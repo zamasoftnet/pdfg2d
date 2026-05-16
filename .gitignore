@@ -6,6 +6,7 @@ target/
 build/
 bin/
 gradle-app.setting
+gradle.properties
 !gradle-wrapper.jar
 !gradle-wrapper.properties
 
@@ -33,5 +34,6 @@ pdfg2d-svg-emoji/*.class
 pdfg2d-svg-emoji-fonts/src/main/resources/net/zamasoft/pdfg2d/font/emoji/emoji.zip
 
 .claude/
+.github/java-upgrade/
 *.pdf
 *.hprof

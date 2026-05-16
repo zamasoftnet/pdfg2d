@@ -35,12 +35,18 @@ record URLSourceValidity(long timestamp, URL url) implements SourceValidity {
 
 	private Validity checkValidity(final URL u) {
 		try {
+			if ("file".equals(u.getProtocol())) {
+				if (new java.io.File(u.toURI()).lastModified() != this.timestamp) {
+					return Validity.INVALID;
+				}
+				return Validity.VALID;
+			}
 			final URLConnection conn = u.openConnection();
 			if (conn.getLastModified() != this.timestamp) {
 				return Validity.INVALID;
 			}
 			return Validity.VALID;
-		} catch (IOException e) {
+		} catch (IOException | java.net.URISyntaxException | IllegalArgumentException e) {
 			return Validity.UNKNOWN;
 		}
 	}

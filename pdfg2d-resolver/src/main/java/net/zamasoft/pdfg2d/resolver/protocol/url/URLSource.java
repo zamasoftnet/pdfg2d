@@ -348,6 +348,9 @@ public class URLSource extends AbstractSource {
 	 */
 	@Override
 	public SourceValidity getValidity() throws IOException {
+		if (this.isFile()) {
+			return new URLSourceValidity(this.getFile().lastModified(), this.url);
+		}
 		this.connect();
 		return new URLSourceValidity(this.timestamp, this.url);
 	}
