@@ -8,6 +8,8 @@ import java.awt.image.Raster;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -58,6 +60,8 @@ import net.zamasoft.pdfg2d.util.ColorUtils;
  * @since 1.0
  */
 class ImageFlow {
+	private static final String JDELI_CLASS = "com.idrsolutions.image.JDeli";
+
 	private final Logger LOG = Logger.getLogger(ImageFlow.class.getName());
 
 	private final Map<String, ObjectRef> nameToResourceRef;
@@ -80,6 +84,19 @@ class ImageFlow {
 	private static final short DEVICE_RGB = 2;
 	private static final short DEVICE_CMYK = 3;
 
+	/**
+	 * Constructs a new ImageFlow.
+	 *
+	 * @param nameToResourceRef the map from resource name to object reference used
+	 *                          by the PDF resource dictionary
+	 * @param objectsFlow       the fragment output to which image XObjects are
+	 *                          written
+	 * @param xref              the cross-reference table used to allocate new object
+	 *                          numbers
+	 * @param params            the PDF generation parameters (compression, color
+	 *                          mode, version, etc.)
+	 * @throws IOException if an I/O error occurs during initialization
+	 */
 	public ImageFlow(final Map<String, ObjectRef> nameToResourceRef, final PDFFragmentOutputImpl objectsFlow,
 			final XRefImpl xref, final PDFParams params) throws IOException {
 		this.xref = xref;
@@ -88,6 +105,44 @@ class ImageFlow {
 		this.params = params;
 	}
 
+	static boolean isJDeliAvailable() {
+		try {
+			Class.forName(JDELI_CLASS);
+			return true;
+		} catch (ClassNotFoundException e) {
+			return false;
+		}
+	}
+
+	static void writeJpeg2000WithJDeli(final BufferedImage image, final OutputStream out) throws IOException {
+		try {
+			final Class<?> jdeliClass = Class.forName(JDELI_CLASS);
+			final Method writeMethod = jdeliClass.getMethod("write", BufferedImage.class, String.class, OutputStream.class);
+			writeMethod.invoke(null, image, "jpx", out);
+		} catch (ClassNotFoundException e) {
+			throw new IOException("JDeli JPEG2000 encoder is not available on the classpath.", e);
+		} catch (NoSuchMethodException e) {
+			throw new IOException("JDeli was found but does not expose JDeli.write(BufferedImage, String, OutputStream).", e);
+		} catch (IllegalAccessException e) {
+			throw new IOException("JDeli JPEG2000 writer method is not accessible.", e);
+		} catch (InvocationTargetException e) {
+			final Throwable cause = e.getCause();
+			if (cause instanceof IOException ioException) {
+				throw ioException;
+			}
+			throw new IOException("JDeli JPEG2000 writer failed.", cause);
+		}
+	}
+
+	/**
+	 * Loads an image from the given {@link Source} and registers it as a PDF image
+	 * XObject, caching the result by URI so that the same image file is encoded
+	 * only once.
+	 *
+	 * @param source the image source to load
+	 * @return the {@link Image} descriptor for the loaded image
+	 * @throws IOException if the image cannot be read or encoded
+	 */
 	public Image loadImage(final Source source) throws IOException {
 		final var uri = source.getURI();
 		var pdfImage = this.images.get(uri);
@@ -116,6 +171,15 @@ class ImageFlow {
 		}
 	}
 
+	/**
+	 * Registers an in-memory {@link BufferedImage} as a PDF image XObject, caching
+	 * the result by identity so that the same {@code BufferedImage} object is
+	 * encoded only once.
+	 *
+	 * @param image the buffered image to encode
+	 * @return the {@link Image} descriptor for the encoded image
+	 * @throws IOException if the image cannot be encoded
+	 */
 	public Image addImage(final BufferedImage image) throws IOException {
 		final var pdfImage = this.bufferedImages.get(image);
 		if (pdfImage != null) {
@@ -126,6 +190,26 @@ class ImageFlow {
 		return res;
 	}
 
+	/**
+	 * Core image-encoding routine.  Exactly one of {@code imageIn} and
+	 * {@code originalImage} must be non-{@code null}.
+	 * <p>
+	 * The method selects the best compression strategy based on
+	 * {@link PDFParams}, reads EXIF orientation metadata when available,
+	 * optionally scales the image to the configured maximum dimensions,
+	 * converts color space when needed, and writes the resulting PDF Image
+	 * XObject (plus a soft-mask object for transparent images) to the
+	 * {@link #objectsFlow}.
+	 * </p>
+	 *
+	 * @param imageIn       an {@link ImageInputStream} wrapping the raw image file,
+	 *                      or {@code null} when the caller has already decoded it
+	 * @param originalImage a pre-decoded {@link BufferedImage}, or {@code null}
+	 *                      when the raw stream should be decoded here
+	 * @return the {@link Image} descriptor, possibly wrapped in a
+	 *         {@link TransformedImage} to account for EXIF orientation
+	 * @throws IOException if an I/O error occurs during reading or writing
+	 */
 	private Image addImage(final ImageInputStream imageIn, final BufferedImage originalImage) throws IOException {
 		var image = originalImage;
 		int orientation = 1;
@@ -434,7 +518,7 @@ class ImageFlow {
 									// ignore
 							}
 							imageIn.seek(0);
-							final byte[] buff = this.objectsFlow.getBuff();
+							final byte[] buff = this.objectsFlow.getBuffer();
 							for (int len = imageIn.read(buff); len != -1; len = imageIn.read(buff)) {
 								out.write(buff, 0, len);
 							}
@@ -473,12 +557,7 @@ class ImageFlow {
 							}
 								break;
 							case JPEG2000:
-								final Iterator<?> i = ImageIO.getImageWritersByFormatName("jpeg 2000");
-								if (i == null || !i.hasNext()) {
-									throw new IOException(
-											"Java Advanced Imaging Image I/O Tools (JAI-ImageIO) is required to output JPEG2000.");
-								}
-								iw = (ImageWriter) i.next();
+								iw = null;
 								iwParams = null;
 								break;
 							default:
@@ -574,13 +653,27 @@ class ImageFlow {
 									g.dispose();
 								}
 								try {
-									final var iout = new FileCacheImageOutputStream(out, null);
-									try {
-										iw.setOutput(iout);
-										iw.write(null, new IIOImage(ximage, null, null), iwParams);
-									} finally {
-										iout.close();
-										iw.dispose();
+									if (imageType == PDFParams.ImageCompression.JPEG2000 && isJDeliAvailable()) {
+										writeJpeg2000WithJDeli(ximage, out);
+									} else {
+										if (iw == null) {
+											final Iterator<?> i = ImageIO.getImageWritersByFormatName(
+													imageType == PDFParams.ImageCompression.JPEG2000 ? "jpeg 2000" : "jpeg");
+											if (i == null || !i.hasNext()) {
+												throw new IOException(imageType == PDFParams.ImageCompression.JPEG2000
+														? "No JPEG2000 encoder is available. Add JDeli or another ImageIO JPEG2000 writer to the classpath."
+														: "No JPEG encoder is available.");
+											}
+											iw = (ImageWriter) i.next();
+										}
+										final var iout = new FileCacheImageOutputStream(out, null);
+										try {
+											iw.setOutput(iout);
+											iw.write(null, new IIOImage(ximage, null, null), iwParams);
+										} finally {
+											iout.close();
+											iw.dispose();
+										}
 									}
 								} finally {
 									if (ximage != image) {
@@ -590,7 +683,7 @@ class ImageFlow {
 							}
 							case FLATE -> {
 								final var raster = image.getRaster();
-								final var fastOut = new FastBufferedOutputStream(out, this.objectsFlow.getBuff());
+								final var fastOut = new FastBufferedOutputStream(out, this.objectsFlow.getBuffer());
 								final var pixel = raster.getDataElements(0, 0, null);
 								if (deviceGray) {
 									for (var y = 0; y < height; ++y) {
@@ -684,7 +777,7 @@ class ImageFlow {
 									out = new DeflaterOutputStream(out);
 									break;
 							}
-							out = new FastBufferedOutputStream(out, this.objectsFlow.getBuff());
+							out = new FastBufferedOutputStream(out, this.objectsFlow.getBuffer());
 
 							final Raster raster = image.getRaster();
 							Object pixel = raster.getDataElements(0, 0, null);

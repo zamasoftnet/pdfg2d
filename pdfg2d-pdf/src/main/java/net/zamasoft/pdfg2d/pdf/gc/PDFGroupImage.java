@@ -22,11 +22,24 @@ public abstract class PDFGroupImage extends PDFNamedGraphicsOutput implements Im
 
 	private final ObjectRef objectRef;
 
+	/** OCG flag: not visible on screen. */
 	public static final int VIEW_OFF = 1;
+	/** OCG flag: not printed. */
 	public static final int PRINT_OFF = 2;
 
 	protected int ocgFlags = 0;
 
+	/**
+	 * Constructs a PDFGroupImage.
+	 *
+	 * @param pdfWriter the PDF writer that owns this resource
+	 * @param out       the underlying output stream
+	 * @param width     the width of the Form XObject in points
+	 * @param height    the height of the Form XObject in points
+	 * @param name      the PDF resource name for this Form XObject
+	 * @param objectRef the indirect object reference for this Form XObject
+	 * @throws IOException if an I/O error occurs
+	 */
 	protected PDFGroupImage(final PDFWriter pdfWriter, final OutputStream out, final double width, final double height,
 			final String name, final ObjectRef objectRef) throws IOException {
 		super(pdfWriter, out, width, height);
@@ -43,6 +56,11 @@ public abstract class PDFGroupImage extends PDFNamedGraphicsOutput implements Im
 		this.ocgFlags = ocgFlags;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * Draws this Form XObject into the given graphics context.
+	 * Only supported when the target is a {@link PDFGC}.
+	 */
 	@Override
 	public void drawTo(final GC gc) throws GraphicsException {
 		if (gc instanceof PDFGC pdfgc) {
@@ -64,16 +82,26 @@ public abstract class PDFGroupImage extends PDFNamedGraphicsOutput implements Im
 		return this.objectRef;
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public String getAltString() {
 		return null;
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public String toString() {
 		return this.name;
 	}
 
+	/**
+	 * Two {@code PDFGroupImage} instances are considered equal if they have the
+	 * same resource name.
+	 *
+	 * @param o the object to compare
+	 * @return {@code true} if the given object is a {@code PDFGroupImage} with the
+	 *         same name
+	 */
 	@Override
 	public boolean equals(final Object o) {
 		if (o instanceof PDFGroupImage other) {
@@ -82,6 +110,7 @@ public abstract class PDFGroupImage extends PDFNamedGraphicsOutput implements Im
 		return false;
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public int hashCode() {
 		return this.name.hashCode();

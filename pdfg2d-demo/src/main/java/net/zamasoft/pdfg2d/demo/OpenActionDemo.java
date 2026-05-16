@@ -24,6 +24,13 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * @since 1.0
  */
 public class OpenActionDemo {
+	/**
+	 * Entry point. Generates {@code output/open-action.pdf} which executes a
+	 * JavaScript alert when the document is opened in a compatible viewer.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if an error occurs during PDF generation
+	 */
 	public static void main(final String[] args) throws Exception {
 		final var js = new JavaScriptAction("app.alert('Hello');");
 		final var params = PDFParams.createDefault()

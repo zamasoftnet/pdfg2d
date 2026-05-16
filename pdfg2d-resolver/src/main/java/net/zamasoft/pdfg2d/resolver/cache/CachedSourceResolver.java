@@ -13,19 +13,51 @@ import net.zamasoft.pdfg2d.resolver.Source;
 import net.zamasoft.pdfg2d.resolver.SourceResolver;
 
 /**
- * Caches data as temporary files to make them accessible.
+ * A {@link SourceResolver} that stores remote or computed resources as
+ * temporary files so that they can be resolved repeatedly without re-fetching.
+ *
+ * <p>Each cached resource is keyed by a normalised URI string.  Callers first
+ * populate the cache via {@link #putFile(SourceMetadata)} or
+ * {@link #putSource(Source)}, after which {@link #resolve(URI)} will return a
+ * {@link CachedSource} wrapping the corresponding temporary file.
+ *
+ * <p>Call {@link #reset()} to delete all cached files and clear the index, or
+ * {@link #dispose()} (which delegates to {@link #reset()}) when the resolver is
+ * no longer needed.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class CachedSourceResolver implements SourceResolver {
+	/**
+	 * Internal record that associates a canonical URI with its cached file and
+	 * content-type metadata.
+	 *
+	 * @param uri      the normalised URI of the original resource.
+	 * @param mimeType the MIME type of the cached content, or {@code null}.
+	 * @param encoding the character encoding of the cached content, or {@code null}.
+	 * @param file     the temporary file holding the cached bytes.
+	 */
 	protected record CachedSourceInfo(URI uri, String mimeType, String encoding, File file) {
 	}
 
 	private final Map<String, CachedSourceInfo> uriToSource = new HashMap<>();
 	private final File tmpDir;
 
+	/**
+	 * Constructs a resolver that writes temporary files to the given directory.
+	 *
+	 * @param tmpDir the directory for temporary cache files, or {@code null} to
+	 *               use the JVM default temporary directory.
+	 */
 	public CachedSourceResolver(final File tmpDir) {
 		this.tmpDir = tmpDir;
 	}
 
+	/**
+	 * Constructs a resolver that writes temporary files to the JVM default
+	 * temporary directory.
+	 */
 	public CachedSourceResolver() {
 		this(null);
 	}
@@ -43,6 +75,13 @@ public class CachedSourceResolver implements SourceResolver {
 		return 0;
 	}
 
+	/**
+	 * Converts a URI to a normalised cache key string, selectively URL-decoding
+	 * characters that are safe to compare literally for HTTP(S) URIs.
+	 *
+	 * @param uri the URI to convert; must not be {@code null}.
+	 * @return a string key suitable for use as a cache map key.
+	 */
 	public static String toKey(final URI uri) {
 		var key = uri.toString();
 		final var scheme = uri.getScheme();
@@ -83,11 +122,16 @@ public class CachedSourceResolver implements SourceResolver {
 	}
 
 	/**
-	 * Caches data with the given attributes as a file.
-	 * 
-	 * @param sourceMetadata Attributes of the data.
-	 * @return The file where data is stored.
-	 * @throws IOException If I/O error occurs.
+	 * Registers the given {@link SourceMetadata} in the cache index and returns a
+	 * newly created empty temporary file that the caller should populate with the
+	 * resource bytes. If a previous entry exists for the same URI its file is
+	 * deleted before the new one is created.
+	 *
+	 * @param sourceMetadata metadata of the resource to cache; must not be
+	 *                        {@code null}.
+	 * @return a newly created, empty temporary file ready to receive the content.
+	 * @throws IOException if a temporary file cannot be created, or if reading the
+	 *                     metadata causes an I/O error.
 	 */
 	public File putFile(final SourceMetadata sourceMetadata) throws IOException {
 		final var uri = sourceMetadata.getURI().normalize();
@@ -109,10 +153,14 @@ public class CachedSourceResolver implements SourceResolver {
 	}
 
 	/**
-	 * Caches another source.
-	 * 
-	 * @param source The source to cache.
-	 * @throws IOException If I/O error occurs.
+	 * Copies the content of {@code source} into a temporary cache file and
+	 * registers it in the index.  The source's input stream is consumed exactly
+	 * once; the source itself is not closed by this method.
+	 *
+	 * @param source the source whose content should be cached; must not be
+	 *               {@code null} and must support {@link Source#getInputStream()}.
+	 * @throws IOException if reading from the source or writing to the cache file
+	 *                     fails.
 	 */
 	public void putSource(final Source source) throws IOException {
 		final var file = this.putFile(source);
@@ -140,7 +188,7 @@ public class CachedSourceResolver implements SourceResolver {
 	}
 
 	/**
-	 * Clears the cache.
+	 * Deletes all temporary cache files and clears the URI index.
 	 */
 	public void reset() {
 		for (CachedSourceInfo info : this.uriToSource.values()) {
@@ -151,6 +199,10 @@ public class CachedSourceResolver implements SourceResolver {
 		this.uriToSource.clear();
 	}
 
+	/**
+	 * Disposes of this resolver by clearing the cache.  Equivalent to calling
+	 * {@link #reset()}.
+	 */
 	public void dispose() {
 		this.reset();
 	}

@@ -4,10 +4,9 @@ import net.zamasoft.pdfg2d.gc.font.FontStyle;
 
 /**
  * Manages font sources and lookups.
- * 
+ *
  * @author MIYABE Tatsuhiko
- * @version $Id: PDFFontSourceManager.java,v 1.1 2007-05-06 15:37:19 miyabe Exp
- *          $
+ * @since 1.0
  */
 public interface FontSourceManager {
 	/**

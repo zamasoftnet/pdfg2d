@@ -18,10 +18,8 @@ import net.zamasoft.pdfg2d.gc.text.Text;
  */
 public class NoOpGC implements GC {
 	/**
-	 * Represents the graphics state.
-	 */
-	/**
-	 * Represents the graphics state.
+	 * Represents a saved graphics state that can be pushed onto and popped off the
+	 * state stack via {@link NoOpGC#begin()} and {@link NoOpGC#end()}.
 	 */
 	protected record GraphicsState(
 			AffineTransform transform,

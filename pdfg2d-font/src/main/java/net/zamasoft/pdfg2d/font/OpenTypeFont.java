@@ -23,7 +23,14 @@ import net.zamasoft.pdfg2d.font.table.VmtxTable;
 import net.zamasoft.pdfg2d.font.truetype.TrueTypeGlyphList;
 
 /**
- * The OpenType font.
+ * Represents an OpenType (or TrueType / CFF) font loaded from a
+ * {@link java.io.RandomAccessFile}.  Font tables are read lazily on first
+ * access; once parsed they are cached for reuse.  The underlying file handle
+ * is released automatically via a {@link java.lang.ref.Cleaner} so the font
+ * behaves correctly even if {@link #close()} is never called explicitly.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class OpenTypeFont implements AutoCloseable {
 	private static final Logger LOG = Logger.getLogger(OpenTypeFont.class.getName());
@@ -58,10 +65,27 @@ public class OpenTypeFont implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Creates a new OpenTypeFont backed by the given random-access file.
+	 * The file is closed automatically when this font is garbage-collected.
+	 *
+	 * @param raf the {@link RandomAccessFile} positioned at the start of the font
+	 * @throws IOException if the font data cannot be read
+	 */
 	public OpenTypeFont(final RandomAccessFile raf) throws IOException {
 		this(raf, null);
 	}
 
+	/**
+	 * Creates a new OpenTypeFont backed by the given random-access file with an
+	 * optional close callback.  The callback (e.g., to delete a temp file) is
+	 * invoked in addition to closing the file when this font is cleaned up.
+	 *
+	 * @param raf     the {@link RandomAccessFile} positioned at the start of the font
+	 * @param onClose an optional {@link Runnable} invoked after the file is closed;
+	 *                may be {@code null}
+	 * @throws IOException if the font data cannot be read
+	 */
 	public OpenTypeFont(final RandomAccessFile raf, final Runnable onClose) throws IOException {
 		this.raf = raf;
 		this.cleanable = cleaner.register(this, new ResourceReleaser(this.raf, onClose));
@@ -123,6 +147,15 @@ public class OpenTypeFont implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Returns a font table by its four-character tag constant defined in
+	 * {@link Table}.  Certain tables ({@code hmtx}, {@code vmtx}, {@code glyf},
+	 * {@code loca}) are pre-loaded during construction and returned directly;
+	 * all other tables are loaded on demand and cached.
+	 *
+	 * @param tableType the table tag (e.g., {@link Table#CMAP}, {@link Table#KERN})
+	 * @return the table, or {@code null} if the table is not present or cannot be read
+	 */
 	public Table getTable(final int tableType) {
 		// Special cases for tables that are pre-loaded
 		if (tableType == Table.HMTX) {
@@ -156,26 +189,58 @@ public class OpenTypeFont implements AutoCloseable {
 		return null;
 	}
 
+	/**
+	 * Returns the typographic ascender value from the {@code hhea} table.
+	 *
+	 * @return the ascender in font units
+	 */
 	public int getAscent() {
 		return this.hhea.getAscender();
 	}
 
+	/**
+	 * Returns the typographic descender value from the {@code hhea} table.
+	 * The value is typically negative.
+	 *
+	 * @return the descender in font units
+	 */
 	public int getDescent() {
 		return this.hhea.getDescender();
 	}
 
+	/**
+	 * Returns the total number of glyphs in the font as reported by the
+	 * {@code maxp} table.
+	 *
+	 * @return the number of glyphs
+	 */
 	public int getNumGlyphs() {
 		return this.maxp.getNumGlyphs();
 	}
 
+	/**
+	 * Returns the glyph at the given glyph index (GID).
+	 *
+	 * @param i the glyph index
+	 * @return the {@link Glyph}, or {@code null} if the index is out of range
+	 */
 	public Glyph getGlyph(final int i) {
 		return this.glyphList.getGlyph(i);
 	}
 
+	/**
+	 * Returns the table directory of this font.
+	 *
+	 * @return the {@link TableDirectory}
+	 */
 	public TableDirectory getTableDirectory() {
 		return this.tableDirectory;
 	}
 
+	/**
+	 * Releases the underlying file handle and, if a close callback was provided,
+	 * invokes it.  Calling {@code close()} more than once is safe.
+	 */
 	@Override
 	public void close() {
 		this.cleanable.clean();

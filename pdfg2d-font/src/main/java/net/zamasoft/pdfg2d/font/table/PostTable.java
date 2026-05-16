@@ -5,12 +5,20 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 
 /**
- * PostScript table.
- * 
- * @param version        the table version
- * @param glyphNameIndex array of glyph name indices
- * @param psGlyphName    array of PostScript glyph names
+ * OpenType {@code post} (PostScript Information) table.
+ * <p>
+ * Contains data required for using the font on PostScript printers, including
+ * PostScript glyph names and the italic angle.  Format 2.0 fonts store a
+ * per-glyph name index that references either the built-in Mac glyph name
+ * table or font-specific names stored inline.
+ * </p>
+ *
+ * @param version        the table version (e.g., {@code 0x00020000} for version 2.0)
+ * @param glyphNameIndex per-glyph index into the combined Mac/font name arrays; {@code null} for non-2.0 fonts
+ * @param psGlyphName    font-specific PostScript glyph names referenced by indices above 257;
+ *                       {@code null} if all names come from the standard Mac table
  * @author <a href="mailto:david@steadystate.co.uk">David Schweinsberg</a>
+ * @author MIYABE Tatsuhiko
  * @since 1.0
  */
 public record PostTable(int version, int[] glyphNameIndex, String[] psGlyphName) implements Table {
@@ -103,6 +111,13 @@ public record PostTable(int version, int[] glyphNameIndex, String[] psGlyphName)
 		}
 	}
 
+	/**
+	 * Returns the PostScript name for the glyph at the given index.
+	 * Returns {@code null} for fonts whose version is not 2.0.
+	 *
+	 * @param i the glyph index
+	 * @return the PostScript glyph name, or {@code null}
+	 */
 	public String getGlyphName(final int i) {
 		if (this.version == 0x00020000) {
 			return (this.glyphNameIndex[i] > 257)
@@ -113,6 +128,7 @@ public record PostTable(int version, int[] glyphNameIndex, String[] psGlyphName)
 		}
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public int getType() {
 		return POST;

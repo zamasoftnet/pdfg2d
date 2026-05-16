@@ -22,8 +22,13 @@ import net.zamasoft.pdfg2d.gc.text.breaking.impl.BitSetCharacterSet;
 import net.zamasoft.pdfg2d.gc.text.breaking.impl.CharacterSet;
 
 /**
- * Represents an OpenType font.
- * 
+ * Abstract base class for an OpenType (TrueType/CFF) font.
+ * <p>
+ * Handles horizontal and optional vertical writing via GSUB {@code vert}
+ * substitution, glyph advance computation, kerning for CJK punctuation, and
+ * delegating text drawing to {@link FontUtils}.
+ * </p>
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
@@ -81,10 +86,23 @@ public abstract class OpenTypeFont implements ShapedFont {
 		this.vmtx = null;
 	}
 
+	/**
+	 * Returns whether this font is configured for vertical writing.
+	 *
+	 * @return {@code true} if vertical tables are present
+	 */
 	protected final boolean isVertical() {
 		return this.vmtx != null;
 	}
 
+	/**
+	 * Adjusts the glyph shape for vertical writing mode, including rotating
+	 * certain fullwidth punctuation characters by 90 degrees.
+	 *
+	 * @param shape the original glyph outline
+	 * @param gid   the glyph ID
+	 * @return the (possibly modified) glyph outline
+	 */
 	protected final Shape adjustShape(Shape shape, final int gid) {
 		if (!this.isVertical()) {
 			return shape;
@@ -112,11 +130,26 @@ public abstract class OpenTypeFont implements ShapedFont {
 		return shape;
 	}
 
+	/**
+	 * Returns the horizontal advance width of the glyph, normalised to
+	 * {@link FontSource#DEFAULT_UNITS_PER_EM}.
+	 *
+	 * @param gid the glyph ID
+	 * @return the horizontal advance width
+	 */
 	protected final short getHAdvance(final int gid) {
 		final var source = (OpenTypeFontSource) this.getFontSource();
 		return (short) (this.hmtx.getAdvanceWidth(gid) * FontSource.DEFAULT_UNITS_PER_EM / source.getUnitsPerEm());
 	}
 
+	/**
+	 * Returns the vertical advance width of the glyph, normalised to
+	 * {@link FontSource#DEFAULT_UNITS_PER_EM}. Falls back to
+	 * {@code DEFAULT_UNITS_PER_EM} when no vmtx table is present.
+	 *
+	 * @param gid the glyph ID
+	 * @return the vertical advance width
+	 */
 	protected final short getVAdvance(final int gid) {
 		if (this.vmtx == null) {
 			return FontSource.DEFAULT_UNITS_PER_EM;

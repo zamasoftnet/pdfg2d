@@ -47,6 +47,11 @@ public interface PDFWriter extends Closeable {
 	 */
 	double MAX_PAGE_HEIGHT = 14400;
 
+	/**
+	 * Returns the parameters used to configure this PDF writer.
+	 *
+	 * @return PDF generation parameters
+	 */
 	PDFParams getParams();
 
 	/**
@@ -141,8 +146,26 @@ public interface PDFWriter extends Closeable {
 	 */
 	PDFPageOutput nextPage(final double width, final double height) throws IOException;
 
+	/**
+	 * Returns the value associated with the given key in this writer's attribute
+	 * map, or {@code null} if no mapping exists.
+	 *
+	 * @param key attribute key
+	 * @return associated value, or {@code null}
+	 */
 	Object getAttribute(Object key);
 
+	/**
+	 * Stores a key/value pair in this writer's attribute map.
+	 * <p>
+	 * The attribute map is a general-purpose store for cooperating components that
+	 * need to share state through the writer without coupling to each other
+	 * directly.
+	 * </p>
+	 *
+	 * @param key   attribute key
+	 * @param value attribute value
+	 */
 	void putAttribute(Object key, Object value);
 
 	/**

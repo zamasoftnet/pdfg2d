@@ -43,7 +43,8 @@ public record PDFParams(
 		byte[] fileId,
 		PDFMetaInfo metaInfo,
 		ViewerPreferences viewerPreferences,
-		Action openAction) {
+		Action openAction,
+		boolean linearized) {
 
 	/**
 	 * Represents the PDF version.
@@ -135,7 +136,8 @@ public record PDFParams(
 				null, // fileId
 				new PDFMetaInfo(),
 				new ViewerPreferences(),
-				null // openAction
+				null, // openAction
+				false // linearized
 		);
 	}
 
@@ -148,7 +150,7 @@ public record PDFParams(
 	public PDFParams withFontSourceManager(FontSourceManager fontSourceManager) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -160,7 +162,7 @@ public record PDFParams(
 	public PDFParams withVersion(Version version) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -172,7 +174,7 @@ public record PDFParams(
 	public PDFParams withCompression(Compression compression) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -184,7 +186,7 @@ public record PDFParams(
 	public PDFParams withJPEGImage(JPEGImage jpegImage) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -196,7 +198,7 @@ public record PDFParams(
 	public PDFParams withImageCompression(ImageCompression imageCompression) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -209,7 +211,7 @@ public record PDFParams(
 	public PDFParams withImageCompressionLossless(int imageCompressionLossless) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -221,7 +223,7 @@ public record PDFParams(
 	public PDFParams withPlatformEncoding(String platformEncoding) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -233,7 +235,7 @@ public record PDFParams(
 	public PDFParams withBookmarks(boolean bookmarks) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -245,7 +247,7 @@ public record PDFParams(
 	public PDFParams withEncryption(EncryptionParams encryption) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -257,7 +259,7 @@ public record PDFParams(
 	public PDFParams withColorMode(ColorMode colorMode) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -269,7 +271,7 @@ public record PDFParams(
 	public PDFParams withMaxImageWidth(int maxImageWidth) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -281,7 +283,7 @@ public record PDFParams(
 	public PDFParams withMaxImageHeight(int maxImageHeight) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -293,7 +295,7 @@ public record PDFParams(
 	public PDFParams withPrecision(int precision) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -305,7 +307,7 @@ public record PDFParams(
 	public PDFParams withFileId(byte[] fileId) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -317,7 +319,7 @@ public record PDFParams(
 	public PDFParams withMetaInfo(PDFMetaInfo metaInfo) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
@@ -329,18 +331,31 @@ public record PDFParams(
 	public PDFParams withViewerPreferences(ViewerPreferences viewerPreferences) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 
 	/**
 	 * Returns a new instance with the specified open action.
-	 * 
-	 * @param openAction the open action
+	 *
+	 * @param openAction the action to execute when the document is opened,
+	 *                   or {@code null} for no action
 	 * @return new PDFParams instance
 	 */
 	public PDFParams withOpenAction(Action openAction) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
+	}
+
+	/**
+	 * Returns a new instance with the specified linearized setting.
+	 * 
+	 * @param linearized true to generate linearized PDF, false otherwise
+	 * @return new PDFParams instance
+	 */
+	public PDFParams withLinearized(boolean linearized) {
+		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized);
 	}
 }

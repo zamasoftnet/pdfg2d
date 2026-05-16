@@ -35,6 +35,13 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * @since 1.0
  */
 public class Graphics2DBridgeDemo {
+	/**
+	 * Entry point. Generates a two-page {@code output/graphics2-d.pdf} and opens
+	 * Swing preview windows for each page.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if an error occurs during PDF generation
+	 */
 	public static void main(final String[] args) throws Exception {
 		final var width = 400.0;
 		final var height = 400.0;
@@ -102,7 +109,7 @@ public class Graphics2DBridgeDemo {
 	/**
 	 * Draws shapes with clipping and transparency.
 	 */
-	private static void draw1(final Graphics2D g) {
+	static void draw1(final Graphics2D g) {
 		// Create complex clip path
 		final var path = new GeneralPath();
 		path.moveTo(150, 0);
@@ -137,7 +144,7 @@ public class Graphics2DBridgeDemo {
 	/**
 	 * Draws styled text with attributes.
 	 */
-	private static void draw2(final Graphics2D g) {
+	static void draw2(final Graphics2D g) {
 		g.setFont(new Font("SansSerif", Font.PLAIN, 12));
 
 		final var fm = g.getFontMetrics();

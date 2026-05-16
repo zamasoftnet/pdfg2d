@@ -17,14 +17,32 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 public class LinkAnnot extends Annot {
 	protected URI uri;
 
+	/**
+	 * Returns the link target URI, or {@code null} if not set.
+	 * URIs starting with {@code #} are treated as named destinations within the
+	 * same document.
+	 *
+	 * @return the target URI
+	 */
 	public URI getURI() {
 		return this.uri;
 	}
 
+	/**
+	 * Sets the link target URI.
+	 * Use a URI starting with {@code #} (e.g., {@code URI.create("#destName")}) for
+	 * in-document named destinations.
+	 *
+	 * @param uri the target URI
+	 */
 	public void setURI(final URI uri) {
 		this.uri = uri;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
 	public void writeTo(final PDFOutput out, final PDFPageOutput pageOut) throws IOException {
 		super.writeTo(out, pageOut);
 
@@ -111,6 +129,12 @@ public class LinkAnnot extends Annot {
 		}
 	}
 
+	/**
+	 * Returns a human-readable description of this link annotation.
+	 *
+	 * @return a string showing the target URI
+	 */
+	@Override
 	public String toString() {
 		return "Link: " + this.uri;
 	}

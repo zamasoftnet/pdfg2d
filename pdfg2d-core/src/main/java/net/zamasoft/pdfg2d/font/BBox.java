@@ -4,7 +4,12 @@ import java.io.Serializable;
 
 /**
  * Represents a bounding box defined by two points: lower-left and upper-right.
- * 
+ * All values are expressed in the font's design units (typically 1/1000 em).
+ *
+ * @param llx the x-coordinate of the lower-left corner
+ * @param lly the y-coordinate of the lower-left corner
+ * @param urx the x-coordinate of the upper-right corner
+ * @param ury the y-coordinate of the upper-right corner
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */

@@ -17,8 +17,16 @@ import net.zamasoft.pdfg2d.pdf.util.PDFUtils;
  * </p>
  * 
  * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class PagesApp {
+	/**
+	 * Entry point. Generates {@code output/pages.pdf} with two A4 pages, each
+	 * labelled with its page number.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws IOException if an error occurs during PDF generation
+	 */
 	public static void main(final String[] args) throws IOException {
 		try (final var pdf = new PDFWriterImpl(
 				new FileFragmentedOutput(new File(DemoUtils.getOutputDir(), "pages.pdf")),

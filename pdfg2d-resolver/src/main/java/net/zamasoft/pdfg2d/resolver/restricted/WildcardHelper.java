@@ -51,16 +51,51 @@ package net.zamasoft.pdfg2d.resolver.restricted;
 import java.util.Objects;
 
 /**
- * Utility class for wildcard pattern matching.
+ * Utility class for wildcard pattern matching used by
+ * {@link RestrictedSourceResolver}.
+ *
+ * <p>This class is derived from the Apache Cocoon project and is used under
+ * the Apache Software License 1.1 (see the licence header at the top of this
+ * file).
+ *
+ * <p>Patterns may contain two wildcard tokens:
+ * <ul>
+ *   <li>{@code *} — matches any sequence of characters that does not include
+ *       a {@code /} path separator (single-segment wildcard).</li>
+ *   <li>{@code **} — matches any sequence of characters including {@code /}
+ *       (multi-segment / path wildcard).</li>
+ * </ul>
+ * All other characters are treated literally.  A backslash ({@code \}) can be
+ * used to escape the next character.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 class WildcardHelper {
 
+	/** Sentinel value representing a single-segment wildcard ({@code *}). */
 	static final int MATCH_FILE = -1;
+	/** Sentinel value representing a multi-segment wildcard ({@code **}). */
 	static final int MATCH_PATH = -2;
+	/** Sentinel value marking the start of a compiled pattern. */
 	static final int MATCH_BEGIN = -4;
+	/** Sentinel value marking the absolute end of a compiled pattern. */
 	static final int MATCH_THEEND = -5;
+	/** Sentinel value marking the end of the match (wildcard at end). */
 	static final int MATCH_END = -3;
 
+	/**
+	 * Compiles a wildcard pattern string into an {@code int[]} representation
+	 * suitable for use with {@link #match(String, int[])}.
+	 *
+	 * <p>The array is prefixed with {@link #MATCH_BEGIN} and terminated with
+	 * {@link #MATCH_THEEND}.  Each literal character from the pattern is stored
+	 * as its code-point value; {@code *} is converted to {@link #MATCH_FILE} or
+	 * {@link #MATCH_PATH} depending on whether it is doubled.
+	 *
+	 * @param data the wildcard pattern string; must not be {@code null}.
+	 * @return the compiled pattern array; never {@code null}.
+	 */
 	static int[] compilePattern(String data) {
 		Objects.requireNonNull(data);
 
@@ -105,6 +140,15 @@ class WildcardHelper {
 		return expr;
 	}
 
+	/**
+	 * Tests whether the given string matches a compiled wildcard pattern.
+	 *
+	 * @param data the string to test against the pattern; must not be {@code null}.
+	 * @param expr a compiled pattern produced by {@link #compilePattern(String)};
+	 *             must not be {@code null}.
+	 * @return {@code true} if {@code data} matches the pattern; {@code false}
+	 *         otherwise.
+	 */
 	static boolean match(String data, int[] expr) {
 		Objects.requireNonNull(data);
 		Objects.requireNonNull(expr);
@@ -181,6 +225,20 @@ class WildcardHelper {
 		}
 	}
 
+	/**
+	 * Searches for the first occurrence of the sub-pattern {@code r[rpos..rend)}
+	 * within the character array {@code d} starting at {@code dpos}.
+	 *
+	 * @param r    the compiled pattern array.
+	 * @param rpos the start index (inclusive) of the sub-pattern within {@code r}.
+	 * @param rend the end index (exclusive) of the sub-pattern within {@code r}.
+	 * @param d    the character array to search.
+	 * @param dpos the position in {@code d} at which to begin searching.
+	 * @return the position in {@code d} where the sub-pattern starts, or
+	 *         {@code d.length} if {@code rend == rpos}, or {@code -1} if not
+	 *         found.
+	 * @throws IllegalArgumentException if {@code rend < rpos}.
+	 */
 	protected static int indexOfArray(int[] r, int rpos, int rend, char[] d, int dpos) {
 		if (rend < rpos)
 			throw new IllegalArgumentException("rend < rpos");
@@ -204,6 +262,20 @@ class WildcardHelper {
 		return -1;
 	}
 
+	/**
+	 * Searches for the last occurrence of the sub-pattern {@code r[rpos..rend)}
+	 * within the character array {@code d} at or after {@code dpos}.
+	 *
+	 * @param r    the compiled pattern array.
+	 * @param rpos the start index (inclusive) of the sub-pattern within {@code r}.
+	 * @param rend the end index (exclusive) of the sub-pattern within {@code r}.
+	 * @param d    the character array to search.
+	 * @param dpos the minimum start position in {@code d} for the match.
+	 * @return the position in {@code d} where the last occurrence of the
+	 *         sub-pattern starts, or {@code d.length} if {@code rend == rpos},
+	 *         or {@code -1} if not found.
+	 * @throws IllegalArgumentException if {@code rend < rpos}.
+	 */
 	protected static int lastIndexOfArray(int[] r, int rpos, int rend, char[] d, int dpos) {
 		if (rend < rpos)
 			throw new IllegalArgumentException("rend < rpos");
@@ -230,6 +302,17 @@ class WildcardHelper {
 		return -1;
 	}
 
+	/**
+	 * Tests whether the sub-pattern {@code r[rpos..rend)} matches exactly the
+	 * characters {@code d[dpos..dpos+(rend-rpos))}.
+	 *
+	 * @param r    the compiled pattern array.
+	 * @param rpos the start index (inclusive) of the sub-pattern within {@code r}.
+	 * @param rend the end index (exclusive) of the sub-pattern within {@code r}.
+	 * @param d    the character array to compare against.
+	 * @param dpos the start position in {@code d}.
+	 * @return {@code true} if all characters match; {@code false} otherwise.
+	 */
 	protected static boolean matchArray(int[] r, int rpos, int rend, char[] d, int dpos) {
 		if (d.length - dpos < rend - rpos)
 			return false;

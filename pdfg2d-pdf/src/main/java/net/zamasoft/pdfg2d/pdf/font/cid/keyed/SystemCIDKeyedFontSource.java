@@ -11,17 +11,25 @@ import net.zamasoft.pdfg2d.util.IntMapIterator;
 import net.zamasoft.pdfg2d.util.ShortList;
 
 /**
- * A monospaced generic font. The typeface varies depending on the platform.
- * 
+ * A CID-keyed font source backed by a system (AWT) font.  Glyph widths are
+ * obtained from the AWT font's glyph metrics.  The typeface appearance varies
+ * depending on the fonts installed on the platform.
+ *
  * @author MIYABE Tatsuhiko
- * @version $Id: GenericType0FontFace.java,v 1.2 2005/06/06 04:42:24 harumanx
- *          Exp $
+ * @since 1.0
  */
 public class SystemCIDKeyedFontSource extends CIDKeyedFontSource {
 	private static final long serialVersionUID = 0L;
 
 	protected final Font awtFont;
 
+	/**
+	 * Constructs a system-font-backed CID-keyed font source.
+	 *
+	 * @param hcmap   the horizontal CMap
+	 * @param vcmap   the vertical CMap, or {@code null} for horizontal-only fonts
+	 * @param awtFont the AWT font to use for metrics and rendering
+	 */
 	public SystemCIDKeyedFontSource(CMap hcmap, CMap vcmap, Font awtFont) {
 		super(hcmap, vcmap);
 		this.awtFont = awtFont = awtFont.deriveFont(1000f);
@@ -36,10 +44,21 @@ public class SystemCIDKeyedFontSource extends CIDKeyedFontSource {
 		this.panose = fs.getPanose();
 	}
 
+	/**
+	 * Returns the AWT font used for glyph metric computation and fallback rendering.
+	 *
+	 * @return the underlying AWT {@link Font}
+	 */
 	public Font getAwtFont() {
 		return this.awtFont;
 	}
 
+	/**
+	 * Returns the glyph-width array, building it lazily from the AWT font's glyph
+	 * metrics the first time it is called.
+	 *
+	 * @return the {@link WArray} containing per-CID advance widths
+	 */
 	public WArray getWArray() {
 		if (this.warray == null) {
 			SystemCIDIdentityFontSource fs = new SystemCIDIdentityFontSource(this.awtFont);

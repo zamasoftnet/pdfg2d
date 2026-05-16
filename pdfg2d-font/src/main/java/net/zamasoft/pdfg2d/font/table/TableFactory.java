@@ -7,12 +7,27 @@ import net.zamasoft.pdfg2d.font.OpenTypeFont;
 import net.zamasoft.pdfg2d.font.cff.CFFTable;
 
 /**
- * Factory class for creating font tables.
+ * Factory that instantiates the correct {@link Table} implementation for each
+ * OpenType/TrueType table tag.  Unknown or unimplemented table types return
+ * {@code null}.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public final class TableFactory {
 	private TableFactory() {
 	}
 
+	/**
+	 * Creates a table object for the given directory entry.
+	 *
+	 * @param otf the font that owns the table
+	 * @param de  the directory entry describing the table's position and type
+	 * @param raf the random-access file to read from
+	 * @return the parsed {@link Table}, or {@code null} if the table type is
+	 *         unknown or not yet implemented
+	 * @throws IOException if the table data cannot be read
+	 */
 	public static Table create(final OpenTypeFont otf, final DirectoryEntry de, final RandomAccessFile raf)
 			throws IOException {
 		return switch (de.tag()) {

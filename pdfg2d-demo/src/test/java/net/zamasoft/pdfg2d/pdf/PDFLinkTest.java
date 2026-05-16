@@ -12,21 +12,18 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.annot.LinkAnnot;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class PDFLinkTest {
 
-    @TempDir
-    File tempDir;
-
     @Test
     public void testHyperlinks() throws Exception {
-        final var file = new File(tempDir, "link_test.pdf");
+        final var file = TestOutputFiles.outputFile(getClass(), "link_test.pdf");
         final var params = PDFParams.createDefault();
 
         try (final var out = new FileOutputStream(file)) {

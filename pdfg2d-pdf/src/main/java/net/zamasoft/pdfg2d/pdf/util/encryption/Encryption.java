@@ -13,6 +13,26 @@ import net.zamasoft.pdfg2d.pdf.params.V1EncryptionParams;
 import net.zamasoft.pdfg2d.pdf.params.V2EncryptionParams;
 import net.zamasoft.pdfg2d.pdf.params.V4EncryptionParams;
 
+/**
+ * Handles PDF standard security handler key derivation and encryption
+ * dictionary generation.
+ * <p>
+ * On construction this class writes the encryption dictionary object to the
+ * main PDF content stream and computes the document encryption key following
+ * the algorithm described in PDF specification section 7.6.3. Supported
+ * encryption versions are V1 (RC4 40-bit), V2 (RC4 variable-length), and V4
+ * (RC4 or AES-128 via crypt filters).
+ * </p>
+ * <p>
+ * After construction callers use {@link #getEncryptor(ObjectRef)} to obtain an
+ * {@link Encryptor} instance suitable for encrypting an individual PDF object,
+ * and {@link #getObjectRef()} to obtain the reference to the encryption
+ * dictionary so that it can be included in the document trailer.
+ * </p>
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 public class Encryption {
 
 	// Padding to adjust password to 32 bytes
@@ -53,6 +73,21 @@ public class Encryption {
 
 	private Encryptor encryptor;
 
+	/**
+	 * Constructs an {@code Encryption} instance, writes the encryption dictionary
+	 * to the PDF output, and derives the document encryption key.
+	 *
+	 * @param mainFlow the main PDF fragment output stream to which the encryption
+	 *                 dictionary object is written
+	 * @param xref     the cross-reference table used to allocate an object number
+	 *                 for the encryption dictionary
+	 * @param fileid   the two-element file identifier array from the PDF trailer;
+	 *                 {@code fileid[0]} is used during key derivation
+	 * @param params   the encryption parameters defining the algorithm version,
+	 *                 passwords, and permissions
+	 * @throws IOException if an I/O error occurs while writing the encryption
+	 *                     dictionary
+	 */
 	public Encryption(PDFFragmentOutput mainFlow, XRef xref, byte[][] fileid, EncryptionParams params)
 			throws IOException {
 		try {
@@ -270,6 +305,21 @@ public class Encryption {
 		mainFlow.endObject();
 	}
 
+	/**
+	 * Returns an {@link Encryptor} configured to encrypt the content of the PDF
+	 * object identified by {@code keyRef}.
+	 * <p>
+	 * The per-object key is derived by appending the object and generation numbers
+	 * (and for AES, the salt bytes {@code sAlT}) to the document encryption key
+	 * and hashing the result with MD5, as specified in PDF section 7.6.2.
+	 * The returned encryptor instance is cached and reused when the same
+	 * {@code keyRef} is requested consecutively.
+	 * </p>
+	 *
+	 * @param keyRef the object reference whose number and generation are mixed into
+	 *               the per-object key derivation
+	 * @return an {@link Encryptor} ready to encrypt data for the given object
+	 */
 	public Encryptor getEncryptor(ObjectRef keyRef) {
 		if (this.keyRef != keyRef) {
 			int keyLen = Math.min(this.length + 5, 16);
@@ -319,6 +369,13 @@ public class Encryption {
 		return this.encryptor;
 	}
 
+	/**
+	 * Returns the object reference of the encryption dictionary written during
+	 * construction. This reference should be included in the PDF trailer
+	 * {@code Encrypt} entry.
+	 *
+	 * @return the object reference of the encryption dictionary
+	 */
 	public ObjectRef getObjectRef() {
 		return this.ref;
 	}

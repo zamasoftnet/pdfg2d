@@ -38,6 +38,12 @@ public class CIDTable implements Serializable {
 
 	transient protected Charset charset = null;
 
+	/**
+	 * Constructs a CIDTable with the given CMap source and Java encoding name.
+	 *
+	 * @param cmapSource   the source of the CMap file
+	 * @param javaEncoding the Java charset name used to decode character bytes
+	 */
 	public CIDTable(Source cmapSource, String javaEncoding) {
 		this.cmapSource = cmapSource;
 		this.javaEncoding = javaEncoding;
@@ -159,6 +165,11 @@ public class CIDTable implements Serializable {
 		return toCid.contains(c);
 	}
 
+	/**
+	 * Returns an iterator over all character-to-CID mappings in this table.
+	 *
+	 * @return an iterator over the character-to-CID entries
+	 */
 	public IntMapIterator getIterator() {
 		IntMap toCid = this.getToCid();
 		return toCid.getIterator();

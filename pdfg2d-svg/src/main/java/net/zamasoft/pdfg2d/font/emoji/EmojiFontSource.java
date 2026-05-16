@@ -221,8 +221,22 @@ public class EmojiFontSource extends AbstractFontSource {
 		return null;
 	}
 
+	/** Lazily opened ZipFile for streaming individual emoji SVG entries. */
 	private static java.util.zip.ZipFile emojiZip;
 
+	/**
+	 * Returns an input stream for a named entry inside the bundled emoji.zip.
+	 *
+	 * <p>
+	 * On the first call the zip archive is extracted to a temporary file so that
+	 * random-access entry reads are possible. The temporary file is deleted when the
+	 * JVM exits. Subsequent calls reuse the same open {@link java.util.zip.ZipFile}.
+	 *
+	 * @param name the entry name to look up (e.g. {@code "emoji_u1f600.svg"})
+	 * @return an input stream for the entry, or {@code null} if the entry does not
+	 *         exist
+	 * @throws java.io.IOException if the zip archive cannot be extracted or opened
+	 */
 	public static synchronized java.io.InputStream getEmojiStream(final String name) throws java.io.IOException {
 		if (emojiZip == null) {
 			final java.io.File tempFile = java.io.File.createTempFile("emoji", ".zip");

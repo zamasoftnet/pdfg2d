@@ -40,22 +40,44 @@ public class FontManagerImpl implements FontManager, Closeable {
 
 	protected final Map<FontStyle, FontListMetrics> fontListMetricsCache = new HashMap<FontStyle, FontListMetrics>();
 
+	/**
+	 * Constructs a FontManagerImpl with the given font source manager and font store.
+	 *
+	 * @param fontdb    the global font source manager used for font lookup
+	 * @param fontStore the font store used to cache loaded fonts
+	 */
 	public FontManagerImpl(FontSourceManager fontdb, FontStore fontStore) {
 		assert fontdb != null;
 		this.globaldb = fontdb;
 		this.fontStore = fontStore;
 	}
 
+	/**
+	 * Constructs a FontManagerImpl with the given font source manager and a default font store.
+	 *
+	 * @param fontdb the global font source manager used for font lookup
+	 */
 	public FontManagerImpl(FontSourceManager fontdb) {
 		this(fontdb, new DefaultFontStore());
 	}
 
+	/**
+	 * Closes this font manager and releases any resources held by the local font source manager.
+	 */
 	public void close() {
 		if (this.localdb != null) {
 			this.localdb.close();
 		}
 	}
 
+	/**
+	 * Registers a font face into the local font source manager.
+	 * The local font source manager is created on first use and takes priority
+	 * over the global one during font lookup.
+	 *
+	 * @param face the font face to register
+	 * @throws IOException if an error occurs while loading the font face
+	 */
 	public void addFontFace(FontFace face) throws IOException {
 		if (this.localdb == null) {
 			this.localdb = new PDFFontSourceManager(true);
@@ -63,6 +85,14 @@ public class FontManagerImpl implements FontManager, Closeable {
 		this.localdb.addFontFace(face);
 	}
 
+	/**
+	 * Returns the {@link FontListMetrics} for the given font style, building and caching it if necessary.
+	 * The list is assembled from locally registered fonts, globally registered fonts, a space font,
+	 * and a missing-glyph fallback font, in that priority order.
+	 *
+	 * @param fontStyle the font style to look up
+	 * @return the font list metrics for the given style
+	 */
 	public FontListMetrics getFontListMetrics(FontStyle fontStyle) {
 		FontListMetrics flm = (FontListMetrics) this.fontListMetricsCache.get(fontStyle);
 		if (flm != null) {
@@ -102,10 +132,21 @@ public class FontManagerImpl implements FontManager, Closeable {
 		return flm;
 	}
 
+	/**
+	 * Creates and returns a new {@link TextShaper} that handles Unicode character-to-glyph
+	 * mapping, ligature formation, surrogate pair processing, and font fallback.
+	 *
+	 * @return a new text shaper instance
+	 */
 	public TextShaper getTextShaper() {
 		return new CharacterHandler();
 	}
 
+	/**
+	 * A {@link TextShaper} implementation that converts a stream of Unicode characters into
+	 * a sequence of glyphs. It handles font selection, font fallback, ligature formation,
+	 * surrogate pairs, zero-width characters (ZWS/ZWJ), and NBSP normalization.
+	 */
 	protected class CharacterHandler implements TextShaper {
 		private GlyphHandler glyphHandler;
 
@@ -131,14 +172,28 @@ public class FontManagerImpl implements FontManager, Closeable {
 
 		private boolean outOfRun = true;
 
+		/**
+		 * Constructs a new CharacterHandler.
+		 */
 		public CharacterHandler() {
 			// ignore
 		}
 
+		/**
+		 * Sets the glyph handler that receives the shaped glyph output.
+		 *
+		 * @param glyphHandler the glyph handler to receive output
+		 */
 		public void setGlyphHandler(GlyphHandler glyphHandler) {
 			this.glyphHandler = glyphHandler;
 		}
 
+		/**
+		 * Signals a font style change. Any pending glyph run is flushed before
+		 * switching to the new font style.
+		 *
+		 * @param fontStyle the new font style to apply
+		 */
 		public void fontStyle(FontStyle fontStyle) {
 			this.glyphBreak();
 			this.fontListMetrics = null;
@@ -153,6 +208,16 @@ public class FontManagerImpl implements FontManager, Closeable {
 			}
 		}
 
+		/**
+		 * Processes a sequence of characters, performing font selection, ligature formation,
+		 * surrogate pair handling, and NBSP normalization before forwarding glyphs to the
+		 * glyph handler.
+		 *
+		 * @param charOffset the character offset of the first character in the source text
+		 * @param ch         the character array containing the text to process
+		 * @param off        the offset within {@code ch} at which to start reading
+		 * @param len        the number of characters to process
+		 */
 		public void characters(int charOffset, char[] ch, int off, int len) {
 			if (this.fontListMetrics == null) {
 				this.fontListMetrics = FontManagerImpl.this.getFontListMetrics(this.fontStyle);
@@ -240,6 +305,12 @@ public class FontManagerImpl implements FontManager, Closeable {
 			}
 		}
 
+		/**
+		 * Processes a text control event. Any pending glyph run is flushed before
+		 * forwarding the control to the glyph handler.
+		 *
+		 * @param control the text control event to forward
+		 */
 		public void control(TextControl control) {
 			this.glyphBreak();
 			this.glyphHandler.control(control);
@@ -261,11 +332,17 @@ public class FontManagerImpl implements FontManager, Closeable {
 			this.zw = false;
 		}
 
+		/**
+		 * Flushes any pending glyph run and forwards the flush signal to the glyph handler.
+		 */
 		public void flush() {
 			this.glyphBreak();
 			this.glyphHandler.flush();
 		}
 
+		/**
+		 * Flushes any pending glyph run and closes the glyph handler, releasing all resources.
+		 */
 		public void close() {
 			this.glyphBreak();
 			this.glyphHandler.close();

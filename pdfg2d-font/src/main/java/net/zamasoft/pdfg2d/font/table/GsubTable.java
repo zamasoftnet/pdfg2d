@@ -4,12 +4,26 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 
 /**
- * GSUB (Glyph Substitution) table.
- * 
- * @param scriptList  the script list
- * @param featureList the feature list
- * @param lookupList  the lookup list
+ * OpenType GSUB (Glyph Substitution) table.
+ * <p>
+ * Provides lookup tables for substituting one glyph (or sequence of glyphs)
+ * with another, supporting features such as ligature formation, vertical
+ * forms, and script-specific alternate glyphs.  The table is structured as a
+ * script list, feature list, and lookup list as defined by the OpenType
+ * specification.
+ * </p>
+ * <p>Currently implemented lookup types:
+ * <ul>
+ *   <li>Type 1 – Single substitution (one glyph → one glyph)</li>
+ *   <li>Type 4 – Ligature substitution (multiple glyphs → one glyph)</li>
+ * </ul>
+ * </p>
+ *
+ * @param scriptList  the script list mapping scripts to language systems and features
+ * @param featureList the feature list associating feature tags with lookup indices
+ * @param lookupList  the lookup list containing the actual substitution data
  * @author <a href="mailto:david@steadystate.co.uk">David Schweinsberg</a>
+ * @author MIYABE Tatsuhiko
  * @since 1.0
  */
 public record GsubTable(ScriptList scriptList, FeatureList featureList, LookupList lookupList)

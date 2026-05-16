@@ -11,19 +11,16 @@ import java.io.IOException;
 import org.apache.pdfbox.Loader;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import net.zamasoft.pdfg2d.PDFGraphics2D;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class PDFMetaInfoTest {
 
-    @TempDir
-    File tempDir;
-
     @Test
     public void testMetaInformation() {
-        final var file = new File(tempDir, "meta_test.pdf");
+        final var file = TestOutputFiles.outputFile(getClass(), "meta_test.pdf");
         assertDoesNotThrow(() -> {
             var params = PDFParams.createDefault();
             final var meta = new PDFMetaInfo();

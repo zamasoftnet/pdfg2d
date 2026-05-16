@@ -9,11 +9,15 @@ import net.zamasoft.pdfg2d.font.table.GlyfTable;
 import net.zamasoft.pdfg2d.font.table.Program;
 
 /**
- * Glyph description for composite glyphs. Composite glyphs are made up of one
- * or more simple glyphs, usually with some sort of transformation applied to
- * each.
- * 
+ * TrueType glyph description for composite glyphs.  A composite glyph is
+ * assembled from one or more referenced component glyphs, each optionally
+ * transformed by a 2×2 affine matrix and/or translation.  Component data is
+ * stored as a list of {@link GlyfCompositeComp} records read from the
+ * {@code glyf} table.
+ *
  * @author <a href="mailto:david@steadystate.co.uk">David Schweinsberg</a>
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class GlyfCompositeDescript extends GlyfDescript {
 
@@ -25,6 +29,16 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		this.components = components;
 	}
 
+	/**
+	 * Reads a composite glyph description from the current position in the given
+	 * random-access file.
+	 *
+	 * @param parentTable the {@link GlyfTable} that owns this description
+	 * @param raf         the file to read from, positioned at the start of the
+	 *                    bounding-box data
+	 * @return the parsed {@link GlyfCompositeDescript}
+	 * @throws IOException if the data cannot be read or is malformed
+	 */
 	public static GlyfCompositeDescript read(final GlyfTable parentTable, final RandomAccessFile raf)
 			throws IOException {
 		final short xMin = (short) (raf.read() << 8 | raf.read());
@@ -59,6 +73,9 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		return new GlyfCompositeDescript(parentTable, xMin, yMin, xMax, yMax, instructions, components);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public int getEndPtOfContours(final int i) {
 		final GlyfCompositeComp c = getCompositeCompEndPt(i);
@@ -69,6 +86,9 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		return 0;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public byte getFlags(final int i) {
 		final GlyfCompositeComp c = getCompositeComp(i);
@@ -79,6 +99,11 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		return 0;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * The coordinate is transformed by the component's affine matrix and
+	 * translation before being returned.
+	 */
 	@Override
 	public short getXCoordinate(final int i) {
 		final GlyfCompositeComp c = getCompositeComp(i);
@@ -94,6 +119,11 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		return 0;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * The coordinate is transformed by the component's affine matrix and
+	 * translation before being returned.
+	 */
 	@Override
 	public short getYCoordinate(final int i) {
 		final GlyfCompositeComp c = getCompositeComp(i);
@@ -109,11 +139,21 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		return 0;
 	}
 
+	/**
+	 * Always returns {@code true} since this is a composite glyph.
+	 *
+	 * @return {@code true}
+	 */
 	@Override
 	public boolean isComposite() {
 		return true;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * Calculated as the first-index offset of the last component plus that
+	 * component's own point count.
+	 */
 	@Override
 	public int getPointCount() {
 		final GlyfCompositeComp c = this.components.get(this.components.size() - 1);
@@ -121,6 +161,11 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		return c.getFirstIndex() + (gd == null ? 0 : gd.getPointCount());
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * Calculated as the first-contour offset of the last component plus that
+	 * component's own contour count.
+	 */
 	@Override
 	public int getContourCount() {
 		final GlyfCompositeComp c = this.components.get(this.components.size() - 1);
@@ -128,14 +173,32 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		return c.getFirstContour() + (gd == null ? 0 : gd.getContourCount());
 	}
 
+	/**
+	 * Returns the first-point index of the {@code i}-th component.
+	 *
+	 * @param i the zero-based component index
+	 * @return the first-point index of the specified component
+	 */
 	public int getComponentIndex(final int i) {
 		return this.components.get(i).getFirstIndex();
 	}
 
+	/**
+	 * Returns the number of component glyphs that make up this composite glyph.
+	 *
+	 * @return the component count
+	 */
 	public int getComponentCount() {
 		return this.components.size();
 	}
 
+	/**
+	 * Returns the component that contains the point at the given absolute index,
+	 * or {@code null} if no component owns that index.
+	 *
+	 * @param i the absolute point index
+	 * @return the owning {@link GlyfCompositeComp}, or {@code null}
+	 */
 	protected GlyfCompositeComp getCompositeComp(final int i) {
 		for (int n = 0; n < this.components.size(); n++) {
 			final GlyfCompositeComp c = this.components.get(n);

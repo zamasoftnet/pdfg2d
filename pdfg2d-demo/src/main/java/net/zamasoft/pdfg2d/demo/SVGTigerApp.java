@@ -28,8 +28,16 @@ import net.zamasoft.pdfg2d.svg.SVGImage;
  * </p>
  * 
  * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class SVGTigerApp {
+	/**
+	 * Entry point. Downloads the Ghostscript Tiger SVG from Wikimedia Commons and
+	 * generates {@code output/svg-tiger.pdf}.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if the SVG cannot be fetched or the PDF cannot be written
+	 */
 	public static void main(final String[] args) throws Exception {
 		final var url = "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg";
 		final var parser = XMLResourceDescriptor.getXMLParserClassName();

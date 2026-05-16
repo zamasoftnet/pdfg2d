@@ -13,33 +13,56 @@ import net.zamasoft.pdfg2d.pdf.util.codec.ASCIIHexOutputStream;
 import net.zamasoft.pdfg2d.pdf.util.io.FastBufferedOutputStream;
 
 /**
- * Concrete implementation of PDFFragmentOutput.
- * This class handles the actual writing of PDF objects, streams, and encrypted
- * content
- * into fragmented output segments.
- * 
+ * Concrete implementation of {@link PDFFragmentOutput} that serializes PDF
+ * objects, dictionaries, and streams into a {@link FragmentedOutput} segment.
+ * <p>
+ * Each instance owns one fragment of the fragmented output (identified by
+ * {@link #id}).  When a new in-line fragment is needed (e.g. to defer writing
+ * a stream length value), {@link #forkFragment()} inserts a new fragment
+ * immediately before the current anchor and returns a fresh
+ * {@code PDFFragmentOutputImpl} targeting that new fragment.
+ * </p>
+ * <p>
+ * Encryption is applied transparently if an {@link Encryption} instance is
+ * configured on the owning {@link PDFWriterImpl}.
+ * </p>
+ *
  * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 class PDFFragmentOutputImpl extends PDFFragmentOutput {
 	private final PDFWriterImpl pdfWriter;
 
-	/** Self and next fragment ID. */
-	private int id, anchorId = -1;
+	/** ID of the fragment currently being written; updated by {@link #forkFragment()}. */
+	private int id;
+	/** ID of the fragment that follows this one in output order; {@code -1} if none. */
+	private int anchorId = -1;
 
-	/** Output byte count. */
+	/** Number of bytes written to this fragment so far. */
 	private int length = 0;
 
-	/** Writing stream. */
+	/** Fragment that will receive the deferred stream-length value. */
 	private PDFFragmentOutputImpl streamLengthFlow = null;
 
-	/** Stream start position. */
+	/** Byte offset within this fragment where the current stream body started. */
 	private int startStreamPosition = 0;
 
-	/** Current object reference. */
+	/** The PDF object currently open, or {@code null} when between objects. */
 	private ObjectRef currentRef;
 
-	private byte[] buff = null;
+	/** Shared scratch buffer for encoding/compression pipelines; lazily allocated. */
+	private byte[] buffer = null;
 
+	/**
+	 * Creates a new fragment output.
+	 *
+	 * @param out        underlying byte sink for this fragment
+	 * @param pdfWriter  owning writer that provides configuration and shared state
+	 * @param id         fragment ID for the initial fragment
+	 * @param nextId     anchor fragment ID ({@code -1} if this is the last fragment)
+	 * @param currentRef the PDF object currently being written, or {@code null}
+	 * @throws IOException if an I/O error occurs
+	 */
 	public PDFFragmentOutputImpl(final OutputStream out, final PDFWriterImpl pdfWriter, final int id,
 			final int nextId, final ObjectRef currentRef) throws IOException {
 		super(out, pdfWriter.getParams().platformEncoding());
@@ -50,11 +73,17 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 		this.currentRef = currentRef;
 	}
 
-	protected byte[] getBuff() {
-		if (this.buff == null) {
-			this.buff = new byte[PDFWriterImpl.BUFFER_SIZE];
+	/**
+	 * Returns a lazily-allocated scratch buffer shared by encoding pipelines in
+	 * this fragment.
+	 *
+	 * @return scratch buffer of length {@link PDFWriterImpl#BUFFER_SIZE}
+	 */
+	protected byte[] getBuffer() {
+		if (this.buffer == null) {
+			this.buffer = new byte[PDFWriterImpl.BUFFER_SIZE];
 		}
-		return this.buff;
+		return this.buffer;
 	}
 
 	/**
@@ -85,9 +114,13 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 		return newFragOut;
 	}
 
+	/** Byte offset within the fragment where the current object header started. */
+	private int objectStartPosition = 0;
+
 	@Override
 	public void startObject(final ObjectRef ref) throws IOException {
 		this.breakBefore();
+		this.objectStartPosition = this.getLength();
 		((ObjectRefImpl) ref).setPosition(this.id, this.getLength());
 		this.writeInt(ref.objectNumber());
 		this.writeInt(ref.generationNumber());
@@ -100,11 +133,20 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 	}
 
 	@Override
+	public void writeObjectRef(final ObjectRef ref) throws IOException {
+		if (this.currentRef != null) {
+			this.pdfWriter.xref.addDependency(this.currentRef, ref);
+		}
+		super.writeObjectRef(ref);
+	}
+
+	@Override
 	public void endObject() throws IOException {
 		this.writeLine("endobj");
 		if (this.currentRef == null) {
 			throw new IllegalStateException("Already outside object");
 		}
+		((ObjectRefImpl) this.currentRef).setLength(this.getLength() - this.objectStartPosition);
 		this.currentRef = null;
 	}
 
@@ -207,7 +249,7 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 					case BINARY -> new DeflaterOutputStream(flowOut);
 					default -> flowOut;
 				};
-				yield new FastBufferedOutputStream(encodedOut, this.getBuff());
+				yield new FastBufferedOutputStream(encodedOut, this.getBuffer());
 			}
 			case BINARY -> {
 				final var encodedOut = switch (compression) {
@@ -215,7 +257,7 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 					case ASCII -> new DeflaterOutputStream(new ASCII85OutputStream(flowOut));
 					case BINARY -> new DeflaterOutputStream(flowOut);
 				};
-				yield new FastBufferedOutputStream(encodedOut, this.getBuff());
+				yield new FastBufferedOutputStream(encodedOut, this.getBuffer());
 			}
 		};
 		return output;
@@ -328,14 +370,19 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 	}
 
 	/**
-	 * Returns current written byte count.
-	 * 
-	 * @return the length
+	 * Returns the number of bytes written to this fragment so far.
+	 *
+	 * @return byte count
 	 */
 	protected int getLength() {
 		return this.length;
 	}
 
+	/**
+	 * Returns the ID of the fragment currently being written.
+	 *
+	 * @return fragment ID
+	 */
 	protected int getId() {
 		return this.id;
 	}

@@ -61,6 +61,12 @@ public class PDFOutput extends FilterOutputStream {
 	// Epsilon for real number comparisons.
 	private double epsilon = 0.05;
 
+	/**
+	 * Constructs a PDFOutput wrapping the given output stream.
+	 *
+	 * @param out          the underlying output stream
+	 * @param nameEncoding the encoding used for PDF name objects
+	 */
 	public PDFOutput(final OutputStream out, final String nameEncoding) {
 		super(out);
 		this.nameEncoding = nameEncoding;
@@ -685,6 +691,12 @@ public class PDFOutput extends FilterOutputStream {
 		this.spaceBefore = true;
 	}
 
+	/**
+	 * Writes a leading space character if necessary to separate tokens.
+	 * The first token on a line does not need a preceding space.
+	 *
+	 * @throws IOException if an I/O error occurs
+	 */
 	public void spaceBefore() throws IOException {
 		if (this.spaceBefore) {
 			this.spaceBefore = false;
@@ -693,6 +705,12 @@ public class PDFOutput extends FilterOutputStream {
 		}
 	}
 
+	/**
+	 * Ensures the output is at the beginning of a new line.
+	 * If the current position is not at a line boundary, writes a line break.
+	 *
+	 * @throws IOException if an I/O error occurs
+	 */
 	public void breakBefore() throws IOException {
 		if (!this.spaceBefore) {
 			this.lineBreak();
@@ -711,6 +729,12 @@ public class PDFOutput extends FilterOutputStream {
 		this.lineBreak();
 	}
 
+	/**
+	 * Writes an ASCII string directly to the underlying output stream.
+	 *
+	 * @param str the ASCII string to write
+	 * @throws IOException if an I/O error occurs
+	 */
 	public void write(final String str) throws IOException {
 		final var len = str.length();
 		this.buffAllocate(len);

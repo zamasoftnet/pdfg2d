@@ -31,3 +31,7 @@ output/
 pdfg2d-svg-emoji/src/main/resources/net/zamasoft/pdfg2d/font/emoji/
 pdfg2d-svg-emoji/*.class
 pdfg2d-svg-emoji-fonts/src/main/resources/net/zamasoft/pdfg2d/font/emoji/emoji.zip
+
+.claude/
+*.pdf
+*.hprof

@@ -7,6 +7,33 @@ import java.io.RandomAccessFile;
 
 import net.zamasoft.pdfg2d.font.Glyph;
 
+/**
+ * Parser and renderer for CFF (Compact Font Format) Type 2 charstrings.
+ * <p>
+ * A Type 2 charstring encodes a glyph outline as a sequence of operators and
+ * operands.  This class reads the byte stream from a {@link RandomAccessFile},
+ * interprets each operator (move-to, line-to, curve-to, hints, subroutine
+ * calls, etc.) and produces two outputs simultaneously:
+ * <ul>
+ *   <li>A {@link java.awt.geom.GeneralPath} describing the outline geometry.</li>
+ *   <li>A cleaned byte array that strips hint masks already consumed during
+ *       parsing, suitable for embedding in an output PDF.</li>
+ * </ul>
+ * </p>
+ * <p>
+ * The operator constants defined here correspond to the byte values specified
+ * in the Adobe Type 2 Charstring specification.  Two-byte operators (escape
+ * sequences starting with {@code 0x0C}) are encoded as {@code 0x0C00 | b1}.
+ * </p>
+ * <p>
+ * Instances are <em>not</em> thread-safe on their own; however, {@link #getGlyph}
+ * synchronises on the shared {@code RandomAccessFile} so multiple callers may
+ * share one {@code Type2CharString} instance backed by the same file.
+ * </p>
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 public class Type2CharString {
 	public static final int HSTEM = 0x0001;
 
@@ -128,10 +155,41 @@ public class Type2CharString {
 
 	private int b0 = -1;
 
+	/**
+	 * Constructs a parser backed by the given random-access file.
+	 *
+	 * @param raf the file containing CFF charstring data; must remain open for
+	 *            the lifetime of this object
+	 */
 	public Type2CharString(final RandomAccessFile raf) {
 		this.raf = raf;
 	}
 
+	/**
+	 * Parses the charstring at the given offset and returns the resulting glyph.
+	 * <p>
+	 * The method seeks to {@code offset} inside the backing file, then interprets
+	 * the Type 2 byte stream until it encounters an {@code endchar} operator.
+	 * Subroutine calls (both local and global) are resolved inline using the
+	 * supplied offset tables.
+	 * </p>
+	 *
+	 * @param ix                the glyph index (used only for debug logging)
+	 * @param offset            the byte offset within the file where the charstring
+	 *                          starts
+	 * @param upm               units-per-em value of the font (currently unused but
+	 *                          reserved for scaling)
+	 * @param globalSubrOffsets array of absolute file offsets for global
+	 *                          subroutines; the bias is applied automatically
+	 *                          according to the array length
+	 * @param localSubrOffsets  array of absolute file offsets for local
+	 *                          subroutines; the bias is applied automatically
+	 *                          according to the array length
+	 * @return a {@link Glyph} containing the outline path and the cleaned
+	 *         charstring bytes
+	 * @throws RuntimeException wrapping any {@link java.io.IOException} encountered
+	 *                          while reading the file
+	 */
 	public Glyph getGlyph(final int ix, final int offset, final short upm, final int[] globalSubrOffsets,
 			final int[] localSubrOffsets) {
 		if (DEBUG) {

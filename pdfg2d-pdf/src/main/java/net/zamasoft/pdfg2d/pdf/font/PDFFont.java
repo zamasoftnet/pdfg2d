@@ -8,6 +8,10 @@ import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
 import net.zamasoft.pdfg2d.pdf.XRef;
 
 /**
+ * Represents a font that can be embedded in or referenced from a PDF document.
+ * Extends the base {@link Font} interface with PDF-specific operations such as
+ * writing font dictionary objects to the PDF output stream.
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */

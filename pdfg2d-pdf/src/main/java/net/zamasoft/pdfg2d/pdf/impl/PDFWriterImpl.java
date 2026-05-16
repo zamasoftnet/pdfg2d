@@ -2,6 +2,7 @@ package net.zamasoft.pdfg2d.pdf.impl;
 
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -9,11 +10,15 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.TimeZone;
 
 import javax.xml.transform.OutputKeys;
@@ -34,7 +39,9 @@ import net.zamasoft.pdfg2d.pdf.Attachment;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
 import net.zamasoft.pdfg2d.pdf.PDFNamedGraphicsOutput;
+import net.zamasoft.pdfg2d.pdf.PDFOutput;
 import net.zamasoft.pdfg2d.pdf.PDFNamedOutput;
+
 import net.zamasoft.pdfg2d.pdf.PDFOutput.Destination;
 import net.zamasoft.pdfg2d.pdf.PDFPageOutput;
 import net.zamasoft.pdfg2d.pdf.PDFWriter;
@@ -123,9 +130,9 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	/**
 	 * Resources referenced from pages.
 	 */
-	final ResourceFlow pageResourceFlow;
+	ResourceFlow pageResourceFlow;
 
-	final ObjectRef pageResourceRef;
+	ObjectRef pageResourceRef;
 
 	/**
 	 * Common resources for pages and XObjects.
@@ -142,6 +149,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	/** Pages. */
 	private final PagesFlow pages;
 
+	protected final List<PDFPageOutputImpl> pageOutputs = new ArrayList<>();
+
 	/** Outline. */
 	final OutlineFlow outline;
 
@@ -157,6 +166,11 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	private final FontFlow fonts;
 
 	private List<ObjectRef> ocgs = null;
+
+	private ObjectRef linDictRef;
+	private PDFFragmentOutputImpl linDictFlow;
+
+	private final ObjectRef rootPageRef;
 
 	public PDFWriterImpl(final FragmentedOutput builder, final PDFParams params) throws IOException {
 		this.params = (params != null) ? params : PDFParams.createDefault();
@@ -189,8 +203,17 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 		this.mainFlow.lineBreak();
 
+		if (this.params.linearized()) {
+			this.linDictFlow = this.mainFlow.forkFragment();
+		}
+
 		// Start root element (Catalog)
 		this.xref = new XRefImpl(this.mainFlow);
+
+		if (this.params.linearized()) {
+			this.linDictRef = this.xref.nextObjectRef();
+			// We will fill this later in closeLinearized
+		}
 
 		this.mainFlow.startHash();
 
@@ -227,8 +250,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 		// Page Tree
 		this.mainFlow.writeName("Pages");
-		final var rootPageRef = this.xref.nextObjectRef();
-		this.mainFlow.writeObjectRef(rootPageRef);
+		this.rootPageRef = this.xref.nextObjectRef();
+		this.mainFlow.writeObjectRef(this.rootPageRef);
 		this.mainFlow.lineBreak();
 
 		// XMP Metadata
@@ -289,7 +312,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 
 		// Page Tree
-		this.pages = new PagesFlow(this, rootPageRef);
+		this.pages = new PagesFlow(this, this.rootPageRef);
 
 		// XMP Metadata
 		if (xmpmetaRef != null) {
@@ -344,7 +367,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 			try (final var pout = this.mainFlow.startStreamFromHash(PDFFragmentOutput.Mode.BINARY);
 					final var in = PDFWriterImpl.class.getResourceAsStream(iccFile)) {
-				final var buff = this.mainFlow.getBuff();
+				final var buff = this.mainFlow.getBuffer();
 				for (int len = in.read(buff); len != -1; len = in.read(buff)) {
 					pout.write(buff, 0, len);
 				}
@@ -407,10 +430,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 
 		// Page Resources
-		this.pageResourceRef = this.xref.nextObjectRef();
-		this.mainFlow.startObject(this.pageResourceRef);
-		this.pageResourceFlow = new ResourceFlow(this.mainFlow);
-		this.mainFlow.endObject();
+		this.pageResourceRef = null;
+		this.pageResourceFlow = null;
 
 		// Objects
 		this.objectsFlow = this.mainFlow.forkFragment();
@@ -422,22 +443,32 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this(builder, PDFParams.createDefault());
 	}
 
+	@Override
 	public PDFParams getParams() {
 		return this.params;
 	}
 
+	/**
+	 * Returns the underlying {@link FragmentedOutput} used to assemble the PDF
+	 * byte stream.
+	 *
+	 * @return the fragmented output builder
+	 */
 	public FragmentedOutput getBuilder() {
 		return this.builder;
 	}
 
+	@Override
 	public Object getAttribute(final Object key) {
 		return this.keyToValue.get(key);
 	}
 
+	@Override
 	public void putAttribute(final Object key, final Object value) {
 		this.keyToValue.put(key, value);
 	}
 
+	@Override
 	public FontManager getFontManager() {
 		if (this.fontManager == null) {
 			this.fontManager = new FontManagerImpl(this.params.fontSourceManager(), this);
@@ -445,12 +476,43 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		return this.fontManager;
 	}
 
+	/**
+	 * Returns the next unique fragment sequence number.
+	 *
+	 * @return monotonically increasing sequence number
+	 */
 	protected int nextId() {
 		return this.sequence++;
 	}
 
+	ObjectRef ensurePageResourceRef() {
+		if (this.pageResourceRef == null) {
+			this.pageResourceRef = this.xref.nextObjectRef();
+		}
+		return this.pageResourceRef;
+	}
+
+	void ensurePageResourceFlow() throws IOException {
+		if (this.pageResourceFlow != null) {
+			return;
+		}
+		if (this.pageResourceRef == null) {
+			throw new IllegalStateException("Page resource reference must be allocated before writing the resource object.");
+		}
+		final var resourceFlow = this.mainFlow.forkFragment();
+		resourceFlow.startObject(this.pageResourceRef);
+		this.pageResourceFlow = new ResourceFlow(resourceFlow);
+		resourceFlow.endObject();
+	}
+
+	/**
+	 * Allocates the next PDF object reference for an Optional Content Group (OCG)
+	 * and registers it in the OCG list for the {@code OCProperties} catalog entry.
+	 *
+	 * @return the newly allocated object reference
+	 */
 	protected ObjectRef nextOCG() {
-		final ObjectRef ocgRef = this.xref.nextObjectRef();
+		final var ocgRef = this.xref.nextObjectRef();
 		if (this.ocgs == null) {
 			this.ocgs = new ArrayList<>();
 		}
@@ -458,18 +520,35 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		return ocgRef;
 	}
 
+	@Override
 	public Font useFont(final FontSource source) throws IOException {
 		return this.fonts.useFont(source);
 	}
 
+	@Override
 	public Image loadImage(final Source source) throws IOException {
 		return this.images.loadImage(source);
 	}
 
+	@Override
 	public Image addImage(final BufferedImage image) throws IOException {
 		return this.images.addImage(image);
 	}
 
+	/**
+	 * Registers a named PDF resource (font, image, pattern, etc.) and returns the
+	 * unique name assigned to it.
+	 * <p>
+	 * The name is formed by concatenating {@code prefix} with a zero-based counter
+	 * that is incremented each time a resource of the same {@code type} is added.
+	 * </p>
+	 *
+	 * @param type        PDF resource type key (e.g. {@code "Font"}, {@code "XObject"})
+	 * @param prefix      name prefix (e.g. {@code "F"} for fonts, {@code "T"} for images)
+	 * @param resourceRef object reference for the resource dictionary entry
+	 * @return the assigned resource name (e.g. {@code "F0"}, {@code "T3"})
+	 * @throws IOException if an I/O error occurs
+	 */
 	protected String addResource(final String type, final String prefix, final ObjectRef resourceRef)
 			throws IOException {
 		final var num = this.typeToCount.getOrDefault(type, 0);
@@ -1312,11 +1391,17 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 			// Resources
 			this.fonts.close();
-			this.pageResourceFlow.close();
+			if (this.pageResourceFlow != null) {
+				this.pageResourceFlow.close();
+			}
 			this.objectsFlow.close();
 
-			// XRef
-			this.xref.close(this.builder.getPositionInfo(), infoRef, this.fileid, this.encryption);
+			if (this.params.linearized()) {
+				this.closeLinearized(infoRef);
+			} else {
+				// XRef
+				this.xref.close(this.builder.getPositionInfo(), infoRef, this.fileid, this.encryption);
+			}
 
 			this.mainFlow.close();
 		} finally {
@@ -1325,6 +1410,863 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		if (this.fontManager != null) {
 			this.fontManager.close();
 		}
+	}
+
+	private static final byte[] PLACEHOLDER = "0000000000".getBytes();
+
+	private void writePlaceholder(PDFFragmentOutputImpl flow) throws IOException {
+		flow.write(PLACEHOLDER);
+	}
+
+	private byte[] format(long value) {
+		String s = String.valueOf(value);
+		if (s.length() > 10) {
+			s = s.substring(s.length() - 10);
+		} else {
+			while (s.length() < 10) {
+				s = " " + s;
+			}
+		}
+		return s.getBytes();
+	}
+
+	private void closeLinearized(ObjectRef infoRef) throws IOException {
+		this.linDictFlow.flush();
+		this.mainFlow.flush();
+
+		if (!(this.builder instanceof net.zamasoft.pdfg2d.io.impl.AbstractTempFileOutput tempBuilder)) {
+			throw new IOException("Linearized output requires AbstractTempFileOutput-backed storage.");
+		}
+
+		final var posInfo = this.builder.getPositionInfo();
+		final var snapshot = tempBuilder.snapshotBytes();
+		final var hintRef = this.xref.nextObjectRef();
+		final var allObjects = this.xref.getObjects();
+		final var linearizedBytes = this.assembleLinearizedPdf(snapshot, posInfo, allObjects, infoRef, hintRef);
+		tempBuilder.replaceBytes(linearizedBytes);
+	}
+
+	private byte[] assembleLinearizedPdf(
+			final byte[] snapshot,
+			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final List<ObjectRef> allObjects,
+			final ObjectRef infoRef,
+			final ObjectRef hintRef) throws IOException {
+		final var sourceObjects = new ArrayList<ObjectRef>();
+		long firstObjectOffset = Long.MAX_VALUE;
+		for (final var ref : allObjects) {
+			if (ref == this.linDictRef || ref == hintRef) {
+				continue;
+			}
+			final var impl = (ObjectRefImpl) ref;
+			sourceObjects.add(ref);
+			firstObjectOffset = Math.min(firstObjectOffset, impl.getPosition(posInfo));
+		}
+		sourceObjects.sort((left, right) -> Long.compare(
+				((ObjectRefImpl) left).getPosition(posInfo),
+				((ObjectRefImpl) right).getPosition(posInfo)));
+
+		final var headerBytes = Arrays.copyOf(snapshot, (int) firstObjectOffset);
+		final var objectBytes = new HashMap<ObjectRef, byte[]>();
+		for (int i = 0; i < sourceObjects.size(); ++i) {
+			final var ref = sourceObjects.get(i);
+			final int start = (int) ((ObjectRefImpl) ref).getPosition(posInfo);
+			final int end;
+			if (i + 1 < sourceObjects.size()) {
+				end = (int) ((ObjectRefImpl) sourceObjects.get(i + 1)).getPosition(posInfo);
+			} else {
+				end = snapshot.length;
+			}
+			objectBytes.put(ref, Arrays.copyOfRange(snapshot, start, end));
+		}
+
+		final var reachableByPage = new HashMap<PDFPageOutputImpl, LinkedHashSet<ObjectRef>>();
+		final var usageCount = new HashMap<ObjectRef, Integer>();
+		for (final var page : this.pageOutputs) {
+			final var reachable = new LinkedHashSet<ObjectRef>();
+			this.collectLinearizedPageObjects(page.getPageRef(), reachable, new LinkedHashSet<>());
+			reachableByPage.put(page, reachable);
+			for (final var ref : reachable) {
+				usageCount.merge(ref, 1, Integer::sum);
+			}
+		}
+
+		final var sharedObjects = new ArrayList<ObjectRef>();
+		for (final var ref : sourceObjects) {
+			if (usageCount.getOrDefault(ref, 0) > 1) {
+				sharedObjects.add(ref);
+			}
+		}
+		final var sharedSet = new LinkedHashSet<>(sharedObjects);
+
+		final var firstPage = this.pageOutputs.get(0);
+		final var firstPageSectionObjects = new ArrayList<ObjectRef>();
+		for (final var ref : sourceObjects) {
+			if (reachableByPage.get(firstPage).contains(ref)) {
+				firstPageSectionObjects.add(ref);
+			}
+		}
+		final var firstPageSectionSet = new LinkedHashSet<>(firstPageSectionObjects);
+		final var sharedSectionObjects = new ArrayList<ObjectRef>();
+		for (final var ref : sharedObjects) {
+			if (!firstPageSectionSet.contains(ref)) {
+				sharedSectionObjects.add(ref);
+			}
+		}
+
+		final var bodyOrder = new ArrayList<ObjectRef>(firstPageSectionObjects);
+		for (final var ref : sourceObjects) {
+			if (!firstPageSectionSet.contains(ref)) {
+				bodyOrder.add(ref);
+			}
+		}
+
+		final var bodyOffsets = new HashMap<ObjectRef, Integer>();
+		int bodyLength = 0;
+		for (final var ref : bodyOrder) {
+			bodyOffsets.put(ref, bodyLength);
+			bodyLength += objectBytes.get(ref).length;
+		}
+
+		final var bodyIndex = new HashMap<ObjectRef, Integer>();
+		for (int i = 0; i < bodyOrder.size(); ++i) {
+			bodyIndex.put(bodyOrder.get(i), i);
+		}
+		final var sharedHintObjects = new ArrayList<ObjectRef>(firstPageSectionObjects);
+		sharedHintObjects.addAll(sharedSectionObjects);
+		final var sharedObjectIndex = new HashMap<ObjectRef, Integer>();
+		for (int i = 0; i < sharedHintObjects.size(); ++i) {
+			sharedObjectIndex.put(sharedHintObjects.get(i), i);
+		}
+
+		final var pageEntries = new ArrayList<HintTableBuilder.PageEntry>();
+		long firstPageEndInBody = 0;
+		for (int pageIndex = 0; pageIndex < this.pageOutputs.size(); ++pageIndex) {
+			final var page = this.pageOutputs.get(pageIndex);
+			final boolean isFirstPage = page == firstPage;
+			final boolean isLastPage = pageIndex == this.pageOutputs.size() - 1;
+			final var sectionObjects = new ArrayList<ObjectRef>();
+			if (isFirstPage) {
+				sectionObjects.addAll(firstPageSectionObjects);
+			} else {
+				for (final var ref : sourceObjects) {
+					if (reachableByPage.get(page).contains(ref) && !sharedSet.contains(ref)) {
+						sectionObjects.add(ref);
+					}
+				}
+			}
+
+			final long sectionStart = this.computeLinearizedPageStart(page, bodyOffsets);
+			final long sectionEnd = this.computeLinearizedPageEndFromBody(
+					isLastPage, sectionObjects, bodyOrder, bodyIndex, bodyOffsets, objectBytes);
+			final var entry = new HintTableBuilder.PageEntry();
+			entry.objectsPerPage = sectionObjects.size();
+			entry.pageLength = sectionEnd - sectionStart;
+			entry.contentStreamStart = 0;
+			entry.contentStreamLength = entry.pageLength;
+			if (!isFirstPage) {
+				for (final var ref : sharedHintObjects) {
+					if (usageCount.getOrDefault(ref, 0) > 1 && reachableByPage.get(page).contains(ref)) {
+						entry.sharedObjectIndices.add(sharedObjectIndex.get(ref));
+					}
+				}
+			}
+			pageEntries.add(entry);
+			if (isFirstPage) {
+				firstPageEndInBody = sectionEnd;
+			}
+		}
+
+		final int xrefSize = allObjects.size() + 1;
+		final int linDictObjectNumber = this.linDictRef.objectNumber();
+		final int hintObjectNumber = hintRef.objectNumber();
+
+		byte[] primaryXrefBytes = new byte[0];
+		byte[] hintCompressedBytes = new byte[0];
+		byte[] hintObjectBytes = renderLinearizedHintObject(hintRef, 0, hintCompressedBytes);
+		int hintSharedTableOffset = 0;
+
+		for (int i = 0; i < 8; ++i) {
+			final int linDictLength = renderLinearizedDictionaryBytes(
+					0, 0, 0, firstPage.getPageRef().objectNumber(), 0, this.pageOutputs.size(), 0).length;
+			final int primaryXrefOffset = headerBytes.length + linDictLength;
+			final int hintObjectOffset = primaryXrefOffset + primaryXrefBytes.length;
+			final int bodyStartOffset = hintObjectOffset + hintObjectBytes.length;
+			final int mainXrefOffset = bodyStartOffset + bodyLength;
+
+			final var offsets = new HashMap<ObjectRef, Long>();
+			offsets.put(this.linDictRef, (long) headerBytes.length);
+			offsets.put(hintRef, (long) hintObjectOffset);
+			for (final var ref : bodyOrder) {
+				offsets.put(ref, (long) bodyStartOffset + bodyOffsets.get(ref));
+			}
+
+			final var hintBuild = this.buildLinearizedHintBytes(
+					hintObjectOffset,
+					pageEntries,
+					firstPageSectionObjects,
+					sharedSectionObjects,
+					bodyOffsets,
+					objectBytes);
+			hintCompressedBytes = hintBuild.compressedBytes;
+			hintSharedTableOffset = hintBuild.sharedObjectTableOffset;
+			final var newHintObjectBytes = renderLinearizedHintObject(hintRef, hintSharedTableOffset, hintCompressedBytes);
+			final var newPrimaryXrefBytes = this.renderLinearizedXrefBytes(
+					allObjects, offsets, infoRef, mainXrefOffset, false, -1);
+			if (newHintObjectBytes.length == hintObjectBytes.length
+					&& newPrimaryXrefBytes.length == primaryXrefBytes.length) {
+				hintObjectBytes = newHintObjectBytes;
+				primaryXrefBytes = newPrimaryXrefBytes;
+				break;
+			}
+			hintObjectBytes = newHintObjectBytes;
+			primaryXrefBytes = newPrimaryXrefBytes;
+		}
+
+		final int linDictLength = renderLinearizedDictionaryBytes(
+				0, 0, 0, firstPage.getPageRef().objectNumber(), 0, this.pageOutputs.size(), 0).length;
+		final var offsets = new HashMap<ObjectRef, Long>();
+		for (int i = 0; i < 8; ++i) {
+			final int primaryXrefOffset = headerBytes.length + linDictLength;
+			final int hintObjectOffset = primaryXrefOffset + primaryXrefBytes.length;
+			final int bodyStartOffset = hintObjectOffset + hintObjectBytes.length;
+			final int mainXrefOffset = bodyStartOffset + bodyLength;
+
+			offsets.clear();
+			offsets.put(this.linDictRef, (long) headerBytes.length);
+			offsets.put(hintRef, (long) hintObjectOffset);
+			for (final var ref : bodyOrder) {
+				offsets.put(ref, (long) bodyStartOffset + bodyOffsets.get(ref));
+			}
+
+			final var nextHintBuild = this.buildLinearizedHintBytes(
+					hintObjectOffset,
+					pageEntries,
+					firstPageSectionObjects,
+					sharedSectionObjects,
+					bodyOffsets,
+					objectBytes);
+			final var nextHintBytes = renderLinearizedHintObject(
+					hintRef, nextHintBuild.sharedObjectTableOffset, nextHintBuild.compressedBytes);
+			final var nextPrimaryXref = this.renderLinearizedXrefBytes(
+					allObjects, offsets, infoRef, mainXrefOffset, false, -1);
+			if (nextHintBytes.length == hintObjectBytes.length && nextPrimaryXref.length == primaryXrefBytes.length) {
+				hintCompressedBytes = nextHintBuild.compressedBytes;
+				hintSharedTableOffset = nextHintBuild.sharedObjectTableOffset;
+				hintObjectBytes = nextHintBytes;
+				primaryXrefBytes = nextPrimaryXref;
+				break;
+			}
+			hintCompressedBytes = nextHintBuild.compressedBytes;
+			hintSharedTableOffset = nextHintBuild.sharedObjectTableOffset;
+			hintObjectBytes = nextHintBytes;
+			primaryXrefBytes = nextPrimaryXref;
+		}
+
+		final int finalBodyStartOffset = headerBytes.length + linDictLength + primaryXrefBytes.length + hintObjectBytes.length;
+		offsets.clear();
+		offsets.put(this.linDictRef, (long) headerBytes.length);
+		offsets.put(hintRef, (long) (headerBytes.length + linDictLength + primaryXrefBytes.length));
+		for (final var ref : bodyOrder) {
+			offsets.put(ref, (long) finalBodyStartOffset + bodyOffsets.get(ref));
+		}
+
+		final int finalMainXrefOffset = finalBodyStartOffset + bodyLength;
+		primaryXrefBytes = this.renderLinearizedXrefBytes(allObjects, offsets, infoRef, finalMainXrefOffset, false, -1);
+		final var mainXrefBytes = this.renderLinearizedXrefBytes(allObjects, offsets, infoRef, -1, true, finalMainXrefOffset);
+		final int finalFileLength = finalMainXrefOffset + mainXrefBytes.length;
+		final int firstPageEnd = finalBodyStartOffset + (int) firstPageEndInBody;
+		final int tOffset = (int) linearizedXrefFirstItemOffset(finalMainXrefOffset, xrefSize);
+		final var linDictBytes = renderLinearizedDictionaryBytes(
+				finalFileLength,
+				headerBytes.length + linDictLength + primaryXrefBytes.length,
+				hintObjectBytes.length,
+				firstPage.getPageRef().objectNumber(),
+				firstPageEnd,
+				this.pageOutputs.size(),
+				tOffset);
+
+		final var out = new ByteArrayOutputStream(finalFileLength);
+		out.write(headerBytes);
+		out.write(linDictBytes);
+		out.write(primaryXrefBytes);
+		out.write(hintObjectBytes);
+		for (final var ref : bodyOrder) {
+			out.write(objectBytes.get(ref));
+		}
+		out.write(mainXrefBytes);
+		return out.toByteArray();
+	}
+
+	private long computeLinearizedPageStart(final PDFPageOutputImpl page, final Map<ObjectRef, Integer> bodyOffsets) {
+		long start = bodyOffsets.get(page.getPageRef());
+		start = Math.min(start, bodyOffsets.get(page.getContentsRef()));
+		for (final var annotRef : page.getAnnotRefs()) {
+			start = Math.min(start, bodyOffsets.get(annotRef));
+		}
+		return start;
+	}
+
+	private long computeLinearizedPageEndFromBody(
+			final boolean isLastPage,
+			final List<ObjectRef> sectionObjects,
+			final List<ObjectRef> bodyOrder,
+			final Map<ObjectRef, Integer> bodyIndex,
+			final Map<ObjectRef, Integer> bodyOffsets,
+			final Map<ObjectRef, byte[]> objectBytes) {
+		long end = 0;
+		int lastIndex = -1;
+		for (final var ref : sectionObjects) {
+			end = Math.max(end, bodyOffsets.get(ref) + objectBytes.get(ref).length);
+			lastIndex = Math.max(lastIndex, bodyIndex.get(ref));
+		}
+		if (!isLastPage && lastIndex >= 0 && lastIndex + 1 < bodyOrder.size()) {
+			return bodyOffsets.get(bodyOrder.get(lastIndex + 1));
+		}
+		return end;
+	}
+
+	private LinearizedHintBuild buildLinearizedHintBytes(
+			final int firstPageLocation,
+			final List<HintTableBuilder.PageEntry> pageEntries,
+			final List<ObjectRef> firstPageSectionObjects,
+			final List<ObjectRef> sharedSectionObjects,
+			final Map<ObjectRef, Integer> bodyOffsets,
+			final Map<ObjectRef, byte[]> objectBytes) throws IOException {
+		final var hintBuilder = new HintTableBuilder();
+		hintBuilder.setFirstPageLocation(firstPageLocation);
+		for (final var ref : firstPageSectionObjects) {
+			hintBuilder.addFirstPageObject(ref, firstPageLocation + bodyOffsets.get(ref), objectBytes.get(ref).length);
+		}
+		for (final var ref : sharedSectionObjects) {
+			hintBuilder.addSharedObject(ref, firstPageLocation + bodyOffsets.get(ref), objectBytes.get(ref).length);
+		}
+		for (final var entry : pageEntries) {
+			hintBuilder.addPage(entry);
+		}
+		final var rawHints = new ByteArrayOutputStream();
+		hintBuilder.build(rawHints);
+		final var compressed = new ByteArrayOutputStream();
+		try (final var deflater = new java.util.zip.DeflaterOutputStream(compressed)) {
+			deflater.write(rawHints.toByteArray());
+		}
+		return new LinearizedHintBuild(compressed.toByteArray(), hintBuilder.getSharedObjectTableOffset(), 0);
+	}
+
+	private byte[] renderLinearizedDictionaryBytes(
+			final int fileLength,
+			final int hintOffset,
+			final int hintLength,
+			final int firstPageObjectNumber,
+			final int firstPageEnd,
+			final int pageCount,
+			final int mainXrefOffset) throws IOException {
+		final var out = new ByteArrayOutputStream();
+		try (final var pdf = new PDFOutput(out, "ISO-8859-1")) {
+			pdf.writeInt(this.linDictRef.objectNumber());
+			pdf.writeInt(this.linDictRef.generationNumber());
+			pdf.writeOperator("obj");
+			pdf.lineBreak();
+			pdf.startHash();
+			pdf.writeName("Linearized");
+			pdf.writeReal(1.0);
+			pdf.lineBreak();
+			pdf.writeName("L");
+			pdf.spaceBefore();
+			writeFixedNumber(pdf, fileLength, 10);
+			pdf.lineBreak();
+			pdf.writeName("H");
+			pdf.startArray();
+			writeFixedNumber(pdf, hintOffset, 10);
+			pdf.spaceBefore();
+			writeFixedNumber(pdf, hintLength, 10);
+			pdf.endArray();
+			pdf.lineBreak();
+			pdf.writeName("O");
+			pdf.spaceBefore();
+			writeFixedNumber(pdf, firstPageObjectNumber, 10);
+			pdf.lineBreak();
+			pdf.writeName("E");
+			pdf.spaceBefore();
+			writeFixedNumber(pdf, firstPageEnd, 10);
+			pdf.lineBreak();
+			pdf.writeName("N");
+			pdf.spaceBefore();
+			writeFixedNumber(pdf, pageCount, 10);
+			pdf.lineBreak();
+			pdf.writeName("T");
+			pdf.spaceBefore();
+			writeFixedNumber(pdf, mainXrefOffset, 10);
+			pdf.lineBreak();
+			pdf.endHash();
+			pdf.lineBreak();
+			pdf.writeOperator("endobj");
+			pdf.lineBreak();
+		}
+		return out.toByteArray();
+	}
+
+	private byte[] renderLinearizedXrefBytes(
+			final List<ObjectRef> allObjects,
+			final Map<ObjectRef, Long> offsets,
+			final ObjectRef infoRef,
+			final long prevOffset,
+			final boolean withStartxref,
+			final long startxrefOffset) throws IOException {
+		final var out = new ByteArrayOutputStream();
+		try (final var pdf = new PDFOutput(out, "ISO-8859-1")) {
+			pdf.writeOperator("xref");
+			pdf.lineBreak();
+			pdf.writeInt(0);
+			pdf.writeInt(allObjects.size() + 1);
+			pdf.lineBreak();
+			writeLinearizedXrefEntry(pdf, 0, 65535, false);
+			for (final var ref : allObjects) {
+				writeLinearizedXrefEntry(pdf, offsets.get(ref), ref.generationNumber(), true);
+			}
+			pdf.writeOperator("trailer");
+			pdf.lineBreak();
+			pdf.startHash();
+			pdf.writeName("Size");
+			pdf.writeInt(allObjects.size() + 1);
+			pdf.lineBreak();
+			if (prevOffset >= 0) {
+				pdf.writeName("Prev");
+				pdf.writeInt((int) prevOffset);
+				pdf.lineBreak();
+			}
+			pdf.writeName("Root");
+			pdf.writeObjectRef(this.xref.getRootRef());
+			pdf.lineBreak();
+			if (infoRef != null) {
+				pdf.writeName("Info");
+				pdf.writeObjectRef(infoRef);
+				pdf.lineBreak();
+			}
+			if (this.fileid != null) {
+				pdf.writeName("ID");
+				pdf.startArray();
+				pdf.writeBytes8(this.fileid[0], 0, this.fileid[0].length);
+				pdf.writeBytes8(this.fileid[1], 0, this.fileid[1].length);
+				pdf.endArray();
+				pdf.lineBreak();
+			}
+			if (this.encryption != null) {
+				pdf.writeName("Encrypt");
+				pdf.writeObjectRef(this.encryption.getObjectRef());
+				pdf.lineBreak();
+			}
+			pdf.endHash();
+			if (withStartxref) {
+				pdf.writeOperator("startxref");
+				pdf.lineBreak();
+				writeFixedNumber(pdf, startxrefOffset, 10);
+				pdf.lineBreak();
+				pdf.writeLine("%%EOF");
+			}
+		}
+		return out.toByteArray();
+	}
+
+	private LinearizedHintBuild buildLinearizedHintData(
+			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final PDFPageOutputImpl firstPage,
+			final List<SharedObjectGroup> sharedGroups,
+			final Set<ObjectRef> sharedRootSet,
+			final Map<ObjectRef, Integer> sharedIndexByRoot,
+			final long shift) throws IOException {
+		final var hintBuilder = new HintTableBuilder();
+		final var layout = this.computeLinearizedLayout(posInfo, shift, firstPage);
+		for (final var objectRef : layout.sharedObjects) {
+			hintBuilder.addSharedObject(
+					objectRef,
+					((ObjectRefImpl) objectRef).getPosition(posInfo) + shift,
+					((ObjectRefImpl) objectRef).getLength());
+		}
+		final long firstPageObjPos = ((ObjectRefImpl) firstPage.getPageRef()).getPosition(posInfo) + shift;
+		hintBuilder.setFirstPageLocation(firstPageObjPos);
+		long endOfFirstPage = layout.firstPageSectionEnd;
+		for (PDFPageOutputImpl page : this.pageOutputs) {
+			final var pageObjects = layout.pageObjects.get(page);
+			final var entry = new HintTableBuilder.PageEntry();
+			entry.objectsPerPage = pageObjects.sectionObjects.size();
+			long start = ((ObjectRefImpl) page.getPageRef()).getPosition(posInfo) + shift;
+			long cPos = ((ObjectRefImpl) page.getContentsRef()).getPosition(posInfo) + shift;
+			long cLen = ((ObjectRefImpl) page.getContentsRef()).getLength();
+			long s = Math.min(start, cPos);
+			entry.contentStreamStart = cPos - s;
+			entry.contentStreamLength = cLen;
+			for (ObjectRef aRef : page.getAnnotRefs()) {
+				long aPos = ((ObjectRefImpl) aRef).getPosition(posInfo) + shift;
+				s = Math.min(s, aPos);
+			}
+			entry.pageLength = pageObjects.pageEnd - s;
+			if (page == firstPage) {
+				endOfFirstPage = pageObjects.pageEnd;
+			} else {
+				entry.sharedObjectIndices.addAll(pageObjects.sharedIndices);
+			}
+			hintBuilder.addPage(entry);
+		}
+
+		final ByteArrayOutputStream rawHints = new ByteArrayOutputStream();
+		hintBuilder.build(rawHints);
+		final ByteArrayOutputStream compHints = new ByteArrayOutputStream();
+		try (java.util.zip.DeflaterOutputStream def = new java.util.zip.DeflaterOutputStream(compHints)) {
+			def.write(rawHints.toByteArray());
+		}
+		return new LinearizedHintBuild(compHints.toByteArray(), hintBuilder.getSharedObjectTableOffset(), endOfFirstPage);
+	}
+
+	private LinearizedLayout computeLinearizedLayout(
+			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final long shift,
+			final PDFPageOutputImpl firstPage) {
+		final var orderedBodyObjects = new ArrayList<ObjectRef>();
+		for (final var ref : this.xref.getObjects()) {
+			if (ref == this.linDictRef) {
+				continue;
+			}
+			final var impl = (ObjectRefImpl) ref;
+			if (impl.getLength() <= 0) {
+				continue;
+			}
+			orderedBodyObjects.add(ref);
+		}
+		orderedBodyObjects.sort((left, right) -> Long.compare(
+				((ObjectRefImpl) left).getPosition(posInfo),
+				((ObjectRefImpl) right).getPosition(posInfo)));
+
+		final var bodyOrder = new HashMap<ObjectRef, Integer>();
+		for (int i = 0; i < orderedBodyObjects.size(); ++i) {
+			bodyOrder.put(orderedBodyObjects.get(i), i);
+		}
+
+		final var reachableByPage = new HashMap<PDFPageOutputImpl, LinkedHashSet<ObjectRef>>();
+		final var usageCount = new HashMap<ObjectRef, Integer>();
+		for (final var page : this.pageOutputs) {
+			final var reachable = new LinkedHashSet<ObjectRef>();
+			this.collectLinearizedPageObjects(page.getPageRef(), reachable, new LinkedHashSet<>());
+			reachableByPage.put(page, reachable);
+			for (final var ref : reachable) {
+				usageCount.merge(ref, 1, Integer::sum);
+			}
+		}
+
+		final var sharedObjects = new ArrayList<ObjectRef>();
+		for (final var entry : usageCount.entrySet()) {
+			if (entry.getValue() > 1) {
+				sharedObjects.add(entry.getKey());
+			}
+		}
+		sharedObjects.sort((left, right) -> Integer.compare(
+				bodyOrder.getOrDefault(left, Integer.MAX_VALUE),
+				bodyOrder.getOrDefault(right, Integer.MAX_VALUE)));
+
+		final var sharedIndexByObject = new HashMap<ObjectRef, Integer>();
+		for (int i = 0; i < sharedObjects.size(); ++i) {
+			sharedIndexByObject.put(sharedObjects.get(i), i);
+		}
+
+		final var pageObjects = new HashMap<PDFPageOutputImpl, LinearizedPageObjects>();
+		for (int pageIndex = 0; pageIndex < this.pageOutputs.size(); ++pageIndex) {
+			final var page = this.pageOutputs.get(pageIndex);
+			final var reachable = reachableByPage.get(page);
+			final var sectionObjects = new ArrayList<ObjectRef>();
+			final var sharedIndices = new ArrayList<Integer>();
+			for (final var ref : reachable) {
+				final boolean shared = sharedIndexByObject.containsKey(ref);
+				if (page == firstPage || !shared) {
+					sectionObjects.add(ref);
+				} else {
+					sharedIndices.add(sharedIndexByObject.get(ref));
+				}
+			}
+			sectionObjects.sort((left, right) -> Integer.compare(
+					bodyOrder.getOrDefault(left, Integer.MAX_VALUE),
+					bodyOrder.getOrDefault(right, Integer.MAX_VALUE)));
+			Collections.sort(sharedIndices);
+			final long pageEnd = this.computeLinearizedPageEnd(
+					page,
+					pageIndex == this.pageOutputs.size() - 1,
+					sectionObjects,
+					orderedBodyObjects,
+					bodyOrder,
+					posInfo,
+					shift);
+			pageObjects.put(page, new LinearizedPageObjects(sectionObjects, sharedIndices, pageEnd));
+		}
+
+		return new LinearizedLayout(sharedObjects, pageObjects, pageObjects.get(firstPage).pageEnd);
+	}
+
+	private void collectLinearizedPageObjects(final ObjectRef current, final Set<ObjectRef> collected,
+			final Set<ObjectRef> visited) {
+		if (current == null || current == this.rootPageRef || !visited.add(current)) {
+			return;
+		}
+		collected.add(current);
+		for (final var dependency : this.xref.getDependencies(current)) {
+			if (dependency == this.rootPageRef) {
+				continue;
+			}
+			this.collectLinearizedPageObjects(dependency, collected, visited);
+		}
+	}
+
+	private long computeLinearizedPageEnd(
+			final PDFPageOutputImpl page,
+			final boolean isLastPage,
+			final List<ObjectRef> sectionObjects,
+			final List<ObjectRef> orderedBodyObjects,
+			final Map<ObjectRef, Integer> bodyOrder,
+			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final long shift) {
+		long pageEnd = 0;
+		int lastBodyIndex = -1;
+		for (final var ref : sectionObjects) {
+			final var impl = (ObjectRefImpl) ref;
+			pageEnd = Math.max(pageEnd, impl.getPosition(posInfo) + shift + impl.getLength());
+			lastBodyIndex = Math.max(lastBodyIndex, bodyOrder.getOrDefault(ref, -1));
+		}
+		if (!isLastPage && lastBodyIndex >= 0 && lastBodyIndex + 1 < orderedBodyObjects.size()) {
+			final var nextObject = (ObjectRefImpl) orderedBodyObjects.get(lastBodyIndex + 1);
+			pageEnd = nextObject.getPosition(posInfo) + shift;
+		}
+		return pageEnd;
+	}
+
+	private byte[] renderLinearizedPrimaryXref(
+			final List<ObjectRef> allObjects,
+			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final ObjectRef infoRef,
+			final ObjectRef hintRef,
+			final long linDictOffset,
+			final long hintObjectOffset,
+			final long shift,
+			final long prevOffset) throws IOException {
+		final ByteArrayOutputStream out = new ByteArrayOutputStream();
+		try (final PDFOutput pdf = new PDFOutput(out, "ISO-8859-1")) {
+			pdf.writeOperator("xref");
+			pdf.lineBreak();
+			pdf.writeInt(0);
+			pdf.writeInt(allObjects.size() + 1);
+			pdf.lineBreak();
+			writeLinearizedXrefEntry(pdf, 0, 65535, false);
+			for (final ObjectRef ref : allObjects) {
+				final long offset;
+				if (ref == this.linDictRef) {
+					offset = linDictOffset;
+				} else if (ref == hintRef) {
+					offset = hintObjectOffset;
+				} else {
+					offset = ((ObjectRefImpl) ref).getPosition(posInfo) + shift;
+				}
+				writeLinearizedXrefEntry(pdf, offset, ref.generationNumber(), true);
+			}
+			pdf.writeOperator("trailer");
+			pdf.lineBreak();
+			pdf.startHash();
+			pdf.writeName("Size");
+			pdf.writeInt(allObjects.size() + 1);
+			pdf.lineBreak();
+			pdf.writeName("Prev");
+			pdf.writeInt((int) prevOffset);
+			pdf.lineBreak();
+			pdf.writeName("Root");
+			pdf.writeObjectRef(this.xref.getRootRef());
+			pdf.lineBreak();
+			if (infoRef != null) {
+				pdf.writeName("Info");
+				pdf.writeObjectRef(infoRef);
+				pdf.lineBreak();
+			}
+			if (this.encryption != null) {
+				pdf.writeName("Encrypt");
+				pdf.writeObjectRef(this.encryption.getObjectRef());
+				pdf.lineBreak();
+			}
+			pdf.endHash();
+		}
+		return out.toByteArray();
+	}
+
+	private static void writeLinearizedXrefEntry(final PDFOutput out, final long byteOffset, final int generationNum,
+			final boolean inUse) throws IOException {
+		writeFixedNumber(out, byteOffset, 10);
+		out.write(' ');
+		writeFixedNumber(out, generationNum, 5);
+		out.write(' ');
+		out.write(inUse ? 'n' : 'f');
+		out.lineBreak();
+	}
+
+	private static void writeFixedNumber(final PDFOutput out, long value, final int width) throws IOException {
+		final byte[] digits = new byte[width];
+		for (int i = width - 1; i >= 0; --i) {
+			digits[i] = (byte) ('0' + (value % 10));
+			value /= 10;
+		}
+		out.write(digits);
+	}
+
+	private byte[] renderLinearizedHintObject(
+			final ObjectRef hintRef,
+			final int sharedObjectTableOffset,
+			final byte[] hintBytesCompressed) throws IOException {
+		final ByteArrayOutputStream out = new ByteArrayOutputStream();
+		try (final PDFOutput pdf = new PDFOutput(out, "ISO-8859-1")) {
+			pdf.writeInt(hintRef.objectNumber());
+			pdf.writeInt(hintRef.generationNumber());
+			pdf.writeOperator("obj");
+			pdf.lineBreak();
+			pdf.startHash();
+			pdf.writeName("Filter");
+			pdf.writeName("FlateDecode");
+			pdf.writeName("S");
+			pdf.writeInt(sharedObjectTableOffset);
+			pdf.writeName("Length");
+			pdf.writeInt(hintBytesCompressed.length);
+			pdf.lineBreak();
+			pdf.endHash();
+			pdf.writeOperator("stream");
+			pdf.lineBreak();
+			pdf.write(hintBytesCompressed);
+			pdf.lineBreak();
+			pdf.writeOperator("endstream");
+			pdf.lineBreak();
+			pdf.writeOperator("endobj");
+			pdf.lineBreak();
+		}
+		return out.toByteArray();
+	}
+
+	private static long linearizedXrefFirstItemOffset(final long xrefOffset, final int objectCount) {
+		return xrefOffset + ("xref\r\n0 " + objectCount + "\r\n").length();
+	}
+
+	private static final class LinearizedHintBuild {
+		final byte[] compressedBytes;
+		final int sharedObjectTableOffset;
+		final long endOfFirstPage;
+
+		LinearizedHintBuild(final byte[] compressedBytes, final int sharedObjectTableOffset, final long endOfFirstPage) {
+			this.compressedBytes = compressedBytes;
+			this.sharedObjectTableOffset = sharedObjectTableOffset;
+			this.endOfFirstPage = endOfFirstPage;
+		}
+	}
+
+	private static final class LinearizedLayout {
+		final List<ObjectRef> sharedObjects;
+		final Map<PDFPageOutputImpl, LinearizedPageObjects> pageObjects;
+		final long firstPageSectionEnd;
+
+		LinearizedLayout(final List<ObjectRef> sharedObjects,
+				final Map<PDFPageOutputImpl, LinearizedPageObjects> pageObjects,
+				final long firstPageSectionEnd) {
+			this.sharedObjects = sharedObjects;
+			this.pageObjects = pageObjects;
+			this.firstPageSectionEnd = firstPageSectionEnd;
+		}
+	}
+
+	private static final class LinearizedPageObjects {
+		final List<ObjectRef> sectionObjects;
+		final List<Integer> sharedIndices;
+		final long pageEnd;
+
+		LinearizedPageObjects(final List<ObjectRef> sectionObjects, final List<Integer> sharedIndices,
+				final long pageEnd) {
+			this.sectionObjects = sectionObjects;
+			this.sharedIndices = sharedIndices;
+			this.pageEnd = pageEnd;
+		}
+	}
+
+	private static final class SharedObjectGroup {
+		final ObjectRef root;
+		final List<ObjectRef> members;
+		final int length;
+
+		SharedObjectGroup(final ObjectRef root, final List<ObjectRef> members, final int length) {
+			this.root = root;
+			this.members = members;
+			this.length = length;
+		}
+	}
+
+	private List<SharedObjectGroup> buildSharedObjectGroups(final List<ObjectRef> roots) {
+		final var rootSet = new LinkedHashSet<>(roots);
+		final var groups = new ArrayList<SharedObjectGroup>(roots.size());
+		for (final var root : roots) {
+			final var members = new ArrayList<ObjectRef>();
+			this.collectSharedGroupMembers(root, root, rootSet, new LinkedHashSet<>(), members);
+			var length = 0;
+			for (final var member : members) {
+				length += Math.max(0, ((ObjectRefImpl) member).getLength());
+			}
+			groups.add(new SharedObjectGroup(root, members, length));
+		}
+		return groups;
+	}
+
+	private void collectSharedGroupMembers(final ObjectRef current, final ObjectRef root, final Set<ObjectRef> rootSet,
+			final Set<ObjectRef> visited, final List<ObjectRef> members) {
+		if (!visited.add(current)) {
+			return;
+		}
+		members.add(current);
+		for (final var dependency : this.xref.getDependencies(current)) {
+			if (dependency == root) {
+				continue;
+			}
+			if (rootSet.contains(dependency)) {
+				continue;
+			}
+			this.collectSharedGroupMembers(dependency, root, rootSet, visited, members);
+		}
+	}
+
+	private List<Integer> sharedGroupIndicesForPage(final PDFPageOutputImpl page, final Set<ObjectRef> sharedRoots,
+			final Map<ObjectRef, Integer> sharedIndexByRoot) {
+		final var reachableRoots = new LinkedHashSet<ObjectRef>();
+		this.collectReachableSharedRoots(page.getPageRef(), sharedRoots, new LinkedHashSet<>(), reachableRoots);
+		reachableRoots.remove(page.getPageRef());
+		final var indices = new ArrayList<Integer>(reachableRoots.size());
+		for (final var root : reachableRoots) {
+			final var index = sharedIndexByRoot.get(root);
+			if (index != null) {
+				indices.add(index);
+			}
+		}
+		Collections.sort(indices);
+		return indices;
+	}
+
+	private void collectReachableSharedRoots(final ObjectRef current, final Set<ObjectRef> sharedRoots,
+			final Set<ObjectRef> visited, final Set<ObjectRef> reachableRoots) {
+		if (!visited.add(current)) {
+			return;
+		}
+		for (final var dependency : this.xref.getDependencies(current)) {
+			if (sharedRoots.contains(dependency)) {
+				reachableRoots.add(dependency);
+			}
+			this.collectReachableSharedRoots(dependency, sharedRoots, visited, reachableRoots);
+		}
+	}
+
+	private long computeSharedSectionEnd(final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final long shift, final List<SharedObjectGroup> sharedGroups) {
+		long end = 0;
+		for (final var group : sharedGroups) {
+			for (final var member : group.members) {
+				final var impl = (ObjectRefImpl) member;
+				end = Math.max(end, impl.getPosition(posInfo) + shift + impl.getLength());
+			}
+		}
+		return end;
 	}
 
 	private void writeArea(final ViewerPreferences.AreaBox area) throws IOException {

@@ -14,16 +14,22 @@ import java.util.logging.Logger;
 import net.zamasoft.pdfg2d.io.FragmentedOutput;
 
 /**
- * High-performance implementation of FragmentedOutput.
+ * High-performance base implementation of {@link FragmentedOutput}.
  * <p>
- * This class optimizes for speed and memory efficiency by buffering data in
- * memory chunks and intelligently spilling to disk only when global memory
- * limit is
- * reached. It uses {@link FileChannel} for efficient file I/O and avoids strict
- * segmentation for better flexibility.
+ * Data is buffered in fixed-size memory chunks and automatically spilled to a
+ * temporary file when the configured global memory limit is reached. The spill
+ * strategy evicts the fragment that currently occupies the most memory, keeping
+ * working-set memory low while preserving fast random-access writes via
+ * {@link FileChannel}.
  * </p>
- * 
+ * <p>
+ * Subclasses must implement the final assembly step by calling
+ * {@link #finish(OutputStream)} to stream all fragments in their logical order
+ * to an output stream.
+ * </p>
+ *
  * @author MIYABE Tatsuhiko
+ * @since 1.2
  */
 public abstract class AbstractTempFileOutput implements FragmentedOutput {
 	private static final Logger LOG = Logger.getLogger(AbstractTempFileOutput.class.getName());
@@ -80,14 +86,39 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 	// This avoids overhead during normal writes.
 
 	/**
-	 * Represents a piece of data, either in memory or on disk.
+	 * A contiguous piece of fragment data stored either in memory or on disk.
+	 * <p>
+	 * Implementations are {@link MemoryChunk} for in-memory storage and
+	 * {@link FileChunk} for disk-backed storage after a spill.
+	 * </p>
 	 */
 	private sealed interface Chunk permits MemoryChunk, FileChunk {
+		/**
+		 * Returns the number of bytes held by this chunk.
+		 *
+		 * @return byte count
+		 */
 		long getLength();
 
+		/**
+		 * Writes the entire chunk content to {@code out}.
+		 *
+		 * @param out     destination stream
+		 * @param channel file channel used by {@link FileChunk}; may be {@code null}
+		 *                for {@link MemoryChunk}
+		 * @param buffer  scratch buffer for disk-to-stream copies
+		 * @throws IOException if an I/O error occurs
+		 */
 		void writeTo(OutputStream out, FileChannel channel, byte[] buffer) throws IOException;
 	}
 
+	/**
+	 * An in-memory chunk backed by a byte array.
+	 * <p>
+	 * The array is pre-allocated at construction time with a fixed capacity equal to
+	 * {@link #chunkSize}. Only {@link #length} bytes are considered valid.
+	 * </p>
+	 */
 	private final class MemoryChunk implements Chunk {
 		final byte[] data;
 		int length;
@@ -108,6 +139,14 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 		}
 	}
 
+	/**
+	 * A disk-backed chunk that references a byte range inside the shared temporary
+	 * file.
+	 * <p>
+	 * Created when a {@link MemoryChunk} is spilled to disk.  The chunk is
+	 * immutable after creation; its content is addressed by absolute file position.
+	 * </p>
+	 */
 	private final class FileChunk implements Chunk {
 		final long position;
 		final long length;
@@ -128,13 +167,10 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 			long currentPos = position;
 			while (remaining > 0) {
 				int readSize = (int) Math.min(remaining, buffer.length);
-				// We need to synchronize if we were using multiple threads,
-				// but this class is not thread-safe by design (inherited).
-				// Use channel.read(dst, position) for thread safety if needed in future.
 				ByteBuffer buf = ByteBuffer.wrap(buffer, 0, readSize);
 				int read = channel.read(buf, currentPos);
 				if (read == -1)
-					break; // Should not happen
+					break;
 				out.write(buffer, 0, read);
 				currentPos += read;
 				remaining -= read;
@@ -142,6 +178,13 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 		}
 	}
 
+	/**
+	 * A single logical fragment that accumulates data in a list of {@link Chunk}s.
+	 * <p>
+	 * Fragments form a doubly-linked list ({@link #prev} / {@link #next}) that
+	 * defines their output order, which may differ from their creation order.
+	 * </p>
+	 */
 	protected class Fragment {
 		final int id;
 		Fragment prev, next;
@@ -150,22 +193,40 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 		long totalLength = 0;
 		long memoryUsage = 0;
 
-		// Optimization: keep the last chunk handy if it's a memory chunk for quick
-		// appending
+		/** Most recently allocated in-memory chunk; {@code null} when full or spilled. */
 		MemoryChunk activeChunk = null;
 
 		Fragment(int id) {
 			this.id = id;
 		}
 
+		/**
+		 * Returns the fragment ID (its index in {@link #fragments}).
+		 *
+		 * @return fragment ID
+		 */
 		int getId() {
 			return id;
 		}
 
+		/**
+		 * Returns the total number of bytes written to this fragment.
+		 *
+		 * @return byte count
+		 */
 		long getLength() {
 			return totalLength;
 		}
 
+		/**
+		 * Appends data to this fragment, allocating new chunks as needed and
+		 * triggering a spill when the global memory limit is exceeded.
+		 *
+		 * @param b   source byte array
+		 * @param off start offset in {@code b}
+		 * @param len number of bytes to write
+		 * @throws IOException if an I/O error occurs during a spill
+		 */
 		void write(byte[] b, int off, int len) throws IOException {
 			int remaining = len;
 			int offset = off;
@@ -192,7 +253,7 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 
 		private void ensureActiveChunk() throws IOException {
 			if (activeChunk == null) {
-				checkSpill(); // Check memory limit before allocation
+				spillIfNeeded(); // Check memory limit before allocation
 
 				activeChunk = new MemoryChunk(chunkSize);
 				chunks.add(activeChunk);
@@ -202,6 +263,18 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 			}
 		}
 
+		/**
+		 * Writes all in-memory chunks of this fragment to the shared temporary file,
+		 * replacing them with {@link FileChunk}s and releasing the memory budget.
+		 * <p>
+		 * Contiguous runs of {@link MemoryChunk}s are flushed in a single scatter-write
+		 * operation ({@link FileChannel#write(java.nio.ByteBuffer[])}) for efficiency.
+		 * After the call, {@link #memoryUsage} is zero and {@link #activeChunk} is
+		 * {@code null}.
+		 * </p>
+		 *
+		 * @throws IOException if an I/O error occurs while writing the temp file
+		 */
 		void spill() throws IOException {
 			if (memoryUsage == 0)
 				return;
@@ -273,11 +346,21 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 		this.maxMemory = config.maxMemory();
 	}
 
+	/**
+	 * @deprecated Use {@link #AbstractTempFileOutput(Config)} instead.
+	 *             This constructor existed before the {@link Config} record was
+	 *             introduced and the {@code threshold} parameter is ignored.
+	 */
 	@Deprecated
 	public AbstractTempFileOutput(int fragmentBufferSize, int totalBufferSize, int threshold) {
-		this(new Config(fragmentBufferSize, totalBufferSize)); // Map legacy params
+		this(new Config(fragmentBufferSize, totalBufferSize));
 	}
 
+	/**
+	 * Creates a new instance with the default configuration.
+	 *
+	 * @see Config#DEFAULT
+	 */
 	public AbstractTempFileOutput() {
 		this(Config.DEFAULT);
 	}
@@ -322,31 +405,63 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 	}
 
 	@Override
+	public void patch(int id, long fragmentOffset, byte[] b, int off, int len) throws IOException {
+		Fragment f = fragments.get(id);
+		long currentPos = 0;
+		int remaining = len;
+		int currentOff = off;
+
+		for (Chunk chunk : f.chunks) {
+			long chunkLen = chunk.getLength();
+
+			// Check if our patch range overlaps with this chunk
+			if (currentPos + chunkLen > fragmentOffset) {
+				// We have intersection.
+
+				// How far into the chunk do we start?
+				long startInChunk = Math.max(0, fragmentOffset - currentPos);
+
+				// How much can we write to this chunk?
+				long toWrite = Math.min(remaining, chunkLen - startInChunk);
+
+				if (chunk instanceof MemoryChunk mc) {
+					System.arraycopy(b, currentOff, mc.data, (int) startInChunk, (int) toWrite);
+				} else if (chunk instanceof FileChunk fc) {
+					ByteBuffer buf = ByteBuffer.wrap(b, currentOff, (int) toWrite);
+					fileChannel.write(buf, fc.position + startInChunk);
+				}
+
+				currentOff += toWrite;
+				remaining -= toWrite;
+			}
+
+			currentPos += chunkLen;
+			if (remaining <= 0)
+				break;
+		}
+
+		if (remaining > 0) {
+			throw new IOException("Patch exceeds fragment bounds. ID=" + id + ", Offset=" + fragmentOffset +
+					", Len=" + len + ", Remaining=" + remaining +
+					", FragmentLength=" + f.getLength() + ", Chunks=" + f.chunks.size());
+		}
+	}
+
+	@Override
 	public void finishFragment(int id) throws IOException {
 		// No-op in this strategy
 	}
 
 	@Override
 	public PositionInfo getPositionInfo() {
-		return new PositionInfo() {
-			private final long[] positions;
-			{
-				// Calculate all positions strictly by linked list order
-				positions = new long[fragments.size()];
-				long pos = 0;
-				Fragment curr = first;
-				while (curr != null) {
-					positions[curr.getId()] = pos;
-					pos += curr.getLength();
-					curr = curr.next;
-				}
-			}
-
-			@Override
-			public long getPosition(int id) {
-				return positions[id];
-			}
-		};
+		// Snapshot all fragment start positions ordered by the linked list.
+		final var positions = new long[fragments.size()];
+		long pos = 0;
+		for (var curr = first; curr != null; curr = curr.next) {
+			positions[curr.getId()] = pos;
+			pos += curr.getLength();
+		}
+		return id -> positions[id];
 	}
 
 	@Override
@@ -355,9 +470,9 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 	}
 
 	/**
-	 * Returns the total length of all data written.
-	 * 
-	 * @return total bytes written across all fragments.
+	 * Returns the total number of bytes written across all fragments.
+	 *
+	 * @return total byte count
 	 */
 	public long getLength() {
 		return totalLength;
@@ -365,12 +480,66 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 
 	@Override
 	public void close() throws IOException {
-		clean();
+		cleanup();
 	}
 
+	/**
+	 * Returns the current logical output as a contiguous byte array without
+	 * consuming the fragments.
+	 *
+	 * @return snapshot of the assembled fragment contents
+	 * @throws IOException if an I/O error occurs while copying spilled chunks
+	 */
+	public byte[] snapshotBytes() throws IOException {
+		final var out = new java.io.ByteArrayOutputStream((int) Math.min(Integer.MAX_VALUE, this.totalLength));
+		this.writeFragments(out);
+		return out.toByteArray();
+	}
+
+	/**
+	 * Replaces the current fragment set with a single fragment containing
+	 * {@code bytes}. This is useful when a higher layer needs to rebuild the final
+	 * serialized form after using fragments for intermediate layout calculations.
+	 *
+	 * @param bytes replacement output bytes
+	 * @throws IOException if an I/O error occurs while resetting fragment storage
+	 */
+	public void replaceBytes(final byte[] bytes) throws IOException {
+		for (final var fragment : this.fragments) {
+			fragment.chunks.clear();
+			fragment.totalLength = 0;
+			fragment.memoryUsage = 0;
+			fragment.activeChunk = null;
+		}
+		if (this.fragments.isEmpty()) {
+			this.addFragment();
+		}
+		this.first = this.fragments.get(0);
+		this.last = this.fragments.get(this.fragments.size() - 1);
+		for (int i = 0; i < this.fragments.size(); ++i) {
+			final var fragment = this.fragments.get(i);
+			fragment.prev = (i == 0) ? null : this.fragments.get(i - 1);
+			fragment.next = (i + 1 < this.fragments.size()) ? this.fragments.get(i + 1) : null;
+		}
+		this.currentMemoryUsage = 0;
+		this.totalLength = 0;
+		this.write(this.fragments.get(0).id, bytes, 0, bytes.length);
+	}
+
+	/**
+	 * Writes all fragments to {@code out} in their logical order, then releases
+	 * all resources.
+	 * <p>
+	 * This method is intended to be called by subclass {@code close()} methods.
+	 * After it returns, the instance must not be used further.
+	 * </p>
+	 *
+	 * @param out destination stream
+	 * @throws IOException if an I/O error occurs
+	 */
 	protected void finish(OutputStream out) throws IOException {
 		if (first == null) {
-			clean();
+			cleanup();
 			return;
 		}
 
@@ -378,18 +547,19 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 			LOG.fine("Finishing output. Total length: " + totalLength + ", Memory usage: " + currentMemoryUsage);
 		}
 
-		byte[] copyBuffer = new byte[8192]; // Buffer for disk-to-stream copies
-
-		Fragment curr = first;
-		while (curr != null) {
-			for (Chunk chunk : curr.chunks) {
-				chunk.writeTo(out, fileChannel, copyBuffer);
-			}
-			curr = curr.next;
-		}
+		this.writeFragments(out);
 
 		out.flush();
-		clean();
+		cleanup();
+	}
+
+	private void writeFragments(final OutputStream out) throws IOException {
+		final var copyBuffer = new byte[8192];
+		for (var curr = first; curr != null; curr = curr.next) {
+			for (final var chunk : curr.chunks) {
+				chunk.writeTo(out, fileChannel, copyBuffer);
+			}
+		}
 	}
 
 	// --- Internal Helpers ---
@@ -398,32 +568,41 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 		this.currentMemoryUsage += delta;
 	}
 
-	private void checkSpill() throws IOException {
+	/**
+	 * Spills fragments to disk until {@link #currentMemoryUsage} is below
+	 * {@link #maxMemory}.  Always evicts the fragment with the highest in-memory
+	 * footprint.
+	 *
+	 * @throws IOException if an I/O error occurs during the spill
+	 */
+	private void spillIfNeeded() throws IOException {
 		while (currentMemoryUsage >= maxMemory) {
-			// Strategy: Find the fragment with MAX memory usage.
-			Fragment candidate = findMaxMemoryFragment();
-
+			final var candidate = findFragmentWithMostMemory();
 			if (candidate == null || candidate.memoryUsage == 0) {
-				// Should not happen if usage > 0, but safety break
 				break;
 			}
-
 			candidate.spill();
 		}
 	}
 
-	private Fragment findMaxMemoryFragment() {
-		Fragment max = null;
-		long maxUsage = -1;
-		for (Fragment f : fragments) {
-			if (f.memoryUsage > maxUsage) {
-				maxUsage = f.memoryUsage;
-				max = f;
-			}
-		}
-		return max;
+	/**
+	 * Returns the fragment that currently occupies the most memory, or
+	 * {@code null} if the fragment list is empty.
+	 *
+	 * @return fragment with the highest {@link Fragment#memoryUsage}, or
+	 *         {@code null}
+	 */
+	private Fragment findFragmentWithMostMemory() {
+		return fragments.stream()
+				.max(java.util.Comparator.comparingLong(f -> f.memoryUsage))
+				.orElse(null);
 	}
 
+	/**
+	 * Opens the shared temporary file if it has not been opened yet.
+	 *
+	 * @throws IOException if the temp file cannot be created or opened
+	 */
 	private void ensureFileOpen() throws IOException {
 		if (fileChannel == null) {
 			tempFile = File.createTempFile("pdfg2d-io-fast-", ".tmp");
@@ -433,7 +612,14 @@ public abstract class AbstractTempFileOutput implements FragmentedOutput {
 		}
 	}
 
-	private void clean() {
+	/**
+	 * Closes and deletes the temporary file (if any) and resets all state.
+	 * <p>
+	 * Errors during resource release are logged at {@code WARNING} level and
+	 * swallowed so that they do not mask earlier exceptions.
+	 * </p>
+	 */
+	private void cleanup() {
 		try {
 			if (fileChannel != null)
 				fileChannel.close();

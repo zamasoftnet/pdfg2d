@@ -13,14 +13,14 @@ import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams.Version;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class PDFVersionTest {
 
     @ParameterizedTest
     @MethodSource("provideVersions")
     public void testPDFVersions(final Version version) throws Exception {
-        final var tempFile = File.createTempFile("test-version-" + version, ".pdf");
-        tempFile.deleteOnExit();
+        final var tempFile = TestOutputFiles.outputFile(getClass(), "test-version-" + version + ".pdf");
 
         final var params = PDFParams.createDefault().withVersion(version);
 

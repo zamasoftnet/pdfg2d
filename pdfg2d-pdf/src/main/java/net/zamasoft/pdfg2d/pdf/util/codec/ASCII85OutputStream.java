@@ -58,11 +58,23 @@ import java.io.OutputStream;
 import net.zamasoft.pdfg2d.pdf.PDFOutput;
 
 /**
- * This class applies a ASCII85 encoding to the stream.
- * 
- * @author Jeremias Maerki
- * @version $Id: ASCII85OutputStream.java,v 1.1.2.3 2003/04/23 20:50:04 jeremias
- *          Exp $
+ * Output stream filter that encodes binary data using the PDF
+ * {@code ASCII85Decode} encoding (also known as Base-85).
+ * <p>
+ * Every group of four input bytes is converted to five printable ASCII
+ * characters in the range {@code !} (0x21) through {@code u} (0x75).
+ * The all-zeros group is represented by the single character {@code z}.
+ * A line break is inserted every 80 characters to keep lines readable.
+ * The end-of-data marker ({@code ~>}) is written automatically when
+ * {@link #finish()} or {@link #close()} is called.
+ * </p>
+ * <p>
+ * This implementation is derived from the Apache FOP project and is
+ * licensed under the Apache Software License, Version 1.1.
+ * </p>
+ *
+ * @author Jeremias Maerki (Apache FOP), adapted by MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class ASCII85OutputStream extends FilterOutputStream {
 
@@ -88,11 +100,18 @@ public class ASCII85OutputStream extends FilterOutputStream {
 
 	private int posinline = 0;
 
-	public ASCII85OutputStream(OutputStream out) {
+	/**
+	 * Constructs an ASCII85OutputStream that wraps the given stream.
+	 *
+	 * @param out the underlying stream to write encoded data to
+	 */
+	public ASCII85OutputStream(final OutputStream out) {
 		super(out);
 	}
 
-	public void write(int b) throws IOException {
+	/** {@inheritDoc} */
+	@Override
+	public void write(final int b) throws IOException {
 		if (this.pos == 0) {
 			this.buffer += (b << 24) & 0xff000000L;
 		} else if (this.pos == 1) {
@@ -167,6 +186,17 @@ public class ASCII85OutputStream extends FilterOutputStream {
 		return ret;
 	}
 
+	/**
+	 * Flushes any remaining buffered bytes and writes the end-of-data marker
+	 * ({@code ~>}) to the stream.
+	 * <p>
+	 * If there are between 1 and 3 bytes left in the internal buffer they are
+	 * padded with zero bytes to form a complete 4-byte group; only the first
+	 * {@code n + 1} characters of the resulting 5-character encoding are written.
+	 * </p>
+	 *
+	 * @throws IOException if an I/O error occurs while writing
+	 */
 	public void finish() throws IOException {
 		// now take care of the trailing few bytes.
 		// with n leftover bytes, we append 0 bytes to make a full group of 4
@@ -201,6 +231,13 @@ public class ASCII85OutputStream extends FilterOutputStream {
 		flush();
 	}
 
+	/**
+	 * Calls {@link #finish()} to flush remaining data and write the end-of-data
+	 * marker, then closes the underlying stream.
+	 *
+	 * @throws IOException if an I/O error occurs
+	 */
+	@Override
 	public void close() throws IOException {
 		finish();
 		super.close();

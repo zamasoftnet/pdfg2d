@@ -8,7 +8,6 @@ import java.io.FileOutputStream;
 
 import org.apache.pdfbox.Loader;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import net.zamasoft.pdfg2d.g2d.gc.BridgeGraphics2D;
 import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
@@ -17,18 +16,16 @@ import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams.ColorMode;
 import net.zamasoft.pdfg2d.pdf.utils.GraphicsOperatorInspector;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 /**
  * Tests for PDF Color Modes: RGB, Gray, and CMYK.
  */
 public class PDFColorModeTest {
 
-    @TempDir
-    File tempDir;
-
     @Test
     public void testColorModeRGB() throws Exception {
-        final var file = new File(tempDir, "color_mode_rgb.pdf");
+        final var file = TestOutputFiles.outputFile(getClass(), "color_mode_rgb.pdf");
         final var params = PDFParams.createDefault().withColorMode(ColorMode.PRESERVE); // Used for RGB
 
         try (final var out = new FileOutputStream(file)) {
@@ -64,7 +61,7 @@ public class PDFColorModeTest {
 
     @Test
     public void testColorModeGray() throws Exception {
-        final var file = new File(tempDir, "color_mode_gray.pdf");
+        final var file = TestOutputFiles.outputFile(getClass(), "color_mode_gray.pdf");
         final var params = PDFParams.createDefault().withColorMode(ColorMode.GRAY);
 
         try (final var out = new FileOutputStream(file)) {
@@ -101,7 +98,7 @@ public class PDFColorModeTest {
 
     @Test
     public void testColorModeCMYK() throws Exception {
-        final var file = new File(tempDir, "color_mode_cmyk.pdf");
+        final var file = TestOutputFiles.outputFile(getClass(), "color_mode_cmyk.pdf");
         final var params = PDFParams.createDefault().withColorMode(ColorMode.CMYK);
 
         try (final var out = new FileOutputStream(file)) {

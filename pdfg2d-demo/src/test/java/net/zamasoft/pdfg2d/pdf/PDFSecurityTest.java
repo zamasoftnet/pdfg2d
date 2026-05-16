@@ -11,13 +11,13 @@ import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.params.V2EncryptionParams; // 128-bit RC4 (V2)
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class PDFSecurityTest {
 
     @Test
     public void testPermissionsAndEncryptionRC4() throws Exception {
-        final var tempFile = File.createTempFile("test-security-rc4", ".pdf");
-        tempFile.deleteOnExit();
+        final var tempFile = TestOutputFiles.outputFile(getClass(), "test-security-rc4.pdf");
 
         var params = PDFParams.createDefault();
 

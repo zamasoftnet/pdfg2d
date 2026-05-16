@@ -1,8 +1,11 @@
 package net.zamasoft.pdfg2d.pdf;
 
 /**
- * Metadata information for a PDF document.
- * 
+ * Metadata information for a PDF document, corresponding to the PDF
+ * information dictionary (PDF spec section 14.3.3).
+ * All string fields may be {@code null} if not set.
+ * Date fields use milliseconds since the Unix epoch, or {@code -1} if not set.
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
@@ -17,112 +20,150 @@ public final class PDFMetaInfo {
 	private long modDate = -1L;
 
 	/**
-	 * @return Returns the author.
+	 * Returns the document author, or {@code null} if not set.
+	 *
+	 * @return the author string
 	 */
 	public String getAuthor() {
 		return this.author;
 	}
 
 	/**
-	 * @param author The author to set.
+	 * Sets the document author.
+	 *
+	 * @param author the author string, or {@code null} to clear
 	 */
 	public void setAuthor(final String author) {
 		this.author = author;
 	}
 
 	/**
-	 * @return Returns the creator.
+	 * Returns the application that created the original document before conversion
+	 * to PDF, or {@code null} if not set.
+	 *
+	 * @return the creator string
 	 */
 	public String getCreator() {
 		return this.creator;
 	}
 
 	/**
-	 * @param creator The creator to set.
+	 * Sets the application that created the original document.
+	 *
+	 * @param creator the creator string, or {@code null} to clear
 	 */
 	public void setCreator(final String creator) {
 		this.creator = creator;
 	}
 
 	/**
-	 * @return Returns the keywords.
+	 * Returns keywords associated with the document, or {@code null} if not set.
+	 *
+	 * @return the keywords string
 	 */
 	public String getKeywords() {
 		return this.keywords;
 	}
 
 	/**
-	 * @param keywords The keywords to set.
+	 * Sets keywords associated with the document.
+	 *
+	 * @param keywords the keywords string, or {@code null} to clear
 	 */
 	public void setKeywords(final String keywords) {
 		this.keywords = keywords;
 	}
 
 	/**
-	 * @return Returns the producer.
+	 * Returns the application that converted the document to PDF, or {@code null}
+	 * if not set.
+	 *
+	 * @return the producer string
 	 */
 	public String getProducer() {
 		return this.producer;
 	}
 
 	/**
-	 * @param producer The producer to set.
+	 * Sets the application that converted the document to PDF.
+	 *
+	 * @param producer the producer string, or {@code null} to clear
 	 */
 	public void setProducer(final String producer) {
 		this.producer = producer;
 	}
 
 	/**
-	 * @return Returns the subject.
+	 * Returns the subject of the document, or {@code null} if not set.
+	 *
+	 * @return the subject string
 	 */
 	public String getSubject() {
 		return this.subject;
 	}
 
 	/**
-	 * @param subject The subject to set.
+	 * Sets the subject of the document.
+	 *
+	 * @param subject the subject string, or {@code null} to clear
 	 */
 	public void setSubject(final String subject) {
 		this.subject = subject;
 	}
 
 	/**
-	 * @return Returns the title.
+	 * Returns the document title, or {@code null} if not set.
+	 *
+	 * @return the title string
 	 */
 	public String getTitle() {
 		return this.title;
 	}
 
 	/**
-	 * @param title The title to set.
+	 * Sets the document title.
+	 *
+	 * @param title the title string, or {@code null} to clear
 	 */
 	public void setTitle(final String title) {
 		this.title = title;
 	}
 
 	/**
-	 * @return The creation date as a timestamp, or -1 if not set.
+	 * Returns the document creation date as a Unix epoch timestamp in milliseconds,
+	 * or {@code -1} if not set.
+	 *
+	 * @return the creation date timestamp, or {@code -1}
 	 */
 	public long getCreationDate() {
 		return this.creationDate;
 	}
 
 	/**
-	 * @param creationDate The creation date timestamp to set.
+	 * Sets the document creation date.
+	 *
+	 * @param creationDate the creation date as a Unix epoch timestamp in milliseconds,
+	 *                     or {@code -1} to clear
 	 */
 	public void setCreationDate(final long creationDate) {
 		this.creationDate = creationDate;
 	}
 
 	/**
-	 * @return The modification date as a timestamp, or -1 if not set.
+	 * Returns the document modification date as a Unix epoch timestamp in
+	 * milliseconds, or {@code -1} if not set.
+	 *
+	 * @return the modification date timestamp, or {@code -1}
 	 */
 	public long getModDate() {
 		return this.modDate;
 	}
 
 	/**
-	 * @param modDate The modification date timestamp to set.
+	 * Sets the document modification date.
+	 *
+	 * @param modDate the modification date as a Unix epoch timestamp in milliseconds,
+	 *                or {@code -1} to clear
 	 */
 	public void setModDate(final long modDate) {
 		this.modDate = modDate;

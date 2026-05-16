@@ -31,11 +31,25 @@ import net.zamasoft.pdfg2d.gc.paint.RadialGradient;
 import net.zamasoft.pdfg2d.gc.text.Text;
 
 /**
+ * A {@link GC} implementation that delegates rendering operations to a Java2D
+ * {@link java.awt.Graphics2D} context. This class bridges the pdfg2d graphics
+ * abstraction layer with the AWT/Java2D painting API, translating internal
+ * paint, stroke, transform, and image operations into equivalent {@code Graphics2D}
+ * calls.
+ *
+ * <p>Graphics state (clip, transform, stroke, paints, alpha, text mode) is
+ * managed via an explicit push/pop stack driven by {@link #begin()} and
+ * {@link #end()}.
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
-
 public class G2DGC implements GC {
+	/**
+	 * Snapshot of all mutable graphics-state fields belonging to a {@link G2DGC}.
+	 * Instances are pushed onto the state stack by {@link G2DGC#begin()} and
+	 * popped (restored) by {@link G2DGC#end()}.
+	 */
 	protected static class GraphicsState {
 		public final Shape clip;
 
@@ -59,6 +73,11 @@ public class G2DGC implements GC {
 
 		public final Composite composite;
 
+		/**
+		 * Captures the current graphics state from the given {@link G2DGC}.
+		 *
+		 * @param gc the graphics context whose state is to be saved
+		 */
 		public GraphicsState(G2DGC gc) {
 			Graphics2D g = gc.g;
 			this.transform = g.getTransform();
@@ -75,6 +94,11 @@ public class G2DGC implements GC {
 			this.textMode = gc.textMode;
 		}
 
+		/**
+		 * Restores the previously captured graphics state into the given {@link G2DGC}.
+		 *
+		 * @param gc the graphics context to restore state into
+		 */
 		public void restore(G2DGC gc) {
 			Graphics2D g = gc.g;
 			g.setTransform(this.transform);
@@ -112,6 +136,13 @@ public class G2DGC implements GC {
 
 	protected final FontManager fm;
 
+	/**
+	 * Constructs a new {@code G2DGC} wrapping the given {@link Graphics2D} context.
+	 * The stroke is initialised to a 1-pixel butt-cap miter-join {@link java.awt.BasicStroke}.
+	 *
+	 * @param g  the underlying Java2D graphics context; must not be {@code null}
+	 * @param fm the font manager used for text rendering; must not be {@code null}
+	 */
 	public G2DGC(Graphics2D g, FontManager fm) {
 		this.g = g;
 		this.g.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
@@ -119,18 +150,38 @@ public class G2DGC implements GC {
 		this.fm = fm;
 	}
 
+	/**
+	 * Returns the font manager associated with this graphics context.
+	 *
+	 * @return the {@link FontManager}
+	 */
 	public FontManager getFontManager() {
 		return this.fm;
 	}
 
+	/**
+	 * Returns the underlying Java2D {@link Graphics2D} context.
+	 *
+	 * @return the wrapped {@code Graphics2D}
+	 */
 	public Graphics2D getGraphics2D() {
 		return this.g;
 	}
 
+	/**
+	 * Returns {@code true} if any rendering operation has been performed since the
+	 * last top-level {@link #begin()} call.
+	 *
+	 * @return {@code true} if something has been drawn
+	 */
 	public boolean drewAnything() {
 		return this.drewAnything;
 	}
 
+	/**
+	 * Saves the current graphics state onto the internal stack and resets the
+	 * {@code drewAnything} flag when the stack was empty before this call.
+	 */
 	public void begin() {
 		if (this.stack.isEmpty()) {
 			this.drewAnything = false;
@@ -138,11 +189,19 @@ public class G2DGC implements GC {
 		this.stack.add(new GraphicsState(this));
 	}
 
+	/**
+	 * Pops the most recently saved graphics state from the stack and restores it.
+	 */
 	public void end() {
 		GraphicsState state = (GraphicsState) this.stack.remove(this.stack.size() - 1);
 		state.restore(this);
 	}
 
+	/**
+	 * Sets the stroke line width.
+	 *
+	 * @param width the new line width in user-space units
+	 */
 	public void setLineWidth(double width) {
 		BasicStroke stroke = (BasicStroke) this.g.getStroke();
 		float fwidth = (float) width;

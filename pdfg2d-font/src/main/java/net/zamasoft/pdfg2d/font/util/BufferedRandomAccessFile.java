@@ -21,16 +21,19 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 
 /**
- * This class is a version of the one published at
- * https://code.google.com/p/jmzreader/wiki/BufferedRandomAccessFile augmented
- * to handle unsigned bytes. The original class is published under Apache 2.0
- * license. Fix is marked below
+ * An optimised subclass of {@link RandomAccessFile} that adds an internal
+ * read-ahead buffer to reduce the number of native I/O calls.  Reads are
+ * served from the buffer whenever possible; the buffer is refilled lazily
+ * when the current position moves past the buffered region.
  *
- * This is an optimized version of the RandomAccessFile class as described by
- * Nick Zhang on JavaWorld.com. The article can be found at
- * http://www.javaworld.com/javaworld/javatips/jw-javatip26.html
+ * <p>This class is derived from the implementation published at
+ * https://code.google.com/p/jmzreader/wiki/BufferedRandomAccessFile (Apache
+ * 2.0 licence) and augmented to handle unsigned bytes correctly when reading
+ * font binary data.
  *
  * @author jg
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class BufferedRandomAccessFile extends RandomAccessFile {
 	/**
@@ -98,6 +101,13 @@ public class BufferedRandomAccessFile extends RandomAccessFile {
 		this.buffer = new byte[this.BUFSIZE];
 	}
 
+	/**
+	 * Reads a single byte from the file, returning it as an unsigned value in the
+	 * range {@code 0}–{@code 255}, or {@code -1} at end-of-file.
+	 *
+	 * @return the unsigned byte value, or {@code -1} at end-of-file
+	 * @throws IOException if an I/O error occurs
+	 */
 	@Override
 	public final int read() throws IOException {
 		if (this.bufpos >= this.bufend && fillBuffer() < 0) {
@@ -144,11 +154,28 @@ public class BufferedRandomAccessFile extends RandomAccessFile {
 		this.realpos = super.getFilePointer();
 	}
 
+	/**
+	 * Reads up to {@code b.length} bytes into the given array.
+	 *
+	 * @param b the buffer to read into
+	 * @return the number of bytes actually read, or {@code -1} at end-of-file
+	 * @throws IOException if an I/O error occurs
+	 */
 	@Override
 	public int read(final byte[] b) throws IOException {
 		return this.read(b, 0, b.length);
 	}
 
+	/**
+	 * Reads up to {@code len} bytes starting at offset {@code off} in the given
+	 * array.  Data is served from the internal buffer where possible.
+	 *
+	 * @param b   the buffer to read into
+	 * @param off the start offset in {@code b}
+	 * @param len the maximum number of bytes to read
+	 * @return the number of bytes actually read, or {@code -1} at end-of-file
+	 * @throws IOException if an I/O error occurs
+	 */
 	@Override
 	public int read(final byte[] b, final int off, final int len) throws IOException {
 		int leftover = this.bufend - this.bufpos;
@@ -168,11 +195,26 @@ public class BufferedRandomAccessFile extends RandomAccessFile {
 		return leftover > 0 ? leftover : -1;
 	}
 
+	/**
+	 * Returns the logical file pointer (the position of the next byte that will
+	 * be read), taking the internal buffer into account.
+	 *
+	 * @return the current file offset in bytes
+	 * @throws IOException if an I/O error occurs
+	 */
 	@Override
 	public long getFilePointer() throws IOException {
 		return this.realpos - this.bufend + this.bufpos;
 	}
 
+	/**
+	 * Repositions the file pointer to the given offset.  If the new position
+	 * falls within the current buffer window the buffer is reused; otherwise the
+	 * buffer is invalidated and the underlying file is sought directly.
+	 *
+	 * @param pos the new file offset in bytes from the start of the file
+	 * @throws IOException if an I/O error occurs
+	 */
 	@Override
 	public void seek(final long pos) throws IOException {
 		final int n = (int) (this.realpos - pos);

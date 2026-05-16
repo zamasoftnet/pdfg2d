@@ -1,8 +1,19 @@
 package net.zamasoft.pdfg2d.pdf;
 
 /**
- * Represents a PDF object reference.
- * 
+ * Immutable identifier for a PDF indirect object, consisting of an
+ * <em>object number</em> and a <em>generation number</em>.
+ * <p>
+ * In PDF syntax an indirect reference is written as {@code N G R} (e.g.
+ * {@code 5 0 R}).  Two {@code ObjectRef} instances are considered equal when
+ * both numbers match, regardless of subclass.
+ * </p>
+ * <p>
+ * Subclasses may add mutable state (e.g. a file position for cross-reference
+ * patching) but equality and hashing are always based solely on the two
+ * immutable number components.
+ * </p>
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */

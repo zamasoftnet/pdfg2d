@@ -31,6 +31,13 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * @since 1.0
  */
 public class TransparencyGroupDemo {
+	/**
+	 * Entry point. Generates {@code output/group-image.pdf} and opens a Swing
+	 * preview window showing the nested transparency groups.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if an error occurs during PDF generation
+	 */
 	public static void main(final String[] args) throws Exception {
 		final var params = PDFParams.createDefault().withCompression(PDFParams.Compression.NONE);
 
@@ -74,7 +81,7 @@ public class TransparencyGroupDemo {
 	 * 
 	 * @param gc graphics context
 	 */
-	private static void draw(final GC gc) {
+	static void draw(final GC gc) {
 		gc.transform(AffineTransform.getRotateInstance(.1f));
 		gc.setLineWidth(10);
 

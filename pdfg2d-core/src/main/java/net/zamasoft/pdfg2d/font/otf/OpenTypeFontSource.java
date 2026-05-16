@@ -29,12 +29,13 @@ import net.zamasoft.pdfg2d.gc.font.Panose;
 import net.zamasoft.pdfg2d.gc.text.util.TextUtils;
 
 /**
- * @author MIYABE Tatsuhiko
- * @since 1.0
- */
-/**
- * Represents a source of an OpenType font.
- * 
+ * Represents a source of an OpenType font loaded from a font file.
+ * <p>
+ * This class reads font metadata (metrics, glyph data, etc.) from a TTF/OTF
+ * file at construction time, caching the resulting {@code OpenTypeFont} instance
+ * in a weak-reference map keyed by file path.
+ * </p>
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
@@ -208,14 +209,29 @@ public class OpenTypeFontSource extends AbstractFontSource {
 		return this.direction;
 	}
 
+	/**
+	 * Overrides the font name.
+	 *
+	 * @param fontName the new font name
+	 */
 	public void setFontName(final String fontName) {
 		this.fontName = fontName;
 	}
 
+	/**
+	 * Returns the PANOSE classification for this font.
+	 *
+	 * @return the PANOSE object
+	 */
 	public Panose getPanose() {
 		return this.panose;
 	}
 
+	/**
+	 * Overrides the PANOSE classification for this font.
+	 *
+	 * @param panose the new PANOSE object
+	 */
 	public void setPanose(final Panose panose) {
 		this.panose = panose;
 	}
@@ -265,14 +281,30 @@ public class OpenTypeFontSource extends AbstractFontSource {
 		return this.stemV;
 	}
 
+	/**
+	 * Returns the number of font design units per em.
+	 *
+	 * @return the units-per-em value
+	 */
 	public short getUnitsPerEm() {
 		return this.upm;
 	}
 
+	/**
+	 * Returns the primary cmap format used for character-to-glyph mapping.
+	 *
+	 * @return the cmap format
+	 */
 	public GenericCmapFormat getCmapFormat() {
 		return this.cmap;
 	}
 
+	/**
+	 * Returns the Unicode Variation Sequences cmap format, or {@code null} if
+	 * the font does not contain one.
+	 *
+	 * @return the UVS cmap format, or {@code null}
+	 */
 	public UvsCmapFormat getUvsCmapFormat() {
 		return this.uvsCmap;
 	}

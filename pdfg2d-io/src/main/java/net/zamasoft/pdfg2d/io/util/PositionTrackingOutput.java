@@ -18,8 +18,7 @@ import net.zamasoft.pdfg2d.io.FragmentedOutput;
  * </p>
  * 
  * @author MIYABE Tatsuhiko
- * @version $Id: RandomBuilderPositionSupport.java 656 2011-09-03 15:42:28Z
- *          miyabe $
+ * @since 1.0
  */
 public class PositionTrackingOutput extends FragmentedOutputWrapper {
 	/** Debug flag for logging fragment statistics. */
@@ -32,16 +31,24 @@ public class PositionTrackingOutput extends FragmentedOutputWrapper {
 	private FragmentInfo first = null, last = null;
 
 	/**
-	 * Internal class to track fragment ordering and size.
+	 * Internal record of a single fragment's position within the output order.
+	 * <p>
+	 * Instances are linked together into a doubly-linked list that reflects the
+	 * logical output order, which may differ from creation order when
+	 * {@link #insertFragmentBefore} is used.
+	 * </p>
 	 */
 	private static class FragmentInfo {
-		/** Fragment ID. */
+		/** Immutable fragment ID assigned at creation time. */
 		public final int id;
 
-		/** Previous and next fragments in the linked list. */
-		public FragmentInfo prev = null, next = null;
+		/** Previous fragment in logical output order; {@code null} if this is the first. */
+		public FragmentInfo prev = null;
 
-		/** Total byte length of this fragment. */
+		/** Next fragment in logical output order; {@code null} if this is the last. */
+		public FragmentInfo next = null;
+
+		/** Accumulated byte length of all data written to this fragment. */
 		public long fragmentLength = 0;
 
 		/**

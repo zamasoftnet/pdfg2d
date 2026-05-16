@@ -120,10 +120,16 @@ public class CFFOutputStream extends FilterOutputStream {
 
 	private int offset = 0;
 
+	/**
+	 * Constructs a new CFF output stream wrapping the given underlying stream.
+	 *
+	 * @param out the underlying output stream
+	 */
 	public CFFOutputStream(OutputStream out) {
 		super(out);
 	}
 
+	/** {@inheritDoc} */
 	public void write(byte[] b, int off, int len) throws IOException {
 		this.offset += len;
 		this.out.write(b, off, len);
@@ -139,10 +145,21 @@ public class CFFOutputStream extends FilterOutputStream {
 		this.out.write(b);
 	}
 
+	/**
+	 * Returns the number of bytes written to this stream so far.
+	 *
+	 * @return the byte offset
+	 */
 	public int getOffset() {
 		return this.offset;
 	}
 
+	/**
+	 * Converts a string to its ISO-8859-1 byte representation.
+	 *
+	 * @param str the string to convert
+	 * @return the ISO-8859-1 encoded bytes
+	 */
 	public static byte[] toBytes(String str) {
 		try {
 			return str.getBytes("ISO-8859-1");
@@ -151,15 +168,34 @@ public class CFFOutputStream extends FilterOutputStream {
 		}
 	}
 
+	/**
+	 * Writes a single unsigned 8-bit integer (Card8).
+	 *
+	 * @param b the byte value to write
+	 * @throws IOException if an I/O error occurs
+	 */
 	public void writeCard8(byte b) throws IOException {
 		this.write(b);
 	}
 
+	/**
+	 * Writes an unsigned 16-bit integer (Card16) in big-endian order.
+	 *
+	 * @param a the integer value to write (lower 16 bits used)
+	 * @throws IOException if an I/O error occurs
+	 */
 	public void writeCard16(int a) throws IOException {
 		this.write(a >> 8);
 		this.write(a);
 	}
 
+	/**
+	 * Writes a CFF OffSize field (1 byte, value must be 1–4).
+	 *
+	 * @param offSize the offset size in bytes (1–4)
+	 * @throws IOException              if an I/O error occurs
+	 * @throws IllegalArgumentException if {@code offSize} is not in range 1–4
+	 */
 	public void writeOffSize(byte offSize) throws IOException {
 		if (offSize < 1 || offSize > 4) {
 			throw new IllegalArgumentException();
@@ -167,6 +203,14 @@ public class CFFOutputStream extends FilterOutputStream {
 		this.write(offSize);
 	}
 
+	/**
+	 * Writes an offset value using the specified number of bytes (big-endian).
+	 *
+	 * @param a    the offset value
+	 * @param size the number of bytes to write (1–4)
+	 * @throws IOException              if an I/O error occurs
+	 * @throws IllegalArgumentException if {@code size} is not in range 1–4
+	 */
 	public void writeOffset(int a, int size) throws IOException {
 		switch (size) {
 			case 4:
@@ -184,6 +228,14 @@ public class CFFOutputStream extends FilterOutputStream {
 		}
 	}
 
+	/**
+	 * Writes a non-standard String ID (NSSID), offset by the number of standard
+	 * CFF strings (391).
+	 *
+	 * @param sid the zero-based index into the non-standard string INDEX
+	 * @throws IOException              if an I/O error occurs
+	 * @throws IllegalArgumentException if the resulting SID is out of range
+	 */
 	public void writeNSSID(int sid) throws IOException {
 		sid += NSTDSTRINGS;
 		if (sid < 0 || sid > 64999) {
@@ -192,11 +244,25 @@ public class CFFOutputStream extends FilterOutputStream {
 		this.writeInteger(sid);
 	}
 
+	/**
+	 * Writes a CFF DICT operator (1 or 2 bytes).
+	 *
+	 * @param o the operator byte sequence
+	 * @return the number of bytes written
+	 * @throws IOException if an I/O error occurs
+	 */
 	public int writeOperator(byte[] o) throws IOException {
 		this.write(o);
 		return o.length;
 	}
 
+	/**
+	 * Encodes and writes an integer operand using the most compact CFF encoding.
+	 *
+	 * @param a the integer value to write
+	 * @return the number of bytes written (1, 2, 3, or 5)
+	 * @throws IOException if an I/O error occurs
+	 */
 	public int writeInteger(int a) throws IOException {
 		if (a >= -107 && a <= 107) {
 			this.write(a + 139);
@@ -226,6 +292,14 @@ public class CFFOutputStream extends FilterOutputStream {
 		}
 	}
 
+	/**
+	 * Encodes and writes a real-number operand using the CFF nibble encoding.
+	 *
+	 * @param real the decimal string representation of the real number
+	 * @return the number of bytes written
+	 * @throws IOException              if an I/O error occurs
+	 * @throws IllegalArgumentException if {@code real} contains an unexpected character
+	 */
 	public int writeReal(String real) throws IOException {
 		this.write(0x1e);
 
@@ -280,6 +354,15 @@ public class CFFOutputStream extends FilterOutputStream {
 		return count + 1;
 	}
 
+	/**
+	 * Writes the 4-byte CFF header.
+	 *
+	 * @param major   the major version (typically 1)
+	 * @param minor   the minor version (typically 0)
+	 * @param hdrSize the size of the header in bytes (typically 4)
+	 * @param offSize the default offset size used in the top-level INDEXes
+	 * @throws IOException if an I/O error occurs
+	 */
 	public void writeHeader(byte major, byte minor, byte hdrSize, byte offSize) throws IOException {
 		this.writeCard8(major);
 		this.writeCard8(minor);
@@ -287,6 +370,13 @@ public class CFFOutputStream extends FilterOutputStream {
 		this.writeOffSize(offSize);
 	}
 
+	/**
+	 * Writes a CFF INDEX structure containing the given objects.
+	 *
+	 * @param objects the array of byte arrays representing the INDEX entries
+	 * @param offSize the number of bytes used for each offset in the INDEX
+	 * @throws IOException if an I/O error occurs
+	 */
 	public void writeIndex(byte[][] objects, byte offSize) throws IOException {
 		this.writeCard16((short) (objects.length));
 		if (objects.length <= 0) {

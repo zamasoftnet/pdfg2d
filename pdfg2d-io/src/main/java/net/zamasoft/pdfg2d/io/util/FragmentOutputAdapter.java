@@ -19,8 +19,7 @@ import net.zamasoft.pdfg2d.io.FragmentedOutput;
  * </p>
  * 
  * @author MIYABE Tatsuhiko
- * @version $Id: RandomBuilderOutputStream.java 656 2011-09-03 15:42:28Z miyabe
- *          $
+ * @since 1.0
  */
 public class FragmentOutputAdapter extends OutputStream {
 	/** The target FragmentedOutput. */

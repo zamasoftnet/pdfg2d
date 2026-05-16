@@ -3,6 +3,21 @@ package net.zamasoft.pdfg2d.resolver.protocol.zip;
 import java.io.File;
 import net.zamasoft.pdfg2d.resolver.SourceValidity;
 
+/**
+ * {@link SourceValidity} implementation for sources residing inside a ZIP
+ * archive.
+ * <p>
+ * Validity is determined by comparing the ZIP file's last-modified timestamp
+ * recorded at resolution time ({@code timestamp}) with its current
+ * last-modified value.  Any change to the archive file invalidates the entry.
+ * </p>
+ *
+ * @param timestamp the last-modified time of the ZIP file when the source was
+ *                  resolved
+ * @param file      the ZIP archive file
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 record ZIPFileSourceValidity(long timestamp, File file) implements SourceValidity {
 	@Override
 	public Validity getValid() {

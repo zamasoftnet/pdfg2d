@@ -4,21 +4,42 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 /**
- * Output stream for PDF fragments.
- * 
+ * Abstract base for an output stream that writes a single PDF fragment.
+ * <p>
+ * A PDF document is assembled from multiple fragments (indirect objects,
+ * streams, dictionaries).  Each fragment is written through one instance of
+ * this class and contributes its byte range to the cross-reference table.
+ * </p>
+ * <p>
+ * Subclasses implement the actual encoding (RAW, deflate/binary, or
+ * deflate/ASCII85) selected by the {@link Mode} passed to
+ * {@link #startStream(Mode)} and {@link #startStreamFromHash(Mode)}.
+ * </p>
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
 public abstract class PDFFragmentOutput extends PDFOutput {
+	/**
+	 * Stream encoding mode used when writing PDF stream objects.
+	 */
 	public enum Mode {
-		/** Writes data output to the stream directly to PDF. */
+		/** Writes data directly to the PDF without any encoding or compression. */
 		RAW,
-		/** Performs compression suitable for binary data. */
+		/** Applies Deflate compression; suitable for binary image/font data. */
 		BINARY,
-		/** Performs compression suitable for text data. */
+		/** Applies Deflate compression followed by ASCII85 encoding; suitable
+		 *  for text-safe contexts (e.g. PostScript-embedded PDFs). */
 		ASCII;
 	}
 
+	/**
+	 * Constructs a fragment output stream.
+	 *
+	 * @param out          the underlying byte sink
+	 * @param nameEncoding encoding used for PDF name objects
+	 * @throws IOException if an I/O error occurs during construction
+	 */
 	protected PDFFragmentOutput(final OutputStream out, final String nameEncoding) throws IOException {
 		super(out, nameEncoding);
 	}

@@ -141,8 +141,24 @@ import net.zamasoft.pdfg2d.util.ColorUtils;
  */
 
 /**
- * PDF Graphics Context implementation.
- * Translates GC operations into PDF operators.
+ * PDF Graphics Context — translates high-level {@link GC} drawing calls into
+ * the binary PDF operator stream written to a {@link PDFGraphicsOutput}.
+ * <p>
+ * Each drawing operation (path construction, painting, text, image placement,
+ * clipping, transparency, colour-space selection) is mapped to the
+ * corresponding PDF content-stream operators defined in ISO 32000-1 (PDF 1.7).
+ * A short reference to the operators used is kept in the block comment above
+ * this class declaration.
+ * </p>
+ * <p>
+ * Graphics-state save/restore ({@code q}/{@code Q}) is modelled by the
+ * {@link GraphicsState} record.  Shadings (gradients) and extended graphics
+ * states (transparency) are cached by structural equality so that duplicate
+ * resource entries are not emitted.
+ * </p>
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class PDFGC implements GC, Closeable {
 	private static final Logger LOG = Logger.getLogger(PDFGC.class.getName());

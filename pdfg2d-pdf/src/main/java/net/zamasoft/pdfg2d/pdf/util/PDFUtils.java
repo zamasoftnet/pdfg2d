@@ -4,8 +4,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
 
 /**
- * Utility class for PDF operations.
- * 
+ * Static utility methods for common PDF operations.
+ * <p>
+ * Provides unit conversion helpers (mm/cm/inch → points), standard paper-size
+ * constants, and PDF name encoding/decoding per ISO 32000-1 section 7.3.5.
+ * </p>
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
@@ -23,12 +27,21 @@ public final class PDFUtils {
 	/** Points per cm. */
 	public static final double POINTS_PER_CM = POINTS_PER_INCH / 2.54;
 
+	/** Standard A4 paper width in millimetres (210 mm). */
 	public static final double PAPER_A4_WIDTH_MM = 210.0;
 
+	/** Standard A4 paper height in millimetres (297 mm). */
 	public static final double PAPER_A4_HEIGHT_MM = 297.0;
 
+	/** Recommended bleed/cutting margin in millimetres (3 mm). */
 	public static final double CUTTING_MARGIN_MM = 3.0;
 
+	/**
+	 * Converts a length in millimetres to PDF user units (points).
+	 *
+	 * @param mm the length in millimetres
+	 * @return the equivalent length in points (1 pt = 1/72 in)
+	 */
 	public static double mmToPt(final double mm) {
 		return mm * POINTS_PER_MM;
 	}
@@ -36,6 +49,17 @@ public final class PDFUtils {
 	private static final byte[] HEX = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
 			'F' };
 
+	/**
+	 * Encodes a PDF name string per the PDF specification: characters outside the
+	 * printable ASCII range and reserved delimiter characters ({@code # ( ) [ ] { }
+	 * &lt; &gt; / %}) are percent-encoded as {@code #XX} where {@code XX} is the
+	 * uppercase hexadecimal byte value.
+	 *
+	 * @param s        the name string to encode
+	 * @param encoding the character encoding to use when converting the string to bytes
+	 * @return the encoded byte array ready for output to a PDF stream
+	 * @throws UnsupportedEncodingException if the specified encoding is not supported
+	 */
 	public static byte[] encodeName(final String s, final String encoding) throws UnsupportedEncodingException {
 		boolean encode = false;
 		final byte[] b = s.getBytes(encoding);
@@ -101,6 +125,17 @@ public final class PDFUtils {
 		return buff.toByteArray();
 	}
 
+	/**
+	 * Decodes a PDF name string that was encoded with {@link #encodeName}.
+	 * Each {@code #XX} escape sequence is replaced by the corresponding byte
+	 * value, and the resulting byte array is converted back to a string using
+	 * the given encoding.
+	 *
+	 * @param s        the encoded PDF name string
+	 * @param encoding the character encoding used to interpret the decoded bytes
+	 * @return the decoded name string
+	 * @throws UnsupportedEncodingException if the specified encoding is not supported
+	 */
 	public static String decodeName(final String s, final String encoding) throws UnsupportedEncodingException {
 		final char[] ch = s.toCharArray();
 		final ByteArrayOutputStream out = new ByteArrayOutputStream();

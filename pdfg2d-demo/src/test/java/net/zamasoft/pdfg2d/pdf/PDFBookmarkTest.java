@@ -11,13 +11,13 @@ import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
 
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class PDFBookmarkTest {
 
     @Test
     public void testBookmarks() throws Exception {
-        final var tempFile = File.createTempFile("test-bookmarks", ".pdf");
-        tempFile.deleteOnExit();
+        final var tempFile = TestOutputFiles.outputFile(getClass(), "test-bookmarks.pdf");
 
         final var params = PDFParams.createDefault().withBookmarks(true);
 

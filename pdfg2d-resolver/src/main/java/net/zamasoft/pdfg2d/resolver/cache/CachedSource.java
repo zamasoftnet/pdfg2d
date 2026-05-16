@@ -15,7 +15,16 @@ import net.zamasoft.pdfg2d.resolver.SourceValidity;
 import net.zamasoft.pdfg2d.resolver.util.UnknownSourceValidity;
 
 /**
- * A data source backed by a cached file, tied to a virtual URI.
+ * A {@link Source} implementation backed by a temporary cache file on the local
+ * file system.  The source is associated with a virtual URI supplied at
+ * construction time, which may differ from the file path.
+ *
+ * <p>The cache file is assumed to already exist when this object is created.
+ * {@link #getValidity()} always returns {@link UnknownSourceValidity} because
+ * the freshness of the original resource is managed externally.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class CachedSource implements Source {
 	private static final Logger LOG = Logger.getLogger(CachedSource.class.getName());
@@ -26,6 +35,18 @@ public class CachedSource implements Source {
 	private final File file;
 	private InputStream in = null;
 
+	/**
+	 * Constructs a {@code CachedSource} for the given cache file.
+	 *
+	 * @param uri      the logical URI associated with this cached source; must not
+	 *                 be {@code null}.
+	 * @param mimeType the MIME type of the cached content, or {@code null} if
+	 *                 unknown.
+	 * @param encoding the character encoding of the cached content, or {@code null}
+	 *                 if the content is binary or the encoding is unknown.
+	 * @param file     the cache file holding the content; must not be {@code null}.
+	 * @throws NullPointerException if {@code uri} or {@code file} is {@code null}.
+	 */
 	public CachedSource(URI uri, String mimeType, String encoding, File file) {
 		this.uri = Objects.requireNonNull(uri, "uri must not be null");
 		this.file = Objects.requireNonNull(file, "file must not be null");

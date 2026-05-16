@@ -11,7 +11,15 @@ import net.zamasoft.pdfg2d.font.table.HeadTable;
 import net.zamasoft.pdfg2d.font.table.MaxpTable;
 
 /**
- * Glyph list for TrueType fonts.
+ * {@link GlyphList} implementation for TrueType outline fonts.
+ * Glyph outlines are decoded from the {@code glyf} table on demand and cached
+ * with {@link java.lang.ref.SoftReference soft references} so they can be
+ * reclaimed under memory pressure.  Both simple and composite glyphs are
+ * supported; composite glyphs are resolved recursively through
+ * {@link GlyfCompositeDescript}.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class TrueTypeGlyphList implements GlyphList {
 
@@ -19,12 +27,27 @@ public class TrueTypeGlyphList implements GlyphList {
 	private final GlyfTable glyf;
 	private final AtomicReferenceArray<SoftReference<Glyph>> glyphs;
 
+	/**
+	 * Creates a new glyph list for the given TrueType font tables.
+	 *
+	 * @param glyf the {@code glyf} table that holds raw glyph outlines
+	 * @param head the {@code head} table providing the units-per-em value
+	 * @param maxp the {@code maxp} table providing the total glyph count
+	 */
 	public TrueTypeGlyphList(final GlyfTable glyf, final HeadTable head, final MaxpTable maxp) {
 		this.head = head;
 		this.glyf = glyf;
 		this.glyphs = new AtomicReferenceArray<>(maxp.getNumGlyphs());
 	}
 
+	/**
+	 * Returns the glyph at the given index, decoding it from the {@code glyf}
+	 * table if it has not been cached yet.
+	 *
+	 * @param ix the glyph index (GID)
+	 * @return the decoded {@link Glyph}, or {@code null} if the index is out of
+	 *         range or the glyph description cannot be found
+	 */
 	@Override
 	public Glyph getGlyph(final int ix) {
 		if (ix >= this.glyphs.length()) {

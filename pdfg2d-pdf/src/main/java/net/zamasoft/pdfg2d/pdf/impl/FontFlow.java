@@ -31,6 +31,16 @@ class FontFlow {
 	private final Map<FontSource, Font> fonts = new HashMap<>();
 	private final List<PDFFont> fontList = new ArrayList<>();
 
+	/**
+	 * Constructs a new FontFlow.
+	 *
+	 * @param nameToResourceRef the map from resource name to object reference used
+	 *                          by the PDF resource dictionary
+	 * @param objectsFlow       the fragment output to which font objects are written
+	 * @param xref              the cross-reference table used to allocate new object
+	 *                          numbers
+	 * @throws IOException if an I/O error occurs during initialization
+	 */
 	public FontFlow(final Map<String, ObjectRef> nameToResourceRef, final PDFFragmentOutputImpl objectsFlow,
 			final XRefImpl xref) throws IOException {
 		this.xref = xref;
@@ -38,6 +48,20 @@ class FontFlow {
 		this.objectsFlow = objectsFlow;
 	}
 
+	/**
+	 * Returns a {@link Font} for the given {@link FontSource}, creating and
+	 * registering it as a PDF resource the first time it is requested.
+	 * <p>
+	 * If {@code source} is a {@link PDFFontSource}, a new indirect object reference
+	 * is allocated and the font is added to the resource dictionary under a
+	 * generated name (e.g. {@code F0}, {@code F1}, …).  Non-PDF sources are
+	 * created directly without allocating a PDF object.
+	 * </p>
+	 *
+	 * @param source the font source describing the typeface to use
+	 * @return the {@link Font} instance associated with {@code source}
+	 * @throws IOException if an I/O error occurs while creating the font
+	 */
 	public Font useFont(final FontSource source) throws IOException {
 		var font = this.fonts.get(source);
 		if (font != null) {
@@ -59,6 +83,17 @@ class FontFlow {
 		return font;
 	}
 
+	/**
+	 * Writes all registered PDF fonts to the object stream and finalizes the font
+	 * flow.
+	 * <p>
+	 * This method must be called exactly once, after all pages have been rendered,
+	 * to flush each {@link PDFFont}'s data (widths, encoding, etc.) into the PDF
+	 * output.
+	 * </p>
+	 *
+	 * @throws IOException if an I/O error occurs while writing font data
+	 */
 	public void close() throws IOException {
 		for (final PDFFont font : this.fontList) {
 			font.writeTo(this.objectsFlow, this.xref);

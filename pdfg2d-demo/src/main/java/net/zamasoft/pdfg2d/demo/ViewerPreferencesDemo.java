@@ -23,22 +23,15 @@ import net.zamasoft.pdfg2d.pdf.params.ViewerPreferences;
  * @since 1.0
  */
 public class ViewerPreferencesDemo {
+	/**
+	 * Entry point. Generates {@code output/viewer-preferences.pdf}, a 10-page PDF
+	 * with viewer preferences (page mode, print scaling, print range, etc.) set.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if an error occurs during PDF generation
+	 */
 	public static void main(final String[] args) throws Exception {
-		final var params = PDFParams.createDefault()
-				.withCompression(PDFParams.Compression.NONE)
-				.withVersion(PDFParams.Version.V_1_7);
-
-		final var meta = params.metaInfo();
-		meta.setTitle("タイトル");
-
-		final var prefs = params.viewerPreferences();
-		prefs.setNonFullScreenPageMode(ViewerPreferences.NonFullScreenPageMode.THUMBS);
-		prefs.setPickTrayByPDFSize(true);
-		prefs.setPrintPageRange(new int[] { 2, 3, 5, 7, 8, 9 });
-		prefs.setNumCopies(4);
-		prefs.setViewArea(ViewerPreferences.AreaBox.BLEED);
-		prefs.setViewClip(ViewerPreferences.AreaBox.BLEED);
-		prefs.setPrintScaling(ViewerPreferences.PrintScaling.NONE);
+		final var params = createDemoParams();
 
 		final var width = 300.0;
 		final var height = 300.0;
@@ -60,5 +53,24 @@ public class ViewerPreferencesDemo {
 			pdf.close();
 			builder.close();
 		}
+	}
+
+	static PDFParams createDemoParams() {
+		final var params = PDFParams.createDefault()
+				.withCompression(PDFParams.Compression.NONE)
+				.withVersion(PDFParams.Version.V_1_7);
+
+		final var meta = params.metaInfo();
+		meta.setTitle("タイトル");
+
+		final var prefs = params.viewerPreferences();
+		prefs.setNonFullScreenPageMode(ViewerPreferences.NonFullScreenPageMode.THUMBS);
+		prefs.setPickTrayByPDFSize(true);
+		prefs.setPrintPageRange(new int[] { 2, 3, 5, 7, 8, 9 });
+		prefs.setNumCopies(4);
+		prefs.setViewArea(ViewerPreferences.AreaBox.BLEED);
+		prefs.setViewClip(ViewerPreferences.AreaBox.BLEED);
+		prefs.setPrintScaling(ViewerPreferences.PrintScaling.NONE);
+		return params;
 	}
 }

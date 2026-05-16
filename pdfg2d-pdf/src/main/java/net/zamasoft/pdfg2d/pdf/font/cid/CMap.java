@@ -22,6 +22,13 @@ public class CMap implements Serializable {
 
 	protected int supplement;
 
+	/**
+	 * Constructs a CMap by loading and parsing the given source file.
+	 *
+	 * @param source       the source of the CMap file
+	 * @param javaEncoding the Java charset name used for character decoding
+	 * @throws IOException if the source cannot be read
+	 */
 	public CMap(Source source, String javaEncoding) throws IOException {
 		this.cidTable = new CIDTable(source, javaEncoding);
 		CMapParser parser = new CMapParser();

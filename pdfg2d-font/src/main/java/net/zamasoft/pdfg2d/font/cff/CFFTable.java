@@ -25,117 +25,134 @@ import net.zamasoft.pdfg2d.font.table.DirectoryEntry;
 import net.zamasoft.pdfg2d.font.table.Table;
 
 /**
- * @since 1.0
+ * Reads and holds the Compact Font Format ({@code CFF}) table of an OpenType
+ * font.  The table is parsed completely on construction; glyph outlines are
+ * decoded lazily on demand via {@link #getGlyph(int, short)}.
+ *
+ * <p>The constants defined in this class correspond to CFF Top-DICT operator
+ * codes as specified in the Adobe Technical Note #5176 "The Compact Font
+ * Format Specification".
+ *
  * @author <a href="mailto:david@steadystate.co.uk">David Schweinsberg</a>
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class CFFTable implements Table {
 
+	// -----------------------------------------------------------------------
+	// CFF Top-DICT operator codes (Adobe Technical Note #5176, Table 9 / 10)
+	// -----------------------------------------------------------------------
+
+	/** Top-DICT operator: {@code version} – font version string SID. */
 	public static final int VERSION = 0x0000;
-
+	/** Top-DICT operator: {@code Notice} – trademark/copyright notice SID. */
 	public static final int NOTICE = 0x0001;
-
+	/** Top-DICT operator: {@code FullName} – full font name SID. */
 	public static final int FULL_NAME = 0x0002;
-
+	/** Top-DICT operator: {@code FamilyName} – family name SID. */
 	public static final int FAMILY_NAME = 0x0003;
-
+	/** Top-DICT operator: {@code Weight} – weight string SID. */
 	public static final int WEIGHT = 0x0004;
-
+	/** Top-DICT operator: {@code FontBBox} – font bounding box array. */
 	public static final int FONT_BBOX = 0x0005;
-
+	/** Private-DICT operator: {@code BlueValues} – alignment zone array. */
 	public static final int BLUE_VALUES = 0x0006;
-
+	/** Private-DICT operator: {@code OtherBlues} – other alignment zones. */
 	public static final int OTHER_BLUES = 0x0007;
-
+	/** Private-DICT operator: {@code FamilyBlues} – family alignment zones. */
 	public static final int FAMILY_BLUES = 0x0008;
-
+	/** Private-DICT operator: {@code FamilyOtherBlues}. */
 	public static final int FAMILY_OTHER_BLUES = 0x0009;
-
+	/** Private-DICT operator: {@code StdHW} – dominant horizontal stem width. */
 	public static final int STD_HW = 0x000A;
-
+	/** Private-DICT operator: {@code StdVW} – dominant vertical stem width. */
 	public static final int STD_VW = 0x000B;
-
+	/** Top-DICT operator: {@code UniqueID}. */
 	public static final int UNIQUE_ID = 0x000D;
-
+	/** Top-DICT operator: {@code XUID} – extended unique ID array. */
 	public static final int XUID = 0x000E;
-
+	/** Top-DICT operator: {@code charset} – charset offset. */
 	public static final int CHARSETS = 0x000F;
-
+	/** Top-DICT operator: {@code Encoding} – encoding offset. */
 	public static final int ENCODING = 0x0010;
-
+	/** Top-DICT operator: {@code CharStrings} – charstrings INDEX offset. */
 	public static final int CHAR_STRINGS = 0x0011;
-
+	/** Top-DICT operator: {@code Private} – private DICT size and offset. */
 	public static final int PRIVATE = 0x0012;
-
+	/** Private-DICT operator: {@code Subrs} – local subroutine INDEX offset. */
 	public static final int SUBRS = 0x0013;
-
+	/** Private-DICT operator: {@code defaultWidthX}. */
 	public static final int DEFAULT_WIDTHX = 0x0014;
-
+	/** Private-DICT operator: {@code nominalWidthX}. */
 	public static final int NOMINAL_WIDTHX = 0x0015;
-
+	/** Top-DICT escape operator: {@code Copyright} SID. */
 	public static final int COPYRIGHT = 0x0C00;
-
+	/** Top-DICT escape operator: {@code isFixedPitch} boolean. */
 	public static final int IS_FIXED_PITCH = 0x0C01;
-
+	/** Top-DICT escape operator: {@code ItalicAngle}. */
 	public static final int ITALIC_ANGLE = 0x0C02;
-
+	/** Top-DICT escape operator: {@code UnderlinePosition}. */
 	public static final int UNDERLINE_POSITION = 0x0C03;
-
+	/** Top-DICT escape operator: {@code UnderlineThickness}. */
 	public static final int UNDERLINE_THICKNESS = 0x0C04;
-
+	/** Top-DICT escape operator: {@code PaintType}. */
 	public static final int PAINT_TYPE = 0x0C05;
-
+	/** Top-DICT escape operator: {@code CharstringType} (default 2). */
 	public static final int CHARSTRING_TYPE = 0x0C06;
-
+	/** Top-DICT escape operator: {@code FontMatrix}. */
 	public static final int FONT_MATRIX = 0x070C;
-
+	/** Top-DICT escape operator: {@code StrokeWidth}. */
 	public static final int STROKE_WIDTH = 0x0C08;
-
+	/** Private-DICT escape operator: {@code BlueScale}. */
 	public static final int BLUE_SCALE = 0x0C09;
-
+	/** Private-DICT escape operator: {@code BlueShift}. */
 	public static final int BLUE_SHIFT = 0x0C0A;
-
+	/** Private-DICT escape operator: {@code BlueFuzz}. */
 	public static final int BLUE_FUZZ = 0x0C0B;
-
+	/** Private-DICT escape operator: {@code StemSnapH}. */
 	public static final int STEM_SNAP_H = 0x0C0C;
-
+	/** Private-DICT escape operator: {@code StemSnapV}. */
 	public static final int STEM_SNAP_V = 0x0C0D;
-
+	/** Private-DICT escape operator: {@code ForceBold}. */
 	public static final int FORCE_BOLD = 0x0C0E;
-
+	/** Private-DICT escape operator: {@code LanguageGroup}. */
 	public static final int LANGUAGE_GROUP = 0x0C11;
-
+	/** Private-DICT escape operator: {@code ExpansionFactor}. */
 	public static final int EXPANSION_FACTOR = 0x120C;
-
+	/** Private-DICT escape operator: {@code initialRandomSeed}. */
 	public static final int INITIAL_RANDOM_SEED = 0x130C;
-
+	/** Top-DICT escape operator: {@code SyntheticBase} index. */
 	public static final int SYNTHETIC_BASE = 0x140C;
-
+	/** Top-DICT escape operator: {@code PostScript} SID. */
 	public static final int POST_SCRIPT = 0x150C;
-
+	/** Top-DICT escape operator: {@code BaseFontName} SID. */
 	public static final int BASE_FONT_NAME = 0x160C;
-
+	/** Top-DICT escape operator: {@code BaseFontBlend} delta array. */
 	public static final int BASE_FONT_BLEND = 0x170C;
-
+	/** CIDFont Top-DICT escape operator: {@code ROS} (Registry/Ordering/Supplement). */
 	public static final int ROS = 0x1E0C;
-
+	/** CIDFont Top-DICT escape operator: {@code CIDFontVersion}. */
 	public static final int CID_FONT_VERSION = 0x1F0C;
-
+	/** CIDFont Top-DICT escape operator: {@code CIDFontRevision}. */
 	public static final int CID_FONT_REVISION = 0x0C20;
-
+	/** CIDFont Top-DICT escape operator: {@code CIDFontType}. */
 	public static final int CID_FONT_TYPE = 0x0C21;
-
+	/** CIDFont Top-DICT escape operator: {@code CIDCount}. */
 	public static final int CID_COUNT = 0x0C22;
-
+	/** CIDFont Top-DICT escape operator: {@code UIDBase}. */
 	public static final int UID_BASE = 0x0C23;
-
+	/** CIDFont Top-DICT escape operator: {@code FDArray} – Font DICT INDEX offset. */
 	public static final int FD_ARRAY = 0x0C24;
-
+	/** CIDFont Top-DICT escape operator: {@code FDSelect} – FD Select offset. */
 	public static final int FD_SELECT = 0x0C25;
-
+	/** CIDFont Top-DICT escape operator: {@code FontName} SID. */
 	public static final int FONT_NAME = 0x0C26;
 
+	/** Token type constant: the current byte sequence represents an operator. */
 	public static final byte TYPE_OPERATOR = 1;
+	/** Token type constant: the current byte sequence represents an integer operand. */
 	public static final byte TYPE_INTEGER = 2;
+	/** Token type constant: the current byte sequence represents a real-number operand. */
 	public static final byte TYPE_REAL = 3;
 
 	private static final boolean DEBUG = false;
@@ -165,6 +182,14 @@ public class CFFTable implements Table {
 
 	private final Type2CharString charString;
 
+	/**
+	 * Parses the CFF table from the given font file.
+	 *
+	 * @param de  the {@link DirectoryEntry} that identifies the CFF table's
+	 *            position and length within the file
+	 * @param raf the random-access file from which to read the table data
+	 * @throws IOException if the table data cannot be read or is malformed
+	 */
 	public CFFTable(final DirectoryEntry de, final RandomAccessFile raf) throws IOException {
 		this.raf = raf;
 		int[] gso = null;
@@ -478,10 +503,23 @@ public class CFFTable implements Table {
 		this.localSubrOffsets = lso;
 	}
 
+	/**
+	 * Returns the table type identifier for this table.
+	 *
+	 * @return {@link Table#CFF}
+	 */
 	public int getType() {
 		return CFF;
 	}
 
+	/**
+	 * Decodes and returns the glyph at the given glyph index.
+	 *
+	 * @param ix  the glyph index (GID)
+	 * @param upm the units-per-em value from the {@code head} table, used to
+	 *            normalise coordinates to a 1000-unit em square
+	 * @return the decoded {@link Glyph}
+	 */
 	public Glyph getGlyph(int ix, short upm) {
 		int[] localSubrOffsets = this.localSubrOffsets == null ? null : this.localSubrOffsets[ix];
 		return this.charString.getGlyph(ix, this.charStringOffsets[ix], upm, this.globalSubrOffsets, localSubrOffsets);

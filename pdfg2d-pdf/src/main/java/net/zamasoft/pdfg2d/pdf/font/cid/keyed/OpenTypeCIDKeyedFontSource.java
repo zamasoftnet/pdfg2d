@@ -16,12 +16,13 @@ import net.zamasoft.pdfg2d.util.IntMapIterator;
 import net.zamasoft.pdfg2d.util.ShortList;
 
 /**
- * A general CID-keyed font with OpenType backing. The appearance may vary by
- * platform.
- * 
+ * A CID-keyed font source backed by an OpenType (TrueType/OTF) font file.
+ * Glyph widths are derived from the OpenType {@code hmtx} table and mapped
+ * through the CMap.  The font program itself is not embedded; the file is used
+ * only to read metrics.
+ *
  * @author MIYABE Tatsuhiko
- * @version $Id: GenericType0FontFace.java,v 1.2 2005/06/06 04:42:24 harumanx
- *          Exp $
+ * @since 1.0
  */
 public class OpenTypeCIDKeyedFontSource extends CIDKeyedFontSource {
 	private static final long serialVersionUID = 1L;
@@ -30,6 +31,15 @@ public class OpenTypeCIDKeyedFontSource extends CIDKeyedFontSource {
 
 	protected final int index;
 
+	/**
+	 * Constructs an OpenType-backed CID-keyed font source.
+	 *
+	 * @param hcmap  the horizontal CMap
+	 * @param vcmap  the vertical CMap, or {@code null} for horizontal-only fonts
+	 * @param otFile the OpenType font file (TTF/OTF/TTC)
+	 * @param index  the zero-based font index within a TTC collection
+	 * @throws IOException if the font file cannot be read
+	 */
 	public OpenTypeCIDKeyedFontSource(CMap hcmap, CMap vcmap, File otFile, int index) throws IOException {
 		super(hcmap, vcmap);
 		this.otFile = otFile;
@@ -48,6 +58,12 @@ public class OpenTypeCIDKeyedFontSource extends CIDKeyedFontSource {
 		this.panose = fs.getPanose();
 	}
 
+	/**
+	 * Returns the glyph-width array, building it lazily from the OpenType
+	 * {@code hmtx} table the first time it is called.
+	 *
+	 * @return the {@link WArray} containing per-CID advance widths
+	 */
 	public WArray getWArray() {
 		if (this.warray == null) {
 			try {

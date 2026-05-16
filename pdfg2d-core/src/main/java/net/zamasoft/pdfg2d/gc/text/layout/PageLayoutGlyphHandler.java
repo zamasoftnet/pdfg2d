@@ -18,6 +18,14 @@ import net.zamasoft.pdfg2d.gc.text.TextImpl;
 import net.zamasoft.pdfg2d.gc.text.layout.control.Control;
 import net.zamasoft.pdfg2d.gc.text.layout.control.Tab;
 
+/**
+ * A {@link GlyphHandler} that arranges glyphs into lines and pages, supporting
+ * multi-column layout, text alignment (start, end, center, justify), vertical
+ * justification, float positioning, and horizontal/vertical writing modes.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 public class PageLayoutGlyphHandler implements GlyphHandler {
 	/**
 	 * Tab width.
@@ -95,86 +103,191 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 
 	private double fontSize = 0;
 
+	/**
+	 * Constructs a new PageLayoutGlyphHandler drawing to the given graphics context.
+	 *
+	 * @param gc the graphics context to draw to, or {@code null} to suppress drawing
+	 */
 	public PageLayoutGlyphHandler(final GC gc) {
 		this.gc = gc;
 	}
 
+	/**
+	 * Returns the graphics context used for drawing.
+	 *
+	 * @return the graphics context
+	 */
 	public GC getGC() {
 		return this.gc;
 	}
 
+	/**
+	 * Sets the graphics context used for drawing.
+	 *
+	 * @param gc the graphics context to set
+	 */
 	public void setGC(final GC gc) {
 		this.gc = gc;
 	}
 
+	/**
+	 * Returns the writing direction.
+	 *
+	 * @return the writing direction
+	 */
 	public Direction getDirection() {
 		return this.direction;
 	}
 
+	/**
+	 * Sets the writing direction.
+	 *
+	 * @param direction the writing direction to set
+	 */
 	public void setDirection(final Direction direction) {
 		this.direction = direction;
 	}
 
+	/**
+	 * Returns the text alignment.
+	 *
+	 * @return the alignment
+	 */
 	public Alignment getAlign() {
 		return this.align;
 	}
 
+	/**
+	 * Sets the text alignment.
+	 *
+	 * @param align the alignment to set
+	 */
 	public void setAlign(final Alignment align) {
 		this.align = align;
 	}
 
+	/**
+	 * Returns the line height multiplier.
+	 *
+	 * @return the line height
+	 */
 	public double getLineHeight() {
 		return this.lineHeight;
 	}
 
+	/**
+	 * Sets the line height multiplier.
+	 *
+	 * @param lineHeight the line height to set
+	 */
 	public void setLineHeight(final double lineHeight) {
 		this.lineHeight = lineHeight;
 	}
 
+	/**
+	 * Returns the letter spacing.
+	 *
+	 * @return the letter spacing
+	 */
 	public double getLetterSpacing() {
 		return this.letterSpacing;
 	}
 
+	/**
+	 * Sets the letter spacing.
+	 *
+	 * @param letterSpacing the letter spacing to set
+	 */
 	public void setLetterSpacing(final double letterSpacing) {
 		this.letterSpacing = letterSpacing;
 	}
 
+	/**
+	 * Returns the maximum page advance (height of the layout area).
+	 *
+	 * @return the page advance limit
+	 */
 	public double getPageAdvance() {
 		return this.pageAdvance;
 	}
 
+	/**
+	 * Sets the maximum page advance (height of the layout area).
+	 *
+	 * @param pageAdvance the page advance limit to set
+	 */
 	public void setPageAdvance(final double pageAdvance) {
 		this.pageAdvance = pageAdvance;
 	}
 
+	/**
+	 * Returns the number of columns.
+	 *
+	 * @return the column count
+	 */
 	public int getColumnCount() {
 		return this.columnCount;
 	}
 
+	/**
+	 * Sets the number of columns.
+	 *
+	 * @param columnCount the column count to set
+	 */
 	public void setColumnCount(final int columnCount) {
 		this.columnCount = columnCount;
 	}
 
+	/**
+	 * Returns the gap between columns.
+	 *
+	 * @return the column gap
+	 */
 	public double getColumnGap() {
 		return this.columnGap;
 	}
 
+	/**
+	 * Sets the gap between columns.
+	 *
+	 * @param columnGap the column gap to set
+	 */
 	public void setColumnGap(final double columnGap) {
 		this.columnGap = columnGap;
 	}
 
+	/**
+	 * Sets the maximum line advance (width of the layout area).
+	 *
+	 * @param lineAdvance the line advance limit to set
+	 */
 	public void setLineAdvance(final double lineAdvance) {
 		this.lineAdvance = lineAdvance;
 	}
 
+	/**
+	 * Returns the actual maximum line advance reached during layout.
+	 *
+	 * @return the maximum line advance
+	 */
 	public double getMaxLineAdvance() {
 		return this.maxLineAdvance;
 	}
 
+	/**
+	 * Returns the actual line advance of the last line drawn.
+	 *
+	 * @return the last line advance
+	 */
 	public double getLastLineAdvance() {
 		return this.lastLineAdvance;
 	}
 
+	/**
+	 * Returns the actual maximum page advance reached during layout.
+	 *
+	 * @return the maximum page advance
+	 */
 	public double getMaxPageAdvance() {
 		return this.maxPageAdvance;
 	}
@@ -189,22 +302,51 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 		return maxAdvance;
 	}
 
+	/**
+	 * Returns whether vertical justification (justifying the page) is enabled.
+	 *
+	 * @return {@code true} if page justification is enabled
+	 */
 	public boolean isJustifyPage() {
 		return this.justifyPage;
 	}
 
+	/**
+	 * Sets whether vertical justification (justifying the page) is enabled.
+	 *
+	 * @param justifyPage {@code true} to enable page justification
+	 */
 	public void setJustifyPage(final boolean justifyPage) {
 		this.justifyPage = justifyPage;
 	}
 
+	/**
+	 * Returns the font size used for line height calculations when set explicitly.
+	 *
+	 * @return the font size, or {@code 0} if not set
+	 */
 	public double getFontSize() {
 		return this.fontSize;
 	}
 
+	/**
+	 * Sets the font size used to override descent calculations for fixed
+	 * line heights.
+	 *
+	 * @param fontSize the font size to set, or {@code 0} to disable the override
+	 */
 	public void setFontSize(final double fontSize) {
 		this.fontSize = fontSize;
 	}
 
+	/**
+	 * Configures a float area that reduces the available line width for the
+	 * lines covered by the float.
+	 *
+	 * @param position the position of the float (e.g. {@link FloatPosition#TOP_RIGHT})
+	 * @param width    the width of the float area
+	 * @param height   the height of the float area
+	 */
 	public void setFloat(final FloatPosition position, final double width, final double height) {
 		this.floatPosition = position;
 		this.floatWidth = width;
@@ -325,6 +467,15 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 		this.pageOffset += pageAdvance1 + pageAdvance2;
 	}
 
+	/**
+	 * Compares two double values with a small tolerance to avoid floating-point
+	 * rounding errors.
+	 *
+	 * @param a the first value
+	 * @param b the second value
+	 * @return {@code 0} if the values are within tolerance, {@code -1} if {@code a < b},
+	 *         or {@code 1} if {@code a > b}
+	 */
 	public static int compare(final double a, final double b) {
 		final double diff = a - b;
 		if (diff < .1 && diff > -.1) {

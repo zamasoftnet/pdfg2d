@@ -56,6 +56,14 @@ public record CMYKColor(float cyan, float magenta, float yellow, float black, by
 		return new CMYKColor(cyan, magenta, yellow, black, overprint);
 	}
 
+	/**
+	 * Creates a CMYK color with no overprint.
+	 *
+	 * @param cyan    the cyan component (0.0–1.0)
+	 * @param magenta the magenta component (0.0–1.0)
+	 * @param yellow  the yellow component (0.0–1.0)
+	 * @param black   the black (key) component (0.0–1.0)
+	 */
 	public CMYKColor(final float cyan, final float magenta, final float yellow, final float black) {
 		this(cyan, magenta, yellow, black, OVERPRINT_NONE);
 	}
@@ -108,6 +116,12 @@ public record CMYKColor(float cyan, float magenta, float yellow, float black, by
 		return 1f;
 	}
 
+	/**
+	 * Returns the overprint mode for this color.
+	 *
+	 * @return the overprint mode ({@link #OVERPRINT_NONE}, {@link #OVERPRINT_STANDARD},
+	 *         or {@link #OVERPRINT_ILLUSTRATOR})
+	 */
 	public byte getOverprint() {
 		return this.overprint;
 	}

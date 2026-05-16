@@ -25,14 +25,29 @@ public class TextAtomizer implements FilterGlyphHandler {
 
 	private TextControl beforeControl = null;
 
+	/**
+	 * Constructs a new TextAtomizer with the given line-breaking rules.
+	 *
+	 * @param rules the text breaking rules to apply
+	 */
 	public TextAtomizer(final TextBreakingRules rules) {
 		this.rules = rules;
 	}
 
+	/**
+	 * Returns the current text breaking rules.
+	 *
+	 * @return the text breaking rules
+	 */
 	public TextBreakingRules getTextBreakingRules() {
 		return this.rules;
 	}
 
+	/**
+	 * Sets the text breaking rules to apply.
+	 *
+	 * @param rules the new text breaking rules
+	 */
 	public void setTextBreakingRules(final TextBreakingRules rules) {
 		this.rules = rules;
 	}

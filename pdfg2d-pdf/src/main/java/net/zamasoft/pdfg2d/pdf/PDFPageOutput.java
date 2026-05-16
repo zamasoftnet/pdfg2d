@@ -66,13 +66,41 @@ public abstract class PDFPageOutput extends PDFGraphicsOutput {
 	 */
 	public abstract void endBookmark() throws IOException;
 
+	/**
+	 * Sets the MediaBox, which defines the full page boundary.
+	 *
+	 * @param mediaBox the media box rectangle
+	 */
 	public abstract void setMediaBox(Rectangle2D mediaBox);
 
+	/**
+	 * Sets the CropBox, which defines the visible area of the page.
+	 *
+	 * @param cropBox the crop box rectangle, or {@code null} to use MediaBox
+	 */
 	public abstract void setCropBox(Rectangle2D cropBox);
 
+	/**
+	 * Sets the BleedBox, which defines the region to which page content should be
+	 * clipped when output in a production environment (PDF 1.4+).
+	 *
+	 * @param bleedBox the bleed box rectangle, or {@code null}
+	 */
 	public abstract void setBleedBox(Rectangle2D bleedBox);
 
+	/**
+	 * Sets the TrimBox, which defines the intended finished dimensions of the page
+	 * after trimming (PDF 1.4+).
+	 *
+	 * @param trimBox the trim box rectangle, or {@code null}
+	 */
 	public abstract void setTrimBox(Rectangle2D trimBox);
 
+	/**
+	 * Sets the ArtBox, which defines the extent of the page's meaningful content
+	 * (PDF 1.4+).
+	 *
+	 * @param artBox the art box rectangle, or {@code null}
+	 */
 	public abstract void setArtBox(Rectangle2D artBox);
 }

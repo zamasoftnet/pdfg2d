@@ -12,8 +12,15 @@ import net.zamasoft.pdfg2d.PDFGraphics2D;
  * </p>
  * 
  * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class EmojiApp {
+	/**
+	 * Entry point. Generates {@code output/emoji.pdf} containing emoji characters.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if an error occurs during PDF generation
+	 */
 	public static void main(final String[] args) throws Exception {
 		try (final var g2d = new PDFGraphics2D(new File(DemoUtils.getOutputDir(), "emoji.pdf"))) {
 			g2d.setFont(new Font("emoji", Font.PLAIN, 38));

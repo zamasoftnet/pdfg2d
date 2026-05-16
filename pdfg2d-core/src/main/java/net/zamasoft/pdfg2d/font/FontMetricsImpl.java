@@ -62,6 +62,12 @@ public class FontMetricsImpl implements FontMetrics {
 		this.descent = descent;
 	}
 
+	/**
+	 * Returns the font, loading it lazily from the font store if necessary.
+	 *
+	 * @return the font instance
+	 * @throws RuntimeException wrapping any {@link java.io.IOException} that occurs
+	 */
 	public Font getFont() {
 		if (this.font == null) {
 			try {
@@ -118,10 +124,23 @@ public class FontMetricsImpl implements FontMetrics {
 		return this.size * this.getFont().getKerning(gid, sgid) / FontSource.DEFAULT_UNITS_PER_EM;
 	}
 
+	/**
+	 * Returns the ligature glyph ID for the given glyph and following character.
+	 *
+	 * @param gid the current glyph ID
+	 * @param cid the following character code
+	 * @return the ligature glyph ID, or a negative value if none exists
+	 */
 	public int getLigature(final int gid, final int cid) {
 		return this.getFont().getLigature(gid, cid);
 	}
 
+	/**
+	 * Returns whether the given character can be displayed by this font.
+	 *
+	 * @param c the character code
+	 * @return {@code true} if the character can be displayed
+	 */
 	public boolean canDisplay(final int c) {
 		return this.getFontSource().canDisplay(c);
 	}

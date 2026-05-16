@@ -63,8 +63,20 @@ public class ViewerPreferences {
 	private AreaBox printArea = AreaBox.CROP;
 	private AreaBox printClip = AreaBox.CROP;
 
+	/**
+	 * Identifies a page boundary box used for display or printing purposes.
+	 */
 	public enum AreaBox {
-		MEDIA, CROP, BLEED, TRIM, ART
+		/** Media box — the full physical page size. */
+		MEDIA,
+		/** Crop box — the visible page area (default). */
+		CROP,
+		/** Bleed box — the area to which page content may bleed. */
+		BLEED,
+		/** Trim box — the intended final page dimensions after trimming. */
+		TRIM,
+		/** Art box — the area of meaningful page content. */
+		ART
 	}
 
 	// PDF 1.6
@@ -130,6 +142,11 @@ public class ViewerPreferences {
 		this.direction = direction;
 	}
 
+	/**
+	 * Returns whether the viewer application's toolbars are hidden.
+	 *
+	 * @return {@code true} if the toolbar is hidden
+	 */
 	public boolean isHideToolbar() {
 		return this.hideToolbar;
 	}
@@ -144,6 +161,11 @@ public class ViewerPreferences {
 		this.hideToolbar = hideToolbar;
 	}
 
+	/**
+	 * Returns whether the viewer application's menu bar is hidden.
+	 *
+	 * @return {@code true} if the menu bar is hidden
+	 */
 	public boolean isHideMenubar() {
 		return this.hideMenubar;
 	}
@@ -157,6 +179,12 @@ public class ViewerPreferences {
 		this.hideMenubar = hideMenubar;
 	}
 
+	/**
+	 * Returns whether user interface elements in the document's window (such as
+	 * scroll bars and navigation controls) are hidden.
+	 *
+	 * @return {@code true} if the window UI is hidden
+	 */
 	public boolean isHideWindowUI() {
 		return this.hideWindowUI;
 	}
@@ -172,6 +200,12 @@ public class ViewerPreferences {
 		this.hideWindowUI = hideWindowUI;
 	}
 
+	/**
+	 * Returns whether the document's window is resized to fit the first displayed
+	 * page.
+	 *
+	 * @return {@code true} if the window is fitted to the page
+	 */
 	public boolean isFitWindow() {
 		return this.fitWindow;
 	}
@@ -186,6 +220,11 @@ public class ViewerPreferences {
 		this.fitWindow = fitWindow;
 	}
 
+	/**
+	 * Returns whether the document's window is centered on the screen.
+	 *
+	 * @return {@code true} if the window is centered
+	 */
 	public boolean isCenterWindow() {
 		return this.centerWindow;
 	}
@@ -199,6 +238,12 @@ public class ViewerPreferences {
 		this.centerWindow = centerWindow;
 	}
 
+	/**
+	 * Returns whether the document's title is displayed in the window title bar
+	 * instead of the filename.
+	 *
+	 * @return {@code true} if the document title is displayed
+	 */
 	public boolean isDisplayDocTitle() {
 		return this.displayDocTitle;
 	}
@@ -212,6 +257,11 @@ public class ViewerPreferences {
 		this.displayDocTitle = displayDocTitle;
 	}
 
+	/**
+	 * Returns the page mode to use when exiting full-screen mode.
+	 *
+	 * @return the non-full-screen page mode
+	 */
 	public NonFullScreenPageMode getNonFullScreenPageMode() {
 		return this.nonFullScreenPageMode;
 	}
@@ -226,38 +276,87 @@ public class ViewerPreferences {
 		this.nonFullScreenPageMode = nonFullScreenPageMode;
 	}
 
+	/**
+	 * Returns the page boundary box used to determine the region of the page to
+	 * display on screen.
+	 *
+	 * @return the view area box
+	 */
 	public AreaBox getViewArea() {
 		return this.viewArea;
 	}
 
+	/**
+	 * Sets the page boundary box used to determine the region of the page to
+	 * display on screen.
+	 *
+	 * @param viewArea the view area box
+	 */
 	public void setViewArea(final AreaBox viewArea) {
 		this.viewArea = viewArea;
 	}
 
+	/**
+	 * Returns the page boundary box used to clip the display of page content.
+	 *
+	 * @return the view clip box
+	 */
 	public AreaBox getViewClip() {
 		return this.viewClip;
 	}
 
+	/**
+	 * Sets the page boundary box used to clip the display of page content.
+	 *
+	 * @param viewClip the view clip box
+	 */
 	public void setViewClip(final AreaBox viewClip) {
 		this.viewClip = viewClip;
 	}
 
+	/**
+	 * Returns the page boundary box used to determine the region of the page to
+	 * render when printing.
+	 *
+	 * @return the print area box
+	 */
 	public AreaBox getPrintArea() {
 		return this.printArea;
 	}
 
+	/**
+	 * Sets the page boundary box used to determine the region of the page to
+	 * render when printing.
+	 *
+	 * @param printArea the print area box
+	 */
 	public void setPrintArea(final AreaBox printArea) {
 		this.printArea = printArea;
 	}
 
+	/**
+	 * Returns the page boundary box used to clip the printing of page content.
+	 *
+	 * @return the print clip box
+	 */
 	public AreaBox getPrintClip() {
 		return this.printClip;
 	}
 
+	/**
+	 * Sets the page boundary box used to clip the printing of page content.
+	 *
+	 * @param printClip the print clip box
+	 */
 	public void setPrintClip(final AreaBox printClip) {
 		this.printClip = printClip;
 	}
 
+	/**
+	 * Returns the page scaling option used when printing.
+	 *
+	 * @return the print scaling option
+	 */
 	public PrintScaling getPrintScaling() {
 		return this.printScaling;
 	}
@@ -271,6 +370,11 @@ public class ViewerPreferences {
 		this.printScaling = printScaling;
 	}
 
+	/**
+	 * Returns the duplex printing mode.
+	 *
+	 * @return the duplex mode
+	 */
 	public Duplex getDuplex() {
 		return this.duplex;
 	}
@@ -284,6 +388,12 @@ public class ViewerPreferences {
 		this.duplex = duplex;
 	}
 
+	/**
+	 * Returns whether the PDF page size should be used to select the input paper
+	 * tray when printing.
+	 *
+	 * @return {@code true} if the paper tray is selected based on the PDF page size
+	 */
 	public boolean getPickTrayByPDFSize() {
 		return this.pickTrayByPDFSize;
 	}
@@ -297,6 +407,13 @@ public class ViewerPreferences {
 		this.pickTrayByPDFSize = pickTrayByPDFSize;
 	}
 
+	/**
+	 * Returns the page ranges used to initialize the print dialog box.
+	 * The array contains pairs of (start, end) page numbers, or {@code null} if
+	 * no range restriction is set.
+	 *
+	 * @return array of page ranges, or {@code null}
+	 */
 	public int[] getPrintPageRange() {
 		return this.printPageRange;
 	}
@@ -313,6 +430,12 @@ public class ViewerPreferences {
 		this.printPageRange = printPageRange;
 	}
 
+	/**
+	 * Returns the number of copies to print.
+	 * Returns {@code 0} to indicate the viewer's default.
+	 *
+	 * @return number of copies, or {@code 0} for viewer default
+	 */
 	public int getNumCopies() {
 		return numCopies;
 	}

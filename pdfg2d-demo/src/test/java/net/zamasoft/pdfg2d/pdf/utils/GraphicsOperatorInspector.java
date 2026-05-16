@@ -2,6 +2,7 @@ package net.zamasoft.pdfg2d.pdf.utils;
 
 import java.awt.geom.Point2D;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -137,18 +138,31 @@ public class GraphicsOperatorInspector extends PDFGraphicsStreamEngine {
     }
 
     private void record(String op, List<Float> operands) throws IOException {
-        Point2D p = getCurrentPoint();
-        Point2D.Float point = (p != null) ? new Point2D.Float((float) p.getX(), (float) p.getY()) : null;
+        final Point2D p = getCurrentPoint();
+        final Point2D.Float point = (p != null) ? new Point2D.Float((float) p.getX(), (float) p.getY()) : null;
 
-        float[] color = getGraphicsState().getNonStrokingColor().getComponents();
-        // Placeholder for alpha implementation
-        float alphaVal = 1.0f;
-        try {
-            // Try reflection or just omit if hard to find
-            // alpha = getGraphicsState().getNonStrokingAlphaConstant();
-        } catch (Exception e) {
-        }
+        final float[] color = getGraphicsState().getNonStrokingColor().getComponents();
+        final float alphaVal = readNonStrokingAlpha();
 
         commands.add(new ShapeCommand(op, operands, point, color, alphaVal));
+    }
+
+    private float readNonStrokingAlpha() {
+        return invokeAlphaGetter("getNonStrokingAlphaConstant", "getNonStrokeAlphaConstant");
+    }
+
+    private float invokeAlphaGetter(final String... methodNames) {
+        for (final String methodName : methodNames) {
+            try {
+                final Method method = getGraphicsState().getClass().getMethod(methodName);
+                final Object value = method.invoke(getGraphicsState());
+                if (value instanceof final Number number) {
+                    return number.floatValue();
+                }
+            } catch (final ReflectiveOperationException e) {
+                // Try the next known PDFBox variant.
+            }
+        }
+        return 1.0f;
     }
 }

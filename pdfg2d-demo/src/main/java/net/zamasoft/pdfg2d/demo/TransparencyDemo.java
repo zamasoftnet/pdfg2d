@@ -31,6 +31,13 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * @since 1.0
  */
 public class TransparencyDemo {
+	/**
+	 * Entry point. Generates {@code output/alpha.pdf} and opens a Swing preview
+	 * window showing the transparency and line-dash effects.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if an error occurs during PDF generation
+	 */
 	public static void main(final String[] args) throws Exception {
 		final var params = PDFParams.createDefault().withCompression(PDFParams.Compression.NONE);
 
@@ -66,7 +73,7 @@ public class TransparencyDemo {
 		}
 	}
 
-	private static void draw(final GC gc) {
+	static void draw(final GC gc) {
 		gc.transform(AffineTransform.getTranslateInstance(100, 0));
 		gc.transform(AffineTransform.getRotateInstance(.1f));
 		gc.setLineWidth(10);

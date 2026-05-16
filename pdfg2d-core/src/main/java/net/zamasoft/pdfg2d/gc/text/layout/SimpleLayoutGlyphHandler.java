@@ -9,6 +9,14 @@ import net.zamasoft.pdfg2d.gc.text.TextImpl;
 import net.zamasoft.pdfg2d.gc.text.layout.control.Control;
 import net.zamasoft.pdfg2d.gc.text.layout.control.Tab;
 
+/**
+ * A simple {@link GlyphHandler} that draws glyphs sequentially in a single
+ * line, advancing the cursor after each glyph run and supporting basic
+ * line-break ({@code '\n'}) and tab ({@code '\t'}) controls.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 public class SimpleLayoutGlyphHandler implements GlyphHandler {
 	/**
 	 * Tab width.
@@ -24,22 +32,47 @@ public class SimpleLayoutGlyphHandler implements GlyphHandler {
 
 	private double advance = 0, line = 0, maxLineHeight = 0;
 
+	/**
+	 * Returns the graphics context used for drawing.
+	 *
+	 * @return the graphics context
+	 */
 	public GC getGC() {
 		return this.gc;
 	}
 
+	/**
+	 * Sets the graphics context used for drawing.
+	 *
+	 * @param gc the graphics context to set
+	 */
 	public void setGC(final GC gc) {
 		this.gc = gc;
 	}
 
+	/**
+	 * Returns the current advance (cursor position in the line direction).
+	 *
+	 * @return the advance
+	 */
 	public double getAdvance() {
 		return this.advance;
 	}
 
+	/**
+	 * Returns the letter spacing added between glyphs.
+	 *
+	 * @return the letter spacing
+	 */
 	public double getLetterSpacing() {
 		return this.letterSpacing;
 	}
 
+	/**
+	 * Sets the letter spacing added between glyphs.
+	 *
+	 * @param letterSpacing the letter spacing to set
+	 */
 	public void setLetterSpacing(final double letterSpacing) {
 		this.letterSpacing = letterSpacing;
 	}

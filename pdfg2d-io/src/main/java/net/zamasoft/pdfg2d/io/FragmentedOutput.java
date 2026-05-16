@@ -99,9 +99,29 @@ public interface FragmentedOutput extends Closeable {
 	void finishFragment(int id) throws IOException;
 
 	/**
-	 * Completes data construction.
-	 * 
-	 * @throws IOException if an I/O error occurs.
+	 * Patches (overwrites) data in an already-written region of a fragment.
+	 * <p>
+	 * Not all implementations support patching. The default implementation
+	 * throws {@link UnsupportedOperationException}; subclasses that support
+	 * random-access writes should override this method.
+	 * </p>
+	 *
+	 * @param id             fragment ID.
+	 * @param fragmentOffset byte offset within the fragment at which to start overwriting.
+	 * @param b              byte array containing the replacement data.
+	 * @param off            start position in {@code b}.
+	 * @param len            number of bytes to overwrite.
+	 * @throws IOException                   if an I/O error occurs.
+	 * @throws UnsupportedOperationException if this implementation does not support patching.
+	 */
+	default void patch(int id, long fragmentOffset, byte[] b, int off, int len) throws IOException {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * Closes this output and releases any underlying resources.
+	 *
+	 * @throws IOException if an I/O error occurs during close.
 	 */
 	@Override
 	void close() throws IOException;

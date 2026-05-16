@@ -1,5 +1,11 @@
 package net.zamasoft.pdfg2d.gc.paint;
 
+/**
+ * Represents an RGBA color with an alpha (opacity) component.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 public record RGBAColor(float red, float green, float blue, float alpha) implements Color {
 	public static final int A = 3;
 

@@ -17,10 +17,14 @@ subprojects {
     apply plugin: 'java-library'
     apply plugin: 'maven-publish'
     apply plugin: 'signing'
+    apply plugin: 'jacoco'
     
     java {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
         withSourcesJar()
         withJavadocJar()
     }
@@ -32,6 +36,19 @@ subprojects {
 
     test {
         useJUnitPlatform()
+        systemProperty 'pdfg2d.testOutputDir', file("${buildDir}/generated-test-files").absolutePath
+    }
+
+    jacoco {
+        toolVersion = '0.8.12'
+    }
+
+    jacocoTestReport {
+        dependsOn test
+        reports {
+            xml.required = true
+            html.required = true
+        }
     }
     
     compileJava {

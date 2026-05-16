@@ -37,6 +37,13 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * @since 1.0
  */
 public class TextOutlineDemo {
+	/**
+	 * Entry point. Generates {@code output/text-stroke.pdf} and opens a Swing
+	 * preview window showing the outlined text.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if a font or PDF output error occurs
+	 */
 	public static void main(final String[] args) throws Exception {
 		final var params = PDFParams.createDefault().withCompression(PDFParams.Compression.NONE);
 
@@ -56,7 +63,7 @@ public class TextOutlineDemo {
 			try (final var out = new BufferedOutputStream(
 					new FileOutputStream(new File(DemoUtils.getOutputDir(), "text-stroke.pdf")))) {
 				final var builder = new StreamFragmentedOutput(out);
-				final var pdf = new PDFWriterImpl(builder, params);
+				final var pdf = new PDFWriterImpl(builder, finalParams);
 
 				try (final var gc = new PDFGC(pdf.nextPage(width, height))) {
 					draw(gc);
@@ -84,7 +91,7 @@ public class TextOutlineDemo {
 		}
 	}
 
-	private static void draw(final GC gc) {
+	static void draw(final GC gc) {
 		{
 			gc.begin();
 			gc.transform(AffineTransform.getTranslateInstance(250, 0));

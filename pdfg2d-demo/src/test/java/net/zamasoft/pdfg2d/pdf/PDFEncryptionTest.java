@@ -11,7 +11,6 @@ import java.io.IOException;
 import org.apache.pdfbox.Loader;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import net.zamasoft.pdfg2d.PDFGraphics2D;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
@@ -19,15 +18,13 @@ import net.zamasoft.pdfg2d.pdf.params.V2EncryptionParams;
 
 import net.zamasoft.pdfg2d.pdf.params.V4EncryptionParams;
 import net.zamasoft.pdfg2d.pdf.params.V4EncryptionParams.CFM;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class PDFEncryptionTest {
 
-    @TempDir
-    File tempDir;
-
     @Test
     public void testEncryptionRC4() {
-        final var file = new File(tempDir, "encryption_rc4_test.pdf");
+        final var file = TestOutputFiles.outputFile(getClass(), "encryption_rc4_test.pdf");
         assertDoesNotThrow(() -> {
             var params = PDFParams.createDefault();
 
@@ -79,7 +76,7 @@ public class PDFEncryptionTest {
 
     @Test
     public void testEncryptionAES() {
-        final var file = new File(tempDir, "encryption_aes_test.pdf");
+        final var file = TestOutputFiles.outputFile(getClass(), "encryption_aes_test.pdf");
         assertDoesNotThrow(() -> {
             var params = PDFParams.createDefault();
 

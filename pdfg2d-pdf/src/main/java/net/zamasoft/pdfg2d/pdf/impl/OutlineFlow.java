@@ -22,6 +22,16 @@ class OutlineFlow {
 
 	private int rootOutlineCount = 0;
 
+	/**
+	 * Constructs a new OutlineFlow associated with the given PDF writer.
+	 * <p>
+	 * A dedicated fragment is forked from the writer's main flow to buffer all
+	 * outline objects until {@link #close()} is called.
+	 * </p>
+	 *
+	 * @param pdfWriter the owning PDF writer
+	 * @throws IOException if an I/O error occurs while forking the fragment
+	 */
 	public OutlineFlow(final PDFWriterImpl pdfWriter) throws IOException {
 		this.xref = pdfWriter.xref;
 		this.out = pdfWriter.mainFlow.forkFragment();
@@ -66,6 +76,11 @@ class OutlineFlow {
 		this.currentOutline = outline;
 	}
 
+	/**
+	 * Ends the current bookmark, making its parent the active outline entry again.
+	 * Must be paired with a preceding call to
+	 * {@link #startBookmark(ObjectRef, String, double, double, double)}.
+	 */
 	public void endBookmark() {
 		this.currentOutline = this.currentOutline.parent;
 	}
@@ -230,20 +245,51 @@ class OutlineFlow {
 	}
 
 	/**
-	 * Represents an internal bookmark entry data structure.
+	 * Represents a single node in the PDF outline (bookmark) tree.
+	 * <p>
+	 * Instances are linked into a doubly-linked list at each level of the hierarchy
+	 * ({@link #prev} / {@link #next}) and into a parent-child tree
+	 * ({@link #parent} / {@link #first} / {@link #last}).  {@link #ref} is
+	 * assigned during the first pass of {@link OutlineFlow#close()}.
+	 * </p>
 	 */
 	private static class OutlineEntry {
+		/** Display label shown in the viewer's bookmark panel; may be {@code null}. */
 		public final String title;
+		/** Link destination (page reference plus coordinates). */
 		public final Destination dest;
+		/** Indirect object reference assigned during serialization. */
 		public ObjectRef ref;
-		public OutlineEntry parent, prev, next, first, last;
+		/** Parent node, or {@code null} for root-level entries. */
+		public OutlineEntry parent;
+		/** Previous sibling in the same level, or {@code null}. */
+		public OutlineEntry prev;
+		/** Next sibling in the same level, or {@code null}. */
+		public OutlineEntry next;
+		/** First child node, or {@code null} if this entry is a leaf. */
+		public OutlineEntry first;
+		/** Last child node, or {@code null} if this entry is a leaf. */
+		public OutlineEntry last;
+		/** Number of direct children. */
 		public int count = 0;
 
+		/**
+		 * Creates a new outline entry with the given title and destination.
+		 *
+		 * @param title the display label, or {@code null} for a placeholder entry
+		 * @param dest  the link destination
+		 */
 		public OutlineEntry(final String title, final Destination dest) {
 			this.title = title;
 			this.dest = dest;
 		}
 
+		/**
+		 * Returns {@code true} if this entry has no visible title and no children,
+		 * meaning it can be pruned from the final outline tree.
+		 *
+		 * @return {@code true} if the entry is effectively empty
+		 */
 		public boolean isEmpty() {
 			return this.title == null && this.count <= 0;
 		}

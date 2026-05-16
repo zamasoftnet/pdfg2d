@@ -3,12 +3,21 @@ package net.zamasoft.pdfg2d.gc.text.layout.control;
 import net.zamasoft.pdfg2d.gc.font.FontListMetrics;
 
 /**
- * Represents a line break.
+ * Represents a line break control element ({@code '\n'}) in the text layout.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class LineBreak extends Control {
 	private final FontListMetrics flm;
 	private final int charOffset;
 
+	/**
+	 * Constructs a new LineBreak.
+	 *
+	 * @param flm        the font list metrics used to determine ascent and descent
+	 * @param charOffset the character offset of this element in the source string
+	 */
 	public LineBreak(final FontListMetrics flm, final int charOffset) {
 		this.flm = flm;
 		this.charOffset = charOffset;

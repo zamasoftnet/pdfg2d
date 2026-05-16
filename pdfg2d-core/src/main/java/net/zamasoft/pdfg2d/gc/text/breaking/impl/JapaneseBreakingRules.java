@@ -122,6 +122,12 @@ public class JapaneseBreakingRules implements TextBreakingRules {
 		return false;
 	}
 
+	/**
+	 * Returns whether the given character belongs to a CJK Unicode block.
+	 *
+	 * @param c the character to test
+	 * @return {@code true} if the character is a CJK character
+	 */
 	protected boolean isCJK(final char c) {
 		final UnicodeBlock b = UnicodeBlock.of(c);
 		if (b == null) {

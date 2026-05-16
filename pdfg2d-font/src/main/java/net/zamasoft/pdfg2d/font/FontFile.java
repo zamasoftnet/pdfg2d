@@ -13,10 +13,25 @@ import java.util.zip.InflaterInputStream;
 import net.zamasoft.pdfg2d.font.util.BufferedRandomAccessFile;
 
 /**
- * Class for accessing TTC, TTF, or WOFF files.
- * Provides file format handling and extraction.
+ * Provides access to TTC (TrueType Collection), TTF (TrueType / OpenType), and
+ * WOFF (Web Open Font Format) files.  WOFF files are transparently decompressed
+ * to a temporary file on construction; TTC files expose each contained font via
+ * an index.
+ *
+ * <p>Example usage:
+ * <pre>{@code
+ * var fontFile = new FontFile(new File("NotoSans.ttf"));
+ * try (var font = fontFile.getFont()) {
+ *     // use font ...
+ * }
+ * }</pre>
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class FontFile {
+
+	/** The last-modified timestamp of the source file at construction time. */
 	public final long timestamp;
 
 	private final OpenTypeFont[] fonts;

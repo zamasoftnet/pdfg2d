@@ -38,6 +38,13 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * @since 1.0
  */
 public class ComplexTextDemo {
+	/**
+	 * Entry point. Generates {@code output/text.pdf} and opens a Swing preview
+	 * window showing the complex text layout.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if a font or PDF output error occurs
+	 */
 	public static void main(final String[] args) throws Exception {
 		final var params = PDFParams.createDefault().withCompression(PDFParams.Compression.NONE);
 
@@ -113,13 +120,13 @@ public class ComplexTextDemo {
 		}
 	}
 
-	private static void draw(final GC gc) {
+	static void draw(final GC gc) {
 		{
 			gc.begin();
 			gc.transform(AffineTransform.getTranslateInstance(200, 0));
-			SimpleLayoutGlyphHandler lgh = new SimpleLayoutGlyphHandler();
+			final var lgh = new SimpleLayoutGlyphHandler();
 			lgh.setGC(gc);
-			try (TextLayoutHandler tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
+			try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
 				// Set text direction to top-to-bottom (vertical)
 				tlf.setDirection(FontStyle.Direction.TB);
 				tlf.setFontFamilies(FontFamilyList.create("IPAex明朝"));
@@ -142,9 +149,9 @@ public class ComplexTextDemo {
 		{
 			gc.begin();
 			gc.transform(AffineTransform.getTranslateInstance(100, 0));
-			SimpleLayoutGlyphHandler lgh = new SimpleLayoutGlyphHandler();
+			final var lgh = new SimpleLayoutGlyphHandler();
 			lgh.setGC(gc);
-			try (TextLayoutHandler tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
+			try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
 				tlf.setDirection(FontStyle.Direction.TB);
 				tlf.setFontFamilies(FontFamilyList.create("Kenten Generic"));
 				tlf.setFontSize(16);

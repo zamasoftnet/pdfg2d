@@ -5,12 +5,19 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 
 /**
- * Index to location table.
- * 
- * @param offsets the array of glyph offsets
- * @param factor  the multiplication factor for offsets
+ * OpenType {@code loca} (Index to Location) table.
+ * <p>
+ * Maps glyph indices to byte offsets within the {@code glyf} table.  The
+ * offset format is determined by the {@code indexToLocFormat} field of the
+ * {@code head} table: short (16-bit) offsets are multiplied by 2 to obtain
+ * the actual byte offset; long (32-bit) offsets are used directly.
+ * </p>
+ *
+ * @param offsets the raw offset values read from the table
+ * @param factor  multiplication factor applied to each offset (2 for short format, 1 for long format)
  * @since 1.0
  * @author <a href="mailto:david@steadystate.co.uk">David Schweinsberg</a>
+ * @author MIYABE Tatsuhiko
  */
 public record LocaTable(int[] offsets, short factor) implements Table {
 
@@ -52,10 +59,17 @@ public record LocaTable(int[] offsets, short factor) implements Table {
 		return new LocaTable(offsets, factor);
 	}
 
+	/**
+	 * Returns the byte offset of the glyph at the given index within the {@code glyf} table.
+	 *
+	 * @param i the glyph index
+	 * @return the byte offset in the {@code glyf} table
+	 */
 	public int getOffset(final int i) {
 		return this.offsets[i] * this.factor;
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public int getType() {
 		return LOCA;

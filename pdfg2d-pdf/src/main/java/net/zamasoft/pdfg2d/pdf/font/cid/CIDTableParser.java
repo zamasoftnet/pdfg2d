@@ -28,6 +28,15 @@ class CIDTableParser {
 
 	private SourceResolver resolver;
 
+	/**
+	 * Parses the CID table from the given CMap source and populates the provided
+	 * integer map with character-code-to-CID mappings.
+	 *
+	 * @param source the CMap source to parse
+	 * @param toCID  the map to populate with character-code-to-CID entries
+	 * @throws IOException   if an I/O error occurs while reading the source
+	 * @throws CMapException if the CMap file contains invalid data
+	 */
 	public void parse(Source source, IntMap toCID) throws IOException, CMapException {
 		this.in = new InputStreamReader(new BufferedInputStream(source.getInputStream()), "ISO-8859-1");
 		try {

@@ -23,6 +23,15 @@ public class CMapParser {
 
 	private CMap cmap;
 
+	/**
+	 * Parses CMap metadata (encoding name, registry, ordering, supplement) from the
+	 * given input stream and populates the provided {@link CMap} object.
+	 *
+	 * @param in   the raw input stream of the CMap file
+	 * @param cmap the CMap object to populate with parsed metadata
+	 * @return the populated {@code CMap} object
+	 * @throws IOException if an I/O error occurs while reading the stream
+	 */
 	public CMap parse(InputStream in, CMap cmap) throws IOException {
 		this.cmap = cmap;
 		this.in = new InputStreamReader(new BufferedInputStream(in), "ISO-8859-1");

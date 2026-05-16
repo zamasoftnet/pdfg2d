@@ -1,12 +1,8 @@
 package net.zamasoft.pdfg2d.gc.paint;
 
 /**
- * @author MIYABE Tatsuhiko
- * @since 1.0
- */
-/**
  * Represents a grayscale color.
- * 
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */

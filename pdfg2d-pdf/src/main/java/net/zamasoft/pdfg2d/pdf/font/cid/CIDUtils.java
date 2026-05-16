@@ -14,6 +14,14 @@ import net.zamasoft.pdfg2d.pdf.font.cid.ToUnicode.Unicode;
 import net.zamasoft.pdfg2d.pdf.font.type2.CFFGenerator;
 import net.zamasoft.pdfg2d.util.ArrayShortMapIterator;
 
+/**
+ * Utility class for writing CID font structures into PDF output streams.
+ * Provides helpers for writing font flags, glyph-width arrays, embedded
+ * CFF font data, and ToUnicode CMaps.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 public final class CIDUtils {
 	public static final String ENCODING_H = "Identity-H";
 
@@ -49,6 +57,14 @@ public final class CIDUtils {
 		// ignore
 	}
 
+	/**
+	 * Writes the PDF font Flags entry and the optional Panose Style entry for the
+	 * given CID font source.
+	 *
+	 * @param out    the PDF output stream
+	 * @param source the CID font source whose metrics and Panose data are used
+	 * @throws IOException if an I/O error occurs
+	 */
 	public static void writeFlagsAndPanose(PDFOutput out, CIDFontSource source) throws IOException {
 		int flags = CID_SYMBOLIC;
 		Panose panose = source.getPanose();
@@ -111,7 +127,11 @@ public final class CIDUtils {
 	}
 
 	/**
-	 * Writes the DW (default width) and W (width) arrays.
+	 * Writes the DW (default width) and W (width) arrays for a horizontal CID font.
+	 *
+	 * @param out    the PDF output stream
+	 * @param warray the width array containing per-glyph widths
+	 * @throws IOException if an I/O error occurs
 	 */
 	public static void writeWArray(PDFOutput out, WArray warray) throws IOException {
 		out.writeName("DW");
@@ -155,7 +175,12 @@ public final class CIDUtils {
 	}
 
 	/**
-	 * Writes the DW2 (default width 2) and W2 (width 2) arrays. TODO: vx, vy
+	 * Writes the DW2 (default vertical metrics) and W2 (vertical widths) arrays
+	 * for a vertical CID font.
+	 *
+	 * @param out    the PDF output stream
+	 * @param warray the width array containing per-glyph vertical widths
+	 * @throws IOException if an I/O error occurs
 	 */
 	public static void writeWArray2(PDFOutput out, WArray warray) throws IOException {
 		out.writeName("DW2");
@@ -209,6 +234,20 @@ public final class CIDUtils {
 		}
 	}
 
+	/**
+	 * Writes a non-embedded (identity) CID font, using Adobe-Identity encoding,
+	 * into the PDF output.
+	 *
+	 * @param out          the PDF fragment output stream
+	 * @param xref         the cross-reference table for allocating object references
+	 * @param source       the CID font source providing metrics and metadata
+	 * @param fontRef      the object reference for the top-level font dictionary
+	 * @param w            horizontal glyph widths indexed by GID
+	 * @param w2           vertical glyph widths indexed by GID, or {@code null} for
+	 *                     horizontal-only fonts
+	 * @param unicodeArray mapping from GID to Unicode code point
+	 * @throws IOException if an I/O error occurs
+	 */
 	public static void writeIdentityFont(PDFFragmentOutput out, XRef xref, CIDFontSource source, ObjectRef fontRef,
 			short[] w, short[] w2, int[] unicodeArray) throws IOException {
 		// Main font

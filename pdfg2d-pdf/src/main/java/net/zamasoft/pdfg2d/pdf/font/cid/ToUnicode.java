@@ -5,6 +5,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
+ * Represents the ToUnicode CMap for a CID font. The ToUnicode CMap maps CID codes
+ * to Unicode code points, enabling PDF viewers and text extraction tools to recover
+ * the original Unicode text from a PDF page content stream. Entries are stored as
+ * ranges respecting the PDF specification constraint that runs cannot span byte
+ * boundaries.
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
@@ -13,14 +19,28 @@ public class ToUnicode implements Serializable {
 
 	protected final Unicode[] unicodes;
 
+	/**
+	 * Constructs a ToUnicode with the given array of Unicode mapping entries.
+	 *
+	 * @param unicodes the array of Unicode mapping ranges
+	 */
 	public ToUnicode(Unicode[] unicodes) {
 		this.unicodes = unicodes;
 	}
 
+	/**
+	 * Returns the array of Unicode mapping entries that make up this CMap.
+	 *
+	 * @return the array of Unicode mapping ranges
+	 */
 	public Unicode[] getUnicodes() {
 		return this.unicodes;
 	}
 
+	/**
+	 * A single range entry in the ToUnicode CMap, mapping a contiguous range of CID
+	 * codes to a corresponding array of Unicode code points.
+	 */
 	public static class Unicode implements Serializable {
 		private static final long serialVersionUID = 0;
 
@@ -43,26 +63,61 @@ public class ToUnicode implements Serializable {
 			this.unicodes = unicodes;
 		}
 
+		/**
+		 * Constructs an entry mapping a single CID code to the given Unicode code points.
+		 *
+		 * @param code     the CID code
+		 * @param unicodes the corresponding Unicode code points
+		 */
 		public Unicode(int code, int[] unicodes) {
 			this(code, code, unicodes);
 		}
 
+		/**
+		 * Constructs an entry mapping CID code 0 to the given Unicode code points.
+		 *
+		 * @param unicodes the corresponding Unicode code points
+		 */
 		public Unicode(int[] unicodes) {
 			this(0, 0, unicodes);
 		}
 
+		/**
+		 * Returns the first CID code in this mapping range.
+		 *
+		 * @return the first CID code
+		 */
 		public int getFirstCode() {
 			return this.firstCode;
 		}
 
+		/**
+		 * Returns the last CID code in this mapping range.
+		 *
+		 * @return the last CID code
+		 */
 		public int getLastCode() {
 			return this.lastCode;
 		}
 
+		/**
+		 * Returns the array of Unicode code points for the codes in this range.
+		 *
+		 * @return the Unicode code point array
+		 */
 		public int[] getUnicodes() {
 			return this.unicodes;
 		}
 
+		/**
+		 * Returns the Unicode code point for the given CID code.
+		 * If the code maps beyond the end of the stored array, the last element is returned.
+		 *
+		 * @param code the CID code to look up
+		 * @return the corresponding Unicode code point
+		 * @throws ArrayIndexOutOfBoundsException if {@code code} is outside the range
+		 *         [{@code firstCode}, {@code lastCode}]
+		 */
 		public int getUnicode(int code) {
 			if (code < this.firstCode || code > this.lastCode) {
 				throw new ArrayIndexOutOfBoundsException(code);

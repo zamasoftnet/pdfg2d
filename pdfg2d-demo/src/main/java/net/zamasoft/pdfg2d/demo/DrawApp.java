@@ -18,8 +18,16 @@ import net.zamasoft.pdfg2d.pdf.util.PDFUtils;
  * </p>
  * 
  * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class DrawApp {
+	/**
+	 * Entry point. Generates {@code output/draw.pdf} containing the Mondrian-like
+	 * composition.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if an error occurs during PDF generation
+	 */
 	public static void main(final String[] args) throws Exception {
 		try (final var g2d = new PDFGraphics2D(new File(DemoUtils.getOutputDir(), "draw.pdf"))) {
 			g2d.setColor(Color.WHITE);

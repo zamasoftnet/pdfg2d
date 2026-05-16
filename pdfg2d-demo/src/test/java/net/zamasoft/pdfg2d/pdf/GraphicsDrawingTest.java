@@ -16,13 +16,13 @@ import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class GraphicsDrawingTest {
 
     @Test
     public void testShapeDrawingOperators() throws Exception {
-        final var tempFile = File.createTempFile("test-graphics-shapes", ".pdf");
-        tempFile.deleteOnExit();
+        final var tempFile = TestOutputFiles.outputFile(getClass(), "test-graphics-shapes.pdf");
 
         // 1. Generate PDF with specific shapes
         try (final var out = new FileOutputStream(tempFile)) {

@@ -25,6 +25,13 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * @since 1.0
  */
 public class LinkAnnotationDemo {
+	/**
+	 * Entry point. Generates {@code output/annotation.pdf} containing a rotated
+	 * rectangle with a clickable URI link annotation.
+	 *
+	 * @param args command-line arguments (not used)
+	 * @throws Exception if an error occurs during PDF generation
+	 */
 	public static void main(final String[] args) throws Exception {
 		final var params = PDFParams.createDefault()
 				.withCompression(PDFParams.Compression.NONE)

@@ -51,10 +51,22 @@ public record TableDirectory(
 		return new TableDirectory(version, searchRange, entrySelector, rangeShift, entries);
 	}
 
+	/**
+	 * Returns the directory entry at the specified index.
+	 *
+	 * @param index the zero-based index into the sorted entry array
+	 * @return the {@link DirectoryEntry} at {@code index}
+	 */
 	public DirectoryEntry getEntry(final int index) {
 		return this.entries[index];
 	}
 
+	/**
+	 * Searches for a directory entry whose tag matches the given value.
+	 *
+	 * @param tag the four-byte table tag (e.g. {@link Table#HEAD})
+	 * @return the matching {@link DirectoryEntry}, or {@code null} if not found
+	 */
 	public DirectoryEntry getEntryByTag(final int tag) {
 		for (final DirectoryEntry entry : this.entries) {
 			if (entry.tag() == tag) {
@@ -64,6 +76,11 @@ public record TableDirectory(
 		return null;
 	}
 
+	/**
+	 * Returns the number of tables in this directory.
+	 *
+	 * @return the table count as a {@code short}
+	 */
 	public short getNumTables() {
 		return (short) this.entries.length;
 	}

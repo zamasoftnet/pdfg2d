@@ -3,9 +3,11 @@ package net.zamasoft.pdfg2d.pdf.impl;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
@@ -30,9 +32,18 @@ class XRefImpl implements XRef {
 	protected final PDFFragmentOutputImpl mainFlow;
 
 	private Map<String, Object> attributes;
+	private final Map<ObjectRef, LinkedHashSet<ObjectRef>> dependencies = new HashMap<>();
 
 	private static final byte[] EOF = { '%', '%', 'E', 'O', 'F' };
 
+	/**
+	 * Creates a new cross-reference table and immediately opens the root Catalog
+	 * object in {@code mainFlow}.
+	 *
+	 * @param mainFlow the primary output fragment into which the xref table and
+	 *                 trailer will eventually be written
+	 * @throws IOException if an I/O error occurs while writing the object header
+	 */
 	XRefImpl(final PDFFragmentOutputImpl mainFlow) throws IOException {
 		this.mainFlow = mainFlow;
 		this.rootRef = this.nextObjectRef();
@@ -51,18 +62,51 @@ class XRefImpl implements XRef {
 	}
 
 	/**
+	 * Returns a snapshot of all object references registered so far, in creation
+	 * order.
+	 *
+	 * @return mutable copy of the internal object list
+	 */
+	public List<ObjectRef> getObjects() {
+		return new ArrayList<>(this.xref);
+	}
+
+	ObjectRef getRootRef() {
+		return this.rootRef;
+	}
+
+	/**
 	 * Finalizes the PDF by writing the xref table and trailer.
 	 * 
 	 * @param posInfo   Position information of fragments.
 	 * @param infoRef   Reference to the Info dictionary.
 	 * @param fileid    The document IDs.
 	 * @param encrypter Encryption settings, if any.
+	 * @return The byte offset of the xref table.
 	 * @throws IOException If an I/O error occurs.
 	 */
-	void close(final PositionInfo posInfo, final ObjectRef infoRef, final byte[][] fileid,
+	long close(final PositionInfo posInfo, final ObjectRef infoRef, final byte[][] fileid,
 			final Encryption encrypter) throws IOException {
+		return this.close(posInfo, infoRef, fileid, encrypter, false);
+	}
+
+	/**
+	 * Writes the xref table and trailer, optionally omitting the final
+	 * {@code startxref} entry for linearized PDF assembly.
+	 *
+	 * @param posInfo    fragment position snapshot
+	 * @param infoRef    reference to the Info dictionary, or {@code null}
+	 * @param fileid     two-element array of 16-byte document IDs, or {@code null}
+	 * @param encrypter  encryption settings, or {@code null}
+	 * @param linearized {@code true} when called from the linearized-PDF path;
+	 *                   suppresses the {@code startxref…%%EOF} footer
+	 * @return absolute byte offset of the xref table in the output file
+	 * @throws IOException if an I/O error occurs
+	 */
+	long close(final PositionInfo posInfo, final ObjectRef infoRef, final byte[][] fileid,
+			final Encryption encrypter, boolean linearized) throws IOException {
 		// Calculate the starting position of the xref table
-		final int xrefPosition = (int) posInfo.getPosition(this.mainFlow.getId()) + this.mainFlow.getLength();
+		final long xrefPosition = posInfo.getPosition(this.mainFlow.getId()) + this.mainFlow.getLength();
 
 		// Generate trailer content in a memory buffer first
 		final var trailerBytes = new ByteArrayOutputStream();
@@ -100,13 +144,16 @@ class XRefImpl implements XRef {
 			}
 
 			trailerFlow.endHash();
-			trailerFlow.writeOperator("startxref");
-			trailerFlow.lineBreak();
-			trailerFlow.writeInt(xrefPosition);
 
-			trailerFlow.lineBreak();
-			trailerFlow.write(EOF);
-			trailerFlow.lineBreak();
+			if (!linearized) {
+				trailerFlow.writeOperator("startxref");
+				trailerFlow.lineBreak();
+				trailerFlow.write(String.valueOf(xrefPosition));
+
+				trailerFlow.lineBreak();
+				trailerFlow.write(EOF);
+				trailerFlow.lineBreak();
+			}
 		}
 		final var trailer = trailerBytes.toString("ISO-8859-1");
 
@@ -127,21 +174,26 @@ class XRefImpl implements XRef {
 
 		// Append trailer content
 		this.mainFlow.write(trailer);
+
+		return xrefPosition;
 	}
 
-	private final byte[] work = new byte[10];
+	/** Scratch buffer for zero-padding numbers in xref entries (10 bytes max). */
+	private final byte[] numberBuffer = new byte[10];
 
 	/**
-	 * Writes a 20-byte cross-reference table entry.
-	 * format: nnnnnnnnnn ggggg f/n[EOL]
-	 * 
-	 * @param out           Output target.
-	 * @param byteOffset    Byte offset of the object.
-	 * @param generationNum Generation number.
-	 * @param inUse         Whether the object is in use ('n') or free ('f').
-	 * @throws IOException If an I/O error occurs.
+	 * Writes a single 20-byte cross-reference table entry in the format:
+	 * <pre>nnnnnnnnnn ggggg n|f[EOL]</pre>
+	 * where {@code n} or {@code f} indicates whether the object is in use or free.
+	 *
+	 * @param out           target fragment output
+	 * @param byteOffset    absolute byte offset of the object in the final file
+	 * @param generationNum generation number of the object
+	 * @param inUse         {@code true} for an in-use entry ({@code n}),
+	 *                      {@code false} for a free entry ({@code f})
+	 * @throws IOException if an I/O error occurs
 	 */
-	private void writeXrefEntry(final PDFFragmentOutputImpl out, final long byteOffset, final int generationNum,
+	void writeXrefEntry(final PDFFragmentOutputImpl out, final long byteOffset, final int generationNum,
 			final boolean inUse) throws IOException {
 		out.breakBefore();
 
@@ -158,14 +210,20 @@ class XRefImpl implements XRef {
 	}
 
 	/**
-	 * Helper to write a zero-padded number of fixed width.
+	 * Writes a decimal number left-padded with {@code '0'} to exactly {@code width}
+	 * digits.
+	 *
+	 * @param out   target output
+	 * @param val   non-negative value to write
+	 * @param width total character width (must be ≤ 10)
+	 * @throws IOException if an I/O error occurs
 	 */
 	private void writeFixedNumber(final PDFFragmentOutputImpl out, long val, final int width) throws IOException {
 		for (var i = width - 1; i >= 0; --i) {
-			this.work[i] = (byte) ('0' + (val % 10));
+			this.numberBuffer[i] = (byte) ('0' + (val % 10));
 			val /= 10;
 		}
-		out.write(this.work, 0, width);
+		out.write(this.numberBuffer, 0, width);
 	}
 
 	public Object getAttribute(final String key) {
@@ -177,5 +235,16 @@ class XRefImpl implements XRef {
 			this.attributes = new HashMap<>();
 		}
 		this.attributes.put(key, value);
+	}
+
+	public void addDependency(final ObjectRef from, final ObjectRef to) {
+		if (from == null || to == null || from == to) {
+			return;
+		}
+		this.dependencies.computeIfAbsent(from, key -> new LinkedHashSet<>()).add(to);
+	}
+
+	public Set<ObjectRef> getDependencies(final ObjectRef ref) {
+		return this.dependencies.getOrDefault(ref, new LinkedHashSet<>());
 	}
 }

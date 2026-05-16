@@ -3,6 +3,8 @@ package net.zamasoft.pdfg2d.pdf.impl;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
@@ -25,6 +27,16 @@ class PDFPageOutputImpl extends PDFPageOutput {
 
 	/** Current page object. */
 	private final ObjectRef pageRef;
+
+	private final ObjectRef contentsRef;
+
+	public ObjectRef getPageRef() {
+		return this.pageRef;
+	}
+
+	public ObjectRef getContentsRef() {
+		return this.contentsRef;
+	}
 
 	/** Parameters flow for current page. */
 	private final PDFFragmentOutputImpl paramsFlow;
@@ -72,12 +84,13 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		mainFlow.lineBreak();
 
 		mainFlow.writeName("Resources");
-		mainFlow.writeObjectRef(pdfWriter.pageResourceRef);
+		final var pageResourceRef = pdfWriter.ensurePageResourceRef();
+		mainFlow.writeObjectRef(pageResourceRef);
 		mainFlow.lineBreak();
 
 		mainFlow.writeName("Contents");
-		final var contentsRef = xref.nextObjectRef();
-		mainFlow.writeObjectRef(contentsRef);
+		this.contentsRef = xref.nextObjectRef();
+		mainFlow.writeObjectRef(this.contentsRef);
 		mainFlow.lineBreak();
 
 		this.annotsFlow = mainFlow.forkFragment();
@@ -85,24 +98,35 @@ class PDFPageOutputImpl extends PDFPageOutput {
 
 		mainFlow.endHash();
 		mainFlow.endObject();
+		pdfWriter.ensurePageResourceFlow();
 
 		this.pageFlow = mainFlow.forkFragment();
 		this.pageFlow.startObject(contentsRef);
 
 		// Always use ASCII/Flate compression for page contents
 		this.out = this.pageFlow.startStream(PDFFragmentOutput.Mode.ASCII);
+
+		pdfWriter.pageOutputs.add(this);
 	}
 
 	private PDFWriterImpl getPDFWriterImpl() {
 		return (PDFWriterImpl) this.pdfWriter;
 	}
 
-	public PDFPageOutput getPDFPageOutput() {
-		return this;
-	}
-
+	/**
+	 * Ensures that the named resource is declared in the page resource dictionary.
+	 * <p>
+	 * If the resource has already been added, this method is a no-op.
+	 * </p>
+	 *
+	 * @param type PDF resource type (e.g. {@code "Font"}, {@code "XObject"})
+	 * @param name resource name as assigned by
+	 *             {@link PDFWriterImpl#addResource(String, String, ObjectRef)}
+	 * @throws IOException if an I/O error occurs
+	 */
 	public void useResource(final String type, final String name) throws IOException {
 		final var pdfWriter = this.getPDFWriterImpl();
+		pdfWriter.ensurePageResourceFlow();
 		final var resourceFlow = pdfWriter.pageResourceFlow;
 		if (resourceFlow.contains(name)) {
 			return;
@@ -110,6 +134,12 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		final var nameToResourceRef = pdfWriter.nameToResourceRef;
 		final var objectRef = nameToResourceRef.get(name);
 		resourceFlow.put(type, name, objectRef);
+	}
+
+	private final List<ObjectRef> annotRefs = new ArrayList<>();
+
+	public List<ObjectRef> getAnnotRefs() {
+		return this.annotRefs;
 	}
 
 	/**
@@ -132,6 +162,7 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		}
 
 		final var annotRef = pdfWriterImpl.xref.nextObjectRef();
+		this.annotRefs.add(annotRef);
 		this.annotsFlow.writeObjectRef(annotRef);
 
 		// Write annotation object to a separate fragment
@@ -153,9 +184,7 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		}
 	}
 
-	/**
-	 * Adds a fragment.
-	 */
+	@Override
 	@SuppressWarnings("resource")
 	public void addFragment(final String id, final Point2D location) throws IOException {
 		final Destination dest = new Destination(this.pageRef, location.getX(), this.height - location.getY(), 0);
@@ -174,6 +203,7 @@ class PDFPageOutputImpl extends PDFPageOutput {
 	 * @param location the location
 	 * @throws IOException in case of I/O error
 	 */
+	@Override
 	@SuppressWarnings("resource")
 	public void startBookmark(final String title, final Point2D location) throws IOException {
 		if (this.getPDFWriterImpl().outline != null) {
@@ -194,6 +224,13 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		}
 	}
 
+	/**
+	 * Writes a PDF rectangle array for a page box, converting from the top-left
+	 * coordinate system used by this API to the bottom-left PDF coordinate system.
+	 *
+	 * @param r rectangle in top-left coordinates
+	 * @throws IOException if an I/O error occurs
+	 */
 	private void paramRect(final Rectangle2D r) throws IOException {
 		this.paramsFlow.startArray();
 		this.paramsFlow.writeReal(r.getMinX());

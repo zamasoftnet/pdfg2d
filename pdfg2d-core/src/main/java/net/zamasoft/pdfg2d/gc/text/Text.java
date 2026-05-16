@@ -10,29 +10,98 @@ import net.zamasoft.pdfg2d.gc.font.FontStyle;
  * @since 1.0
  */
 public non-sealed interface Text extends Element {
+	/**
+	 * Returns the font style of this text run.
+	 *
+	 * @return the font style
+	 */
 	public FontStyle getFontStyle();
 
+	/**
+	 * Returns the font metrics of this text run.
+	 *
+	 * @return the font metrics
+	 */
 	public FontMetrics getFontMetrics();
 
+	/**
+	 * Returns the character offset of the first character in this text run
+	 * within the original source string.
+	 *
+	 * @return the character offset
+	 */
 	public int getCharOffset();
 
+	/**
+	 * Returns the ascent of this text run.
+	 *
+	 * @return the ascent
+	 */
 	public double getAscent();
 
+	/**
+	 * Returns the descent of this text run.
+	 *
+	 * @return the descent
+	 */
 	public double getDescent();
 
+	/**
+	 * Returns the character buffer for this text run.
+	 *
+	 * @return the character array
+	 */
 	public char[] getChars();
 
+	/**
+	 * Returns the number of characters in this text run.
+	 *
+	 * @return the character count
+	 */
 	public int getCharCount();
 
+	/**
+	 * Returns the glyph ID array for this text run.
+	 *
+	 * @return the glyph ID array
+	 */
 	public int[] getGlyphIds();
 
+	/**
+	 * Returns the number of characters corresponding to each glyph (cluster lengths).
+	 *
+	 * @return the cluster length array
+	 */
 	public byte[] getClusterLengths();
 
+	/**
+	 * Returns the number of glyphs in this text run.
+	 *
+	 * @return the glyph count
+	 */
 	public int getGlyphCount();
 
+	/**
+	 * Returns the additional spacing added between each glyph (letter spacing).
+	 *
+	 * @return the letter spacing
+	 */
 	public double getLetterSpacing();
 
+	/**
+	 * Sends all glyphs in this text run to the specified glyph handler.
+	 *
+	 * @param gh the glyph handler to receive the glyphs
+	 */
 	public void toGlyphs(GlyphHandler gh);
 
+	/**
+	 * Returns the per-glyph extra advance adjustments, optionally creating
+	 * the array if it does not yet exist.
+	 *
+	 * @param make if {@code true}, create the array when it does not exist
+	 * @return the per-glyph x-advance array, or {@code null} if not set and
+	 *         {@code make} is {@code false}
+	 */
 	public double[] getXAdvances(boolean make);
 }

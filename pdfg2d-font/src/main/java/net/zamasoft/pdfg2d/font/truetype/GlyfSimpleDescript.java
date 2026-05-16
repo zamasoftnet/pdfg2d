@@ -7,10 +7,14 @@ import net.zamasoft.pdfg2d.font.table.GlyfTable;
 import net.zamasoft.pdfg2d.font.table.Program;
 
 /**
- * Simple glyph description.
- * 
- * @since 1.0
+ * TrueType simple glyph description.  A simple glyph consists of one or more
+ * contours each made up of on-curve and off-curve (quadratic Bézier control)
+ * points.  Coordinates and flags are decoded from the compact run-length
+ * encoded format used in the {@code glyf} table.
+ *
  * @author <a href="mailto:david@steadystate.co.uk">David Schweinsberg</a>
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class GlyfSimpleDescript extends GlyfDescript {
 
@@ -32,6 +36,17 @@ public class GlyfSimpleDescript extends GlyfDescript {
 		this.count = count;
 	}
 
+	/**
+	 * Reads a simple glyph description from the current position in the given
+	 * random-access file.
+	 *
+	 * @param parentTable      the {@link GlyfTable} that owns this description
+	 * @param numberOfContours the number of contours in the glyph (must be &gt; 0)
+	 * @param raf              the file to read from, positioned at the start of the
+	 *                         bounding-box data
+	 * @return the parsed {@link GlyfSimpleDescript}
+	 * @throws IOException if the data cannot be read or is malformed
+	 */
 	public static GlyfSimpleDescript read(final GlyfTable parentTable, final int numberOfContours,
 			final RandomAccessFile raf) throws IOException {
 		final short xMin = (short) (raf.read() << 8 | raf.read());
@@ -59,36 +74,59 @@ public class GlyfSimpleDescript extends GlyfDescript {
 				endPtsOfContours, flags, xCoordinates, yCoordinates, count);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public int getEndPtOfContours(final int i) {
 		return this.endPtsOfContours[i];
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public byte getFlags(final int i) {
 		return this.flags[i];
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public short getXCoordinate(final int i) {
 		return this.xCoordinates[i];
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public short getYCoordinate(final int i) {
 		return this.yCoordinates[i];
 	}
 
+	/**
+	 * Always returns {@code false} since this is a simple glyph.
+	 *
+	 * @return {@code false}
+	 */
 	@Override
 	public boolean isComposite() {
 		return false;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public int getPointCount() {
 		return this.count;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public int getContourCount() {
 		return this.getNumberOfContours();

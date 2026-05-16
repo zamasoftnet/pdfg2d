@@ -27,11 +27,22 @@ import java.nio.file.StandardCopyOption;
  * new PDF.
  * This effectively measures the time taken to re-record PDF drawing commands.
  * </p>
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
  */
 public class PdfBoxGraphics2dPerformanceDemo {
     private static final String PDF_URL = "https://www.oecd.org/content/dam/oecd/en/publications/reports/2024/09/education-at-a-glance-2024_5ea68448/c00cad36-en.pdf";
     private static final String FILE_NAME = "education-at-a-glance-2024.pdf";
 
+    /**
+     * Entry point. Downloads the OECD report PDF if not already cached and runs
+     * the zamasoft PDFGraphics2D performance measurement (the rototor variant is
+     * commented out but available for comparison).
+     *
+     * @param args command-line arguments (not used)
+     * @throws IOException if the PDF cannot be downloaded or written
+     */
     public static void main(final String[] args) throws IOException {
         final var file = new File(DemoUtils.getOutputDir(), FILE_NAME);
         if (!file.exists()) {
@@ -44,11 +55,23 @@ public class PdfBoxGraphics2dPerformanceDemo {
             System.out.println("Using existing file " + file.getAbsolutePath());
         }
 
-        measureRototorPdfBoxGraphics2D(file);
+        // measureRototorPdfBoxGraphics2D(file);
         System.out.println("--------------------------------------------------");
         measureZamasoftPDFGraphics2D(file);
     }
 
+    /**
+     * Measures PDF re-recording performance using
+     * {@code de.rototor.pdfbox.graphics2d.PdfBoxGraphics2D}.
+     * <p>
+     * Each page of the source document is rendered into a
+     * {@code PdfBoxGraphics2D} context and the resulting XForm object is placed
+     * onto a new destination page.
+     * </p>
+     *
+     * @param file the source PDF file to process
+     * @throws IOException if the source cannot be read or the output cannot be saved
+     */
     private static void measureRototorPdfBoxGraphics2D(final File file) throws IOException {
         System.out.println("Measuring de.rototor.pdfbox.graphics2d.PdfBoxGraphics2D...");
         final var outFile = new File(DemoUtils.getOutputDir(), "performance-test-rototor.pdf");
@@ -98,12 +121,24 @@ public class PdfBoxGraphics2dPerformanceDemo {
         }
     }
 
+    /**
+     * Measures PDF re-recording performance using
+     * {@link net.zamasoft.pdfg2d.PDFGraphics2D}.
+     * <p>
+     * Pages from the source document are rendered into a {@code PDFGraphics2D}
+     * context backed by a linearized {@link PDFWriterImpl}, and the result is
+     * saved to {@code output/performance-test-zamasoft.pdf}.
+     * </p>
+     *
+     * @param file the source PDF file to process
+     * @throws IOException if the source cannot be read or the output cannot be saved
+     */
     private static void measureZamasoftPDFGraphics2D(final File file) throws IOException {
         System.out.println("Measuring net.zamasoft.pdfg2d.PDFGraphics2D...");
         final var outFile = new File(DemoUtils.getOutputDir(), "performance-test-zamasoft.pdf");
 
         try (final var sourceDoc = Loader.loadPDF(file)) {
-            final var params = PDFParams.createDefault();
+            final var params = PDFParams.createDefault().withLinearized(true);
             final int pageCount = sourceDoc.getNumberOfPages();
             System.out.println("Starting rendering of " + pageCount + " pages...");
             final long startTime = System.currentTimeMillis();
@@ -113,7 +148,7 @@ public class PdfBoxGraphics2dPerformanceDemo {
                         new FileFragmentedOutput(outFile, AbstractTempFileOutput.Config.ON_MEMORY), params)) {
                     final var renderer = new PDFRenderer(sourceDoc);
 
-                    for (int i = 0; i < pageCount; i++) {
+                    for (int i = 0; i < 1; i++) {
                         final var sourcePage = sourceDoc.getPage(i);
                         final var mediaBox = sourcePage.getMediaBox();
 

@@ -11,10 +11,19 @@ import net.zamasoft.pdfg2d.gc.paint.RGBColor;
 import net.zamasoft.pdfg2d.util.ColorUtils;
 
 /**
- * Base output class for PDF graphics operations like path drawing, color
- * setting,
- * and transformations.
- * 
+ * Abstract base for writing PDF graphics content to an output stream.
+ * <p>
+ * Provides typed write helpers for the most common PDF content-stream
+ * constructs that deal with coordinate geometry and colour: positions,
+ * rectangles, affine transforms, fill/stroke colours, and resource
+ * references.
+ * </p>
+ * <p>
+ * Coordinate system: pdfg2d uses a top-left origin internally, but PDF uses a
+ * bottom-left origin.  The {@code write*} helpers in this class perform the
+ * y-flip ({@code pdfY = height - javaY}) automatically.
+ * </p>
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
@@ -23,6 +32,15 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 
 	protected final PDFWriter pdfWriter;
 
+	/**
+	 * Constructs a PDFGraphicsOutput.
+	 *
+	 * @param pdfWriter the PDF writer that owns this output
+	 * @param out       the underlying output stream
+	 * @param width     the width of the graphics area in points
+	 * @param height    the height of the graphics area in points
+	 * @throws IOException if an I/O error occurs
+	 */
 	public PDFGraphicsOutput(final PDFWriter pdfWriter, final OutputStream out, final double width,
 			final double height) throws IOException {
 		super(out, pdfWriter.getParams().platformEncoding());
@@ -42,14 +60,32 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 		return this.pdfWriter;
 	}
 
+	/**
+	 * Returns the width of the graphics area in PDF user units (points).
+	 *
+	 * @return the width in points
+	 */
 	public double getWidth() {
 		return width;
 	}
 
+	/**
+	 * Returns the height of the graphics area in PDF user units (points).
+	 *
+	 * @return the height in points
+	 */
 	public double getHeight() {
 		return height;
 	}
 
+	/**
+	 * Declares that a named resource of a given type is used in this content stream.
+	 * The resource must have been registered with the PDF writer before use.
+	 *
+	 * @param type the PDF resource type (e.g., "Font", "XObject", "Pattern")
+	 * @param name the resource name
+	 * @throws IOException if an I/O error occurs
+	 */
 	public abstract void useResource(String type, String name) throws IOException;
 
 	/**

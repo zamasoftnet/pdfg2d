@@ -29,18 +29,42 @@ public abstract class Annot {
 		this.shape = shape;
 	}
 
+	/**
+	 * Returns the active area shape of this annotation in page coordinates.
+	 *
+	 * @return the annotation shape
+	 */
 	public Shape getShape() {
 		return this.shape;
 	}
 
+	/**
+	 * Returns the text content of the annotation, or {@code null} if not set.
+	 * The contents are typically displayed as a tooltip.
+	 *
+	 * @return the contents string, or {@code null}
+	 */
 	public String getContents() {
 		return this.contents;
 	}
 
+	/**
+	 * Sets the text content of the annotation.
+	 *
+	 * @param contents the contents string, or {@code null} to clear
+	 */
 	public void setContents(final String contents) {
 		this.contents = contents;
 	}
 
+	/**
+	 * Writes this annotation's PDF dictionary entries to the given output stream.
+	 * Subclasses must override this method and call {@code super.writeTo()} first.
+	 *
+	 * @param out     the PDF output stream to write to
+	 * @param pageOut the page output that owns this annotation
+	 * @throws IOException if an I/O error occurs
+	 */
 	public void writeTo(final PDFOutput out, final PDFPageOutput pageOut) throws IOException {
 		out.writeName("Type");
 		out.writeName("Annot");

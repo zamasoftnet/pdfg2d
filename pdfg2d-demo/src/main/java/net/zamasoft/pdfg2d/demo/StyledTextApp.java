@@ -27,6 +27,12 @@ import net.zamasoft.pdfg2d.pdf.util.PDFUtils;
  * @since 1.0
  */
 public class StyledTextApp {
+	/**
+	 * Entry point. Generates {@code output/styled-text.pdf} with justified,
+	 * mixed-language text on an A4 page.
+	 *
+	 * @param args command-line arguments (not used)
+	 */
 	public static void main(final String[] args) {
 		try (final var pdf = new PDFWriterImpl(
 				new FileFragmentedOutput(new File(DemoUtils.getOutputDir(), "styled-text.pdf")),

@@ -11,6 +11,15 @@ import java.util.List;
 import net.zamasoft.pdfg2d.font.BBox;
 import net.zamasoft.pdfg2d.pdf.font.PDFEmbeddedFont;
 
+/**
+ * Generates a CFF (Compact Font Format / Adobe Type 2) binary stream from a
+ * {@link PDFEmbeddedFont} subset.  The output is suitable for embedding as a
+ * {@code FontFile3} stream with subtype {@code CIDFontType0C} inside a PDF
+ * font descriptor.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 public class CFFGenerator {
 	protected String subsetName;
 
@@ -18,14 +27,31 @@ public class CFFGenerator {
 
 	private static final boolean DEBUG = false;
 
+	/**
+	 * Sets the subset name (the six-letter tag + PostScript name) that will be
+	 * written into the CFF Name INDEX, e.g. {@code "ABCDEF+FontName"}.
+	 *
+	 * @param subsetName the subset-qualified font name
+	 */
 	public void setSubsetName(String subsetName) {
 		this.subsetName = subsetName;
 	}
 
+	/**
+	 * Sets the embedded font whose glyph data will be written into the CFF stream.
+	 *
+	 * @param font the font to embed
+	 */
 	public void setEmbedableFont(PDFEmbeddedFont font) {
 		this.font = font;
 	}
 
+	/**
+	 * Writes the complete CFF binary data to the given output stream.
+	 *
+	 * @param out the output stream to receive the CFF data
+	 * @throws IOException if an I/O error occurs while writing
+	 */
 	public void writeTo(OutputStream out) throws IOException {
 		@SuppressWarnings("resource")
 		final CFFOutputStream cout = new CFFOutputStream(out);

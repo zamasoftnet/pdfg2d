@@ -48,12 +48,25 @@ public final class FontUtils {
 		return buff.toString();
 	}
 
+	/**
+	 * Returns whether two font styles are equal.
+	 *
+	 * @param a the first font style
+	 * @param b the second font style
+	 * @return {@code true} if the two font styles are equal
+	 */
 	public static boolean equals(final FontStyle a, final FontStyle b) {
 		return a.getFamily().equals(b.getFamily()) && a.getSize() == b.getSize() && a.getStyle() == b.getStyle()
 				&& a.getWeight() == b.getWeight() && a.getDirection() == b.getDirection()
 				&& a.getPolicy().equals(b.getPolicy());
 	}
 
+	/**
+	 * Returns a hash code for the specified font style.
+	 *
+	 * @param fontStyle the font style
+	 * @return the hash code
+	 */
 	public static int hashCode(final FontStyle fontStyle) {
 		int h = fontStyle.getFamily().hashCode();
 		final var a = Double.doubleToLongBits(fontStyle.getSize());

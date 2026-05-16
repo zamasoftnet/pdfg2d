@@ -10,21 +10,18 @@ import java.io.FileOutputStream;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionJavaScript;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.action.JavaScriptAction;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class PDFOpenActionTest {
 
-    @TempDir
-    File tempDir;
-
     @Test
     public void testOpenJavaScriptAction() throws Exception {
-        final var file = new File(tempDir, "open_action_test.pdf");
+        final var file = TestOutputFiles.outputFile(getClass(), "open_action_test.pdf");
         // Define JavaScript Open Action
         final var jsCode = "app.alert('Welcome to this PDF!');";
         final var params = PDFParams.createDefault()

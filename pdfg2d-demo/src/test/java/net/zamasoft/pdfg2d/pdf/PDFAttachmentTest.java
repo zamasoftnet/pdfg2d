@@ -13,20 +13,17 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class PDFAttachmentTest {
 
-    @TempDir
-    File tempDir;
-
     @Test
     public void testFileAttachments() throws Exception {
-        final var file = new File(tempDir, "attachment_test.pdf");
+        final var file = TestOutputFiles.outputFile(getClass(), "attachment_test.pdf");
         // Version 1.4+ required for attachments
         final var params = PDFParams.createDefault()
                 .withVersion(PDFParams.Version.V_1_4);

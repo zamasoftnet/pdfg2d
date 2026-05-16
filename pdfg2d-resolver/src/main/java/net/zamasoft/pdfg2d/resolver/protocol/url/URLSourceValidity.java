@@ -5,6 +5,20 @@ import java.net.URL;
 import java.net.URLConnection;
 import net.zamasoft.pdfg2d.resolver.SourceValidity;
 
+/**
+ * {@link SourceValidity} implementation for generic URL sources.
+ * <p>
+ * Each validity check opens a new connection to the URL and compares the
+ * server-reported {@code Last-Modified} time against the cached
+ * {@code timestamp}.  If the connection fails, the result is
+ * {@link net.zamasoft.pdfg2d.resolver.SourceValidity.Validity#UNKNOWN}.
+ * </p>
+ *
+ * @param timestamp the last-modified time recorded when the source was resolved
+ * @param url       the URL whose freshness is being tracked
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 record URLSourceValidity(long timestamp, URL url) implements SourceValidity {
 	@Override
 	public Validity getValid() {

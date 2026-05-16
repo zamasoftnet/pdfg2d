@@ -28,6 +28,12 @@ public class MapIntMap implements IntMap {
 		return this.map.containsKey(key);
 	}
 
+	/**
+	 * Returns an {@link IntMapIterator} that iterates over the entries in ascending
+	 * key order (backed by a {@link java.util.TreeMap}).
+	 *
+	 * @return an iterator over the map entries
+	 */
 	@Override
 	public IntMapIterator getIterator() {
 		final var i = this.map.entrySet().iterator();

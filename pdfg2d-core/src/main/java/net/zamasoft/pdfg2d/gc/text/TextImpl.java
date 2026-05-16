@@ -54,6 +54,14 @@ public class TextImpl extends AbstractText implements Serializable {
 	 */
 	public double[] xadvances = null;
 
+	/**
+	 * Constructs a new TextImpl.
+	 *
+	 * @param charOffset  the character offset of the first character within the
+	 *                    source string
+	 * @param fontStyle   the font style for this text run
+	 * @param fontMetrics the font metrics for this text run
+	 */
 	public TextImpl(final int charOffset, final FontStyle fontStyle, final FontMetrics fontMetrics) {
 		assert fontStyle != null : "FontStyle required.";
 		assert fontMetrics != null : "FontMetrics required.";
@@ -140,10 +148,24 @@ public class TextImpl extends AbstractText implements Serializable {
 		return this.letterSpacing;
 	}
 
+	/**
+	 * Sets the letter spacing added after each glyph.
+	 *
+	 * @param letterSpacing the letter spacing to set
+	 */
 	public void setLetterSpacing(final double letterSpacing) {
 		this.letterSpacing = letterSpacing;
 	}
 
+	/**
+	 * Splits this text run at the specified glyph offset and returns the first
+	 * part. This text instance is modified in place to become the second (tail)
+	 * part.
+	 *
+	 * @param goff the glyph index at which to split (must be &gt; 0 and
+	 *             &lt; {@link #getGlyphCount()})
+	 * @return the first (head) part of the split
+	 */
 	public Text split(final int goff) {
 		assert goff > 0 : "Cannot split at goff <= 0: goff=" + goff;
 		assert goff < this.glyphCount : "Cannot split at goff >= glyphCount (" + this.glyphCount + "): goff=" + goff;
@@ -183,6 +205,13 @@ public class TextImpl extends AbstractText implements Serializable {
 		return text;
 	}
 
+	/**
+	 * Returns the advance width contributed by the specified glyph when appended
+	 * after the current last glyph, taking kerning into account.
+	 *
+	 * @param gid the glyph ID to measure
+	 * @return the advance width of the glyph
+	 */
 	public double glyphAdvance(final int gid) {
 		double advance = this.fontMetrics.getAdvance(gid);
 		if (this.glyphCount > 0) {
@@ -234,6 +263,10 @@ public class TextImpl extends AbstractText implements Serializable {
 		return advance;
 	}
 
+	/**
+	 * Trims all internal arrays to their exact sizes, reducing memory usage.
+	 * Should be called after all glyphs have been appended.
+	 */
 	public void pack() {
 		assert this.glyphCount > 0 : "Empty text";
 		if (this.glyphIds.length != this.glyphCount) {

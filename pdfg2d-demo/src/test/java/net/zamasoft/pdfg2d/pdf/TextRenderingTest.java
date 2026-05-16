@@ -19,13 +19,13 @@ import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
+import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 public class TextRenderingTest {
 
     @Test
     public void testTextAttributes() throws Exception {
-        final var tempFile = File.createTempFile("test-text-rendering", ".pdf");
-        tempFile.deleteOnExit();
+        final var tempFile = TestOutputFiles.outputFile(getClass(), "test-text-rendering.pdf");
 
         // 1. Generate PDF with text
         try (final var out = new FileOutputStream(tempFile)) {

@@ -21,6 +21,15 @@ import net.zamasoft.pdfg2d.pdf.gc.PDFGC;
 import net.zamasoft.pdfg2d.util.IntList;
 import net.zamasoft.pdfg2d.util.ShortList;
 
+/**
+ * A PDF CID font instance that is built from an OpenType font file and
+ * embedded as a subset in the PDF output.  Each character code is mapped to
+ * an internal glyph identifier (GID) that is independent of the original font
+ * GID, so that the subset can be re-numbered compactly.
+ *
+ * @author MIYABE Tatsuhiko
+ * @since 1.0
+ */
 class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	private static final long serialVersionUID = 0L;
 
@@ -38,6 +47,13 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 
 	protected int glyphCount = 1;
 
+	/**
+	 * Constructs a new embedded CID font instance.
+	 *
+	 * @param source  the font source that supplies the underlying OpenType data
+	 * @param name    the internal PDF resource name for this font
+	 * @param fontRef the indirect object reference for the font dictionary
+	 */
 	protected OpenTypeEmbeddedCIDFont(OpenTypeEmbeddedCIDFontSource source, String name, ObjectRef fontRef) {
 		super(source);
 		this.fontRef = fontRef;

@@ -32,6 +32,11 @@ public class WArray implements Serializable {
 		this.widths = widths == null ? EMPTY_WIDTHS : widths;
 	}
 
+	/**
+	 * Constructs a WArray with the given default width and no per-glyph width entries.
+	 *
+	 * @param defaultWidth the default width (DW) applied to all glyphs without an explicit entry
+	 */
 	public WArray(short defaultWidth) {
 		this(defaultWidth, null);
 	}
@@ -150,6 +155,11 @@ public class WArray implements Serializable {
 		return new WArray(defaultWidth, (Width[]) newList.toArray(new Width[newList.size()]));
 	}
 
+	/**
+	 * Returns a human-readable representation of the default width and all width entries.
+	 *
+	 * @return a multi-line string showing the default width followed by each width entry
+	 */
 	public String toString() {
 		final var buff = new StringBuilder();
 		buff.append(this.defaultWidth).append('\n');
