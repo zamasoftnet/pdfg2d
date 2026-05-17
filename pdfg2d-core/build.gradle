@@ -1,9 +1,9 @@
 description = 'Simple graphic context'
 
 dependencies {
-    implementation project(':pdfg2d-resolver')
+    implementation 'net.zamasoft:zstream-resolver:1.0.0-SNAPSHOT'
     implementation project(':pdfg2d-font')
-    implementation project(':pdfg2d-io')
+    implementation 'net.zamasoft:zstream-io:1.0.0-SNAPSHOT'
 }
 
 publishing {

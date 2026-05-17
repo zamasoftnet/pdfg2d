@@ -8,8 +8,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import net.zamasoft.pdfg2d.io.impl.AbstractTempFileOutput;
-import net.zamasoft.pdfg2d.io.impl.FileFragmentedOutput;
+import net.zamasoft.zstream.io.impl.AbstractTempFileOutput;
+import net.zamasoft.zstream.io.impl.FileFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.test.TestOutputFiles;

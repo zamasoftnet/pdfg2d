@@ -8,7 +8,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.net.URI;
 
-import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
+import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.PDFWriter;
 import net.zamasoft.pdfg2d.pdf.annot.LinkAnnot;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;

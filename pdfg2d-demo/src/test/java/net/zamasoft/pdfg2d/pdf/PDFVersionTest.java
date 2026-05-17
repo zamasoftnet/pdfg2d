@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
+import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams.Version;

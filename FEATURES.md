@@ -7,8 +7,8 @@ pdfg2d は、Java の `Graphics2D`/独自 `GC` API を PDF 出力へ変換する
 - `pdfg2d-core`: 描画 API、色、ペイント、テキストレイアウト、フォント抽象、ユーティリティ。
 - `pdfg2d-pdf`: PDF 生成本体、PDFWriter、ページ出力、画像埋め込み、注釈、暗号化、各種 PDF 設定。
 - `pdfg2d-font`: TrueType/OpenType/CFF/WOFF 読み込みとグリフ解析。
-- `pdfg2d-io`: 分割出力、テンポラリ出力、ストリーム出力。
-- `pdfg2d-resolver`: `file:` `data:` `zip:` を含む Source/Resolver 層と制限付きリゾルバ。
+- `zstream-io`: 分割出力、テンポラリ出力、ストリーム出力。
+- `zstream-resolver`: `file:` `data:` `zip:` を含む Source/Resolver 層と制限付きリゾルバ。
 - `pdfg2d-svg`: Batik ベースの SVG 描画連携。
 - `pdfg2d-svg-emoji`: 絵文字フォント支援。既定ビルドでは無効で、`-PincludeEmojiFonts=true` で有効化します。
 - `pdfg2d-demo`: 実行サンプルと統合テスト。
@@ -65,8 +65,8 @@ pdfg2d は、Java の `Graphics2D`/独自 `GC` API を PDF 出力へ変換する
     - pattern 内の SVG `text`
     - raster image alpha soft mask
     - PDF 1.4+ 向け transparency-group Form XObject fallback
-  - `pdfg2d-io` 相当の in-memory 分割出力、patch-back、position tracking、adapter / wrapper
-  - `pdfg2d-resolver` 相当の `file:` `data:` `zip:` `http:` `https:`、cached resolver、restricted resolver、URL/stream/wrapper utilities
+  - `zstream-io` 相当の in-memory 分割出力、patch-back、position tracking、adapter / wrapper
+  - `zstream-resolver` 相当の `file:` `data:` `zip:` `http:` `https:`、cached resolver、restricted resolver、URL/stream/wrapper utilities
   - HTTP resolver の最小設定 API
     - timeout
     - redirect
@@ -182,8 +182,8 @@ pdfg2d は、Java の `Graphics2D`/独自 `GC` API を PDF 出力へ変換する
 
 ### モジュール別 API / 基盤機能
 - `pdfg2d-core` 描画 API、Recorder/NoOp、paint 値オブジェクト: テスト有。`CoreApiTest`
-- `pdfg2d-io` 分割出力、パッチ書き戻し: テスト有。`FragmentedOutputTest`
-- `pdfg2d-resolver` `file:` `data:` `zip:` を含む Source/Resolver: テスト有。`ResolverApiTest`
+- `zstream-io` 分割出力、パッチ書き戻し: テスト有。`FragmentedOutputTest`
+- `zstream-resolver` `file:` `data:` `zip:` を含む Source/Resolver: テスト有。`ResolverApiTest`
 
 ### SVG / Batik 連携
 - SVG 描画全般: テスト有。`SVGApiTest`, `DemoFeatureCoverageTest`

@@ -2,8 +2,8 @@ package net.zamasoft.pdfg2d.demo;
 
 import de.rototor.pdfbox.graphics2d.PdfBoxGraphics2D;
 import net.zamasoft.pdfg2d.PDFGraphics2D;
-import net.zamasoft.pdfg2d.io.impl.AbstractTempFileOutput;
-import net.zamasoft.pdfg2d.io.impl.FileFragmentedOutput;
+import net.zamasoft.zstream.io.impl.AbstractTempFileOutput;
+import net.zamasoft.zstream.io.impl.FileFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import org.apache.pdfbox.Loader;

@@ -3,7 +3,7 @@ package net.zamasoft.pdfg2d.pdf.font.cid;
 import java.io.IOException;
 import java.io.Serializable;
 
-import net.zamasoft.pdfg2d.resolver.Source;
+import net.zamasoft.zstream.resolver.Source;
 
 /**
  * Character mapping information for general CID fonts.

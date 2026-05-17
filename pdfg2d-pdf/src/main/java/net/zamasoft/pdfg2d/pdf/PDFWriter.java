@@ -10,7 +10,7 @@ import net.zamasoft.pdfg2d.gc.font.FontManager;
 import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGroupImage;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
-import net.zamasoft.pdfg2d.resolver.Source;
+import net.zamasoft.zstream.resolver.Source;
 
 /**
  * Interface for writing PDF documents.

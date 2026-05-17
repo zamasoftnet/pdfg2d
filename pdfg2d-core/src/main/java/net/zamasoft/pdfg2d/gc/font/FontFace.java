@@ -2,7 +2,7 @@ package net.zamasoft.pdfg2d.gc.font;
 
 import java.awt.Font;
 
-import net.zamasoft.pdfg2d.resolver.Source;
+import net.zamasoft.zstream.resolver.Source;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Style;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Weight;
 

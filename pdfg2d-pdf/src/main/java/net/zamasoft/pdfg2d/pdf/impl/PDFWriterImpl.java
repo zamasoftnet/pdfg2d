@@ -32,9 +32,9 @@ import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.FontStore;
 import net.zamasoft.pdfg2d.gc.font.FontManager;
 import net.zamasoft.pdfg2d.gc.image.Image;
-import net.zamasoft.pdfg2d.io.FragmentedOutput;
-import net.zamasoft.pdfg2d.io.util.FragmentOutputAdapter;
-import net.zamasoft.pdfg2d.io.util.PositionTrackingOutput;
+import net.zamasoft.zstream.io.FragmentedOutput;
+import net.zamasoft.zstream.io.util.FragmentOutputAdapter;
+import net.zamasoft.zstream.io.util.PositionTrackingOutput;
 import net.zamasoft.pdfg2d.pdf.Attachment;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
@@ -53,7 +53,7 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.params.V4EncryptionParams;
 import net.zamasoft.pdfg2d.pdf.params.ViewerPreferences;
 import net.zamasoft.pdfg2d.pdf.util.encryption.Encryption;
-import net.zamasoft.pdfg2d.resolver.Source;
+import net.zamasoft.zstream.resolver.Source;
 
 /**
  * Core implementation of {@link PDFWriter} that handles the assembly of PDF
@@ -1434,7 +1434,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.linDictFlow.flush();
 		this.mainFlow.flush();
 
-		if (!(this.builder instanceof net.zamasoft.pdfg2d.io.impl.AbstractTempFileOutput tempBuilder)) {
+		if (!(this.builder instanceof net.zamasoft.zstream.io.impl.AbstractTempFileOutput tempBuilder)) {
 			throw new IOException("Linearized output requires AbstractTempFileOutput-backed storage.");
 		}
 
@@ -1448,7 +1448,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 	private byte[] assembleLinearizedPdf(
 			final byte[] snapshot,
-			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final net.zamasoft.zstream.io.FragmentedOutput.PositionInfo posInfo,
 			final List<ObjectRef> allObjects,
 			final ObjectRef infoRef,
 			final ObjectRef hintRef) throws IOException {
@@ -1869,7 +1869,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	private LinearizedHintBuild buildLinearizedHintData(
-			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final net.zamasoft.zstream.io.FragmentedOutput.PositionInfo posInfo,
 			final PDFPageOutputImpl firstPage,
 			final List<SharedObjectGroup> sharedGroups,
 			final Set<ObjectRef> sharedRootSet,
@@ -1919,7 +1919,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	private LinearizedLayout computeLinearizedLayout(
-			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final net.zamasoft.zstream.io.FragmentedOutput.PositionInfo posInfo,
 			final long shift,
 			final PDFPageOutputImpl firstPage) {
 		final var orderedBodyObjects = new ArrayList<ObjectRef>();
@@ -2020,7 +2020,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			final List<ObjectRef> sectionObjects,
 			final List<ObjectRef> orderedBodyObjects,
 			final Map<ObjectRef, Integer> bodyOrder,
-			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final net.zamasoft.zstream.io.FragmentedOutput.PositionInfo posInfo,
 			final long shift) {
 		long pageEnd = 0;
 		int lastBodyIndex = -1;
@@ -2038,7 +2038,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 	private byte[] renderLinearizedPrimaryXref(
 			final List<ObjectRef> allObjects,
-			final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+			final net.zamasoft.zstream.io.FragmentedOutput.PositionInfo posInfo,
 			final ObjectRef infoRef,
 			final ObjectRef hintRef,
 			final long linDictOffset,
@@ -2257,7 +2257,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 	}
 
-	private long computeSharedSectionEnd(final net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo posInfo,
+	private long computeSharedSectionEnd(final net.zamasoft.zstream.io.FragmentedOutput.PositionInfo posInfo,
 			final long shift, final List<SharedObjectGroup> sharedGroups) {
 		long end = 0;
 		for (final var group : sharedGroups) {

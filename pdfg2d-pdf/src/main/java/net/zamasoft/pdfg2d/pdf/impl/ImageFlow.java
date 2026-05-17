@@ -47,7 +47,7 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.util.codec.ASCII85OutputStream;
 import net.zamasoft.pdfg2d.pdf.util.codec.ASCIIHexOutputStream;
 import net.zamasoft.pdfg2d.pdf.util.io.FastBufferedOutputStream;
-import net.zamasoft.pdfg2d.resolver.Source;
+import net.zamasoft.zstream.resolver.Source;
 import net.zamasoft.pdfg2d.util.ColorUtils;
 
 /**

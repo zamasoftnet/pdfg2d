@@ -16,7 +16,7 @@ import java.util.logging.Logger;
 
 import org.xml.sax.Attributes;
 
-import net.zamasoft.pdfg2d.resolver.Source;
+import net.zamasoft.zstream.resolver.Source;
 import net.zamasoft.pdfg2d.font.table.Table;
 import net.zamasoft.pdfg2d.font.AbstractFontSource;
 import net.zamasoft.pdfg2d.font.BBox;

@@ -15,8 +15,8 @@ import org.apache.batik.bridge.GVTBuilder;
 import org.apache.batik.bridge.UserAgentAdapter;
 import org.w3c.dom.Document;
 
-import net.zamasoft.pdfg2d.resolver.protocol.file.FileSource;
-import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
+import net.zamasoft.zstream.resolver.protocol.file.FileSource;
+import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.g2d.gc.G2DGC;
 
 import net.zamasoft.pdfg2d.pdf.PDFWriter;

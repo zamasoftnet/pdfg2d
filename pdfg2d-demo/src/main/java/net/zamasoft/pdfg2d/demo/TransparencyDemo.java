@@ -15,7 +15,7 @@ import net.zamasoft.pdfg2d.g2d.gc.G2DGC;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
 import net.zamasoft.pdfg2d.gc.paint.RGBColor;
-import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
+import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;

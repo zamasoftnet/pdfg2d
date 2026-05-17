@@ -15,7 +15,7 @@ import java.text.AttributedString;
 
 import javax.swing.JFrame;
 
-import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
+import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.g2d.gc.BridgeGraphics2D;
 import net.zamasoft.pdfg2d.gc.font.FontStyle;
 import net.zamasoft.pdfg2d.gc.text.util.TextUtils;

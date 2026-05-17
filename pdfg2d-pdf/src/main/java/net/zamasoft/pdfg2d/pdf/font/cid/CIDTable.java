@@ -9,7 +9,7 @@ import java.nio.charset.CharsetDecoder;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import net.zamasoft.pdfg2d.resolver.Source;
+import net.zamasoft.zstream.resolver.Source;
 import net.zamasoft.pdfg2d.util.IntList;
 import net.zamasoft.pdfg2d.util.IntMap;
 import net.zamasoft.pdfg2d.util.IntMapIterator;

@@ -11,7 +11,7 @@ import org.apache.batik.bridge.UserAgentAdapter;
 import org.apache.batik.util.XMLResourceDescriptor;
 import org.w3c.dom.svg.SVGDocument;
 
-import net.zamasoft.pdfg2d.io.impl.FileFragmentedOutput;
+import net.zamasoft.zstream.io.impl.FileFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;

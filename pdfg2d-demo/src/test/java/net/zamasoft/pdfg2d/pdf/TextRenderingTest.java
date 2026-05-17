@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import net.zamasoft.pdfg2d.pdf.utils.TextInspector;
 import net.zamasoft.pdfg2d.g2d.gc.BridgeGraphics2D;
-import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
+import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;

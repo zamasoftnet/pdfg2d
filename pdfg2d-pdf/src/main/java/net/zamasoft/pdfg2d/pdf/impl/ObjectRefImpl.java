@@ -1,6 +1,6 @@
 package net.zamasoft.pdfg2d.pdf.impl;
 
-import net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo;
+import net.zamasoft.zstream.io.FragmentedOutput.PositionInfo;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 
 /**

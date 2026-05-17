@@ -2,7 +2,7 @@ package net.zamasoft.pdfg2d.pdf.tools;
 
 import java.io.File;
 
-import net.zamasoft.pdfg2d.resolver.protocol.file.FileSource;
+import net.zamasoft.zstream.resolver.protocol.file.FileSource;
 import net.zamasoft.pdfg2d.font.OpenTypeFont;
 import net.zamasoft.pdfg2d.font.table.Os2Table;
 import net.zamasoft.pdfg2d.font.table.Table;

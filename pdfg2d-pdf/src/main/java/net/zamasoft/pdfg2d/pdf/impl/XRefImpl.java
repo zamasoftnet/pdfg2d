@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import net.zamasoft.pdfg2d.io.FragmentedOutput.PositionInfo;
+import net.zamasoft.zstream.io.FragmentedOutput.PositionInfo;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFOutput;
 import net.zamasoft.pdfg2d.pdf.XRef;

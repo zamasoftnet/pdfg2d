@@ -4,9 +4,9 @@ plugins {
 
 rootProject.name = 'pdfg2d'
 
-include 'pdfg2d-resolver'
+includeBuild 'F:/dev/zamasoftnet-public/zstream'
+
 include 'pdfg2d-font'
-include 'pdfg2d-io'
 include 'pdfg2d-core'
 include 'pdfg2d-pdf'
 include 'pdfg2d-svg'

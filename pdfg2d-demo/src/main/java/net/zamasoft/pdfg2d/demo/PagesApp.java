@@ -4,7 +4,7 @@ import java.awt.Font;
 import java.io.File;
 import java.io.IOException;
 
-import net.zamasoft.pdfg2d.io.impl.FileFragmentedOutput;
+import net.zamasoft.zstream.io.impl.FileFragmentedOutput;
 import net.zamasoft.pdfg2d.PDFGraphics2D;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;

@@ -17,10 +17,10 @@ import org.xml.sax.InputSource;
 import org.xml.sax.XMLReader;
 import org.xml.sax.helpers.ParserAdapter;
 
-import net.zamasoft.pdfg2d.resolver.Source;
-import net.zamasoft.pdfg2d.resolver.SourceValidity;
-import net.zamasoft.pdfg2d.resolver.SourceValidity.Validity;
-import net.zamasoft.pdfg2d.resolver.protocol.url.URLSource;
+import net.zamasoft.zstream.resolver.Source;
+import net.zamasoft.zstream.resolver.SourceValidity;
+import net.zamasoft.zstream.resolver.SourceValidity.Validity;
+import net.zamasoft.zstream.resolver.protocol.url.URLSource;
 import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.FontSourceManager;
 import net.zamasoft.pdfg2d.gc.font.FontStyle;

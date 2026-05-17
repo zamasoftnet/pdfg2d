@@ -4,7 +4,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 
-import net.zamasoft.pdfg2d.io.impl.FileFragmentedOutput;
+import net.zamasoft.zstream.io.impl.FileFragmentedOutput;
 import net.zamasoft.pdfg2d.g2d.gc.BridgeGraphics2D;
 import net.zamasoft.pdfg2d.pdf.PDFPageOutput;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;

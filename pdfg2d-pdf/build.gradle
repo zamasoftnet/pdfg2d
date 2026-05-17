@@ -2,8 +2,8 @@ description = 'PDF output implementation'
 
 dependencies {
     implementation project(':pdfg2d-core')
-    implementation project(':pdfg2d-resolver')
-    implementation project(':pdfg2d-io')
+    implementation 'net.zamasoft:zstream-resolver:1.0.0-SNAPSHOT'
+    implementation 'net.zamasoft:zstream-io:1.0.0-SNAPSHOT'
     implementation project(':pdfg2d-font')
     implementation 'org.apache.xmlgraphics:batik-gvt:1.16'
     implementation 'com.twelvemonkeys.imageio:imageio-jpeg:3.12.0'

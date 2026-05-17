@@ -10,8 +10,8 @@ import java.io.FileOutputStream;
 
 import javax.swing.JFrame;
 
-import net.zamasoft.pdfg2d.resolver.protocol.file.FileSource;
-import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
+import net.zamasoft.zstream.resolver.protocol.file.FileSource;
+import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.g2d.gc.G2DGC;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.font.FontFace;

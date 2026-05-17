@@ -44,12 +44,12 @@ import net.zamasoft.pdfg2d.gc.text.breaking.TextBreakingRulesBundle;
 import net.zamasoft.pdfg2d.gc.text.layout.PageLayoutGlyphHandler;
 import net.zamasoft.pdfg2d.gc.text.layout.PageLayoutGlyphHandler.Alignment;
 import net.zamasoft.pdfg2d.gc.text.layout.SimpleLayoutGlyphHandler;
-import net.zamasoft.pdfg2d.io.impl.StreamFragmentedOutput;
+import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.util.PDFUtils;
-import net.zamasoft.pdfg2d.resolver.protocol.file.FileSource;
+import net.zamasoft.zstream.resolver.protocol.file.FileSource;
 import net.zamasoft.pdfg2d.test.TestOutputFiles;
 
 class DemoFeatureCoverageTest {

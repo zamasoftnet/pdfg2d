@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.zip.DeflaterOutputStream;
 
-import net.zamasoft.pdfg2d.io.util.FragmentOutputAdapter;
+import net.zamasoft.zstream.io.util.FragmentOutputAdapter;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
 import net.zamasoft.pdfg2d.pdf.util.codec.ASCII85OutputStream;
