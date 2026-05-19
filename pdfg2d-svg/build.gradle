@@ -4,8 +4,8 @@ dependencies {
     implementation project(':pdfg2d-pdf')
     implementation project(':pdfg2d-core')
     implementation project(':pdfg2d-font')
-    implementation 'org.apache.xmlgraphics:batik-bridge:1.16'
-    implementation 'org.apache.xmlgraphics:batik-anim:1.16'
+    implementation 'org.apache.xmlgraphics:batik-bridge:1.19'
+    implementation 'org.apache.xmlgraphics:batik-anim:1.19'
     implementation 'xml-apis:xml-apis:1.4.01'
     implementation 'fr.sertelon.media:jpeg-cmyk:1.1.0'
     // Emoji fonts resource - users need this JAR at runtime for emoji support

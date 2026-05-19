@@ -13,10 +13,9 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import org.apache.commons.collections.map.LRUMap;
 
 import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.FontSourceManager;
@@ -167,7 +166,6 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 		// }
 	}
 
-	@SuppressWarnings("unchecked")
 	public synchronized FontSource[] lookup(final FontStyle fontStyle) {
 		if (fontStyle == null) {
 			return this.allFonts.toArray(new FontSource[this.allFonts.size()]);
@@ -185,10 +183,25 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 		this.lookup(fontStyle, fontStyle.getFamily(), fontList, false);
 		fonts = fontList.toArray(new FontSource[fontList.size()]);
 		if (this.fontListCache == null) {
-			this.fontListCache = new LRUMap();
+			this.fontListCache = new LRUCache<FontStyle, FontSource[]>(128);
 		}
 		this.fontListCache.put(fontStyle, fonts);
 		return fonts;
+	}
+
+	private static class LRUCache<K, V> extends LinkedHashMap<K, V> {
+		private static final long serialVersionUID = 0;
+
+		private final int maxEntries;
+
+		LRUCache(final int maxEntries) {
+			super(maxEntries + 1, 0.75f, true);
+			this.maxEntries = maxEntries;
+		}
+
+		protected boolean removeEldestEntry(final Map.Entry<K, V> eldest) {
+			return this.size() > this.maxEntries;
+		}
 	}
 
 	protected void lookup(FontStyle fontStyle, FontFamilyList family, List<FontSource> fontList, boolean recurse) {

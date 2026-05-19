@@ -7,12 +7,12 @@ dependencies {
     implementation project(':pdfg2d-font')
     implementation 'net.zamasoft:zstream-io:1.0.0-SNAPSHOT'
     implementation 'net.zamasoft:zstream-resolver:1.0.0-SNAPSHOT'
-    implementation 'org.apache.xmlgraphics:batik-bridge:1.16'
-    implementation 'org.apache.xmlgraphics:batik-anim:1.16'
-    implementation 'org.apache.xmlgraphics:batik-gvt:1.16'
+    implementation 'org.apache.xmlgraphics:batik-bridge:1.19'
+    implementation 'org.apache.xmlgraphics:batik-anim:1.19'
+    implementation 'org.apache.xmlgraphics:batik-gvt:1.19'
     implementation 'xml-apis:xml-apis:1.4.01'
-    implementation 'org.apache.pdfbox:pdfbox:3.0.3'
-    implementation 'de.rototor.pdfbox:graphics2d:3.0.4'
+    implementation 'org.apache.pdfbox:pdfbox:3.0.7'
+    implementation 'de.rototor.pdfbox:graphics2d:3.0.5'
 }
 
 publishing {

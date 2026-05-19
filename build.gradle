@@ -30,7 +30,7 @@ subprojects {
     }
     
     dependencies {
-        testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
+        testImplementation 'org.junit.jupiter:junit-jupiter:5.13.4'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
 
@@ -40,7 +40,7 @@ subprojects {
     }
 
     jacoco {
-        toolVersion = '0.8.12'
+        toolVersion = '0.8.13'
     }
 
     jacocoTestReport {
