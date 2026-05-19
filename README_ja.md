@@ -54,6 +54,10 @@ implementation("io.github.mimidesunya:pdfg2d-svg:1.2.0")
 ## ソースコードからのビルド
 このプロジェクトはGradleを使用しています。
 
+`zstream-io` および `zstream-resolver` は
+[zamasoftnet/zstream](https://github.com/zamasoftnet/zstream) リポジトリで開発されています。
+Gradle設定では、このリポジトリのローカルチェックアウトを指す composite build を使用しています。
+
 プロジェクトをビルドするには:
 ```bash
 ./gradlew build

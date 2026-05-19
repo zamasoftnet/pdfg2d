@@ -4,6 +4,8 @@ plugins {
 
 rootProject.name = 'pdfg2d'
 
+// zstream provides net.zamasoft:zstream-io and net.zamasoft:zstream-resolver.
+// GitHub: https://github.com/zamasoftnet/zstream
 includeBuild 'F:/dev/zamasoftnet-public/zstream'
 
 include 'pdfg2d-font'

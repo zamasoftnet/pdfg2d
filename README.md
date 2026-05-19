@@ -54,6 +54,11 @@ implementation("io.github.mimidesunya:pdfg2d-svg:1.2.0")
 ## Building from Source
 This project uses Gradle.
 
+The `zstream-io` and `zstream-resolver` dependencies are developed in the
+[zamasoftnet/zstream](https://github.com/zamasoftnet/zstream) repository.
+The Gradle settings use a composite build that points to a local checkout of
+that repository.
+
 To build the project:
 ```bash
 ./gradlew build
