@@ -187,15 +187,18 @@ public class TrueTypeGlyphList implements GlyphList {
 						// Fallback or ignore for robustness
 					}
 					count -= 2;
-					System.arraycopy(x, 2, x, 0, count);
-					System.arraycopy(y, 2, y, 0, count);
-					System.arraycopy(onCurve, 2, onCurve, 0, count);
+					// 輪郭の末尾でcountは負になり得る(その場合はシフト不要)
+					final int shift3 = Math.max(count, 0);
+					System.arraycopy(x, 2, x, 0, shift3);
+					System.arraycopy(y, 2, y, 0, shift3);
+					System.arraycopy(onCurve, 2, onCurve, 0, shift3);
 					continue;
 				}
 				--count;
-				System.arraycopy(x, 1, x, 0, count);
-				System.arraycopy(y, 1, y, 0, count);
-				System.arraycopy(onCurve, 1, onCurve, 0, count);
+				final int shift2 = Math.max(count, 0);
+				System.arraycopy(x, 1, x, 0, shift2);
+				System.arraycopy(y, 1, y, 0, shift2);
+				System.arraycopy(onCurve, 1, onCurve, 0, shift2);
 			} while (end && count > 0);
 
 			if (end) {
