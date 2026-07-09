@@ -6,7 +6,7 @@ rootProject.name = 'pdfg2d'
 
 // zstream provides net.zamasoft:zstream-io and net.zamasoft:zstream-resolver.
 // GitHub: https://github.com/zamasoftnet/zstream
-includeBuild 'F:/dev/zamasoftnet-public/zstream'
+includeBuild '../zstream'
 
 include 'pdfg2d-font'
 include 'pdfg2d-core'
