@@ -37,3 +37,6 @@ pdfg2d-svg-emoji-fonts/src/main/resources/net/zamasoft/pdfg2d/font/emoji/emoji.z
 .github/java-upgrade/
 *.pdf
 *.hprof
+# AIエージェント用ローカルガイド（git管理外）
+AGENTS.md
+CLAUDE.md
