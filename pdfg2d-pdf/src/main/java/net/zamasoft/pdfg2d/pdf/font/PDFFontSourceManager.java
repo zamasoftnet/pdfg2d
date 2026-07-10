@@ -11,6 +11,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -71,8 +74,14 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 	public synchronized void addFontFace(FontFace face) throws IOException {
 		final List<FontSource> list = new ArrayList<FontSource>();
 		if (face.local != null) {
-			list.add(FontLoader.readSystemFont(face, FontLoader.Type.EMBEDDED, face.local, null));
-			list.add(FontLoader.readSystemFont(face, FontLoader.Type.CID_IDENTITY, face.local, null));
+			try (final var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+				final var embedded = executor.submit(
+						() -> FontLoader.readSystemFont(face, FontLoader.Type.EMBEDDED, face.local, null));
+				final var cidIdentity = executor.submit(
+						() -> FontLoader.readSystemFont(face, FontLoader.Type.CID_IDENTITY, face.local, null));
+				list.add(await(embedded));
+				list.add(await(cidIdentity));
+			}
 		} else {
 			File file;
 			if (face.src.isFile()) {
@@ -91,8 +100,21 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 					this.uriToFile.put(face.src.getURI(), file);
 				}
 			}
-			FontLoader.readTTF(list, face, FontLoader.Type.EMBEDDED, file, face.index, null);
-			FontLoader.readTTF(list, face, FontLoader.Type.CID_IDENTITY, file, face.index, null);
+			final var fontFile = file;
+			try (final var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+				final var embedded = executor.submit(() -> {
+					final var sources = new ArrayList<FontSource>();
+					FontLoader.readTTF(sources, face, FontLoader.Type.EMBEDDED, fontFile, face.index, null);
+					return sources;
+				});
+				final var cidIdentity = executor.submit(() -> {
+					final var sources = new ArrayList<FontSource>();
+					FontLoader.readTTF(sources, face, FontLoader.Type.CID_IDENTITY, fontFile, face.index, null);
+					return sources;
+				});
+				list.addAll(await(embedded));
+				list.addAll(await(cidIdentity));
+			}
 		}
 
 		if (face.unicodeRange != null && !face.unicodeRange.isEmpty()) {
@@ -164,6 +186,27 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 		// MultimapUtils.putDirect(this.nameToFonts, name, source);
 		// m.add(name);
 		// }
+	}
+
+	private static <T> T await(final Future<T> future) throws IOException {
+		try {
+			return future.get();
+		} catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Interrupted while loading font sources.", e);
+		} catch (final ExecutionException e) {
+			final var cause = e.getCause();
+			if (cause instanceof final IOException ioException) {
+				throw ioException;
+			}
+			if (cause instanceof final RuntimeException runtimeException) {
+				throw runtimeException;
+			}
+			if (cause instanceof final Error error) {
+				throw error;
+			}
+			throw new IOException("Failed to load font sources.", cause);
+		}
 	}
 
 	public synchronized FontSource[] lookup(final FontStyle fontStyle) {

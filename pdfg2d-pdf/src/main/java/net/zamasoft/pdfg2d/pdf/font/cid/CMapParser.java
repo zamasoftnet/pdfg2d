@@ -117,7 +117,7 @@ public class CMapParser {
 
 	private String nextToken() throws IOException {
 		this.skipWhiteSpace();
-		StringBuffer buff = new StringBuffer();
+		StringBuilder buff = new StringBuilder();
 		for (; this.ch != -1 && !Character.isWhitespace((char) this.ch); this.ch = this.in.read()) {
 			buff.append((char) this.ch);
 		}

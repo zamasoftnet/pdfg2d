@@ -137,7 +137,7 @@ class Type1Font implements PDFFont {
 			double size = text.getFontMetrics().getFontSize();
 			out.startArray();
 			int pgid = 0;
-			StringBuffer buff = new StringBuffer();
+			StringBuilder buff = new StringBuilder();
 			for (int j = 0; j < glyphCount; ++j) {
 				int gid = glyphIds[j];
 				short kerning = this.source.getKerning(gid, pgid);

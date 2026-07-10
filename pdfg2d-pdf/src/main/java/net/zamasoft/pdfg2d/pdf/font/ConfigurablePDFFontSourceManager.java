@@ -40,19 +40,22 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 
 	private SourceValidity configValidity = null;
 
-	private static FontSourceManager fsm = null;
+	private static final class DefaultFontSourceManager {
+		private static final FontSourceManager INSTANCE = create();
 
-	public static final synchronized FontSourceManager getDefaultFontSourceManager() {
-		if (fsm == null) {
-			URL url = ConfigurablePDFFontSourceManager.class.getResource("builtin/fonts.xml");
+		private static FontSourceManager create() {
+			final URL url = ConfigurablePDFFontSourceManager.class.getResource("builtin/fonts.xml");
 			try {
-				Source source = new URLSource(url);
-				fsm = new ConfigurablePDFFontSourceManager(source, null);
-			} catch (Exception e) {
+				final Source source = new URLSource(url);
+				return new ConfigurablePDFFontSourceManager(source, null);
+			} catch (final Exception e) {
 				throw new RuntimeException(e);
 			}
 		}
-		return fsm;
+	}
+
+	public static FontSourceManager getDefaultFontSourceManager() {
+		return DefaultFontSourceManager.INSTANCE;
 	}
 
 	public ConfigurablePDFFontSourceManager(Source config) {

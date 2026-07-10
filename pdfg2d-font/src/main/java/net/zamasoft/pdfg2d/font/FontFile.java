@@ -248,7 +248,7 @@ public class FontFile {
 	 * @return The font.
 	 * @throws IOException If I/O error occurs.
 	 */
-	public OpenTypeFont getFont(final int i) throws IOException {
+	public synchronized OpenTypeFont getFont(final int i) throws IOException {
 		if (this.fonts[i] == null) {
 			final RandomAccessFile fontRaf = new BufferedRandomAccessFile(this.file, "r");
 			fontRaf.seek(this.offsets[i]);

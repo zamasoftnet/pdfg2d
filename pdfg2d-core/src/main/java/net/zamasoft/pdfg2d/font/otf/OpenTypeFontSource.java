@@ -190,17 +190,30 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	 * @param index the font index
 	 * @return the OpenType font
 	 */
-	public static synchronized OpenTypeFont getOpenTypeFont(final File file, final int index) {
-		var fontFile = fileToFont.get(file);
+	public static OpenTypeFont getOpenTypeFont(final File file, final int index) {
 		try {
-			if (fontFile != null && fontFile.timestamp == file.lastModified()) {
-				return fontFile.getFont(index);
+			final var timestamp = file.lastModified();
+			var fontFile = getCachedFontFile(file, timestamp);
+			if (fontFile == null) {
+				final var loadedFontFile = new FontFile(file);
+				synchronized (fileToFont) {
+					fontFile = fileToFont.get(file);
+					if (fontFile == null || fontFile.timestamp != timestamp) {
+						fileToFont.put(file, loadedFontFile);
+						fontFile = loadedFontFile;
+					}
+				}
 			}
-			fontFile = new FontFile(file);
-			fileToFont.put(file, fontFile);
 			return fontFile.getFont(index);
 		} catch (final Exception e) {
 			throw new RuntimeException(e);
+		}
+	}
+
+	private static FontFile getCachedFontFile(final File file, final long timestamp) {
+		synchronized (fileToFont) {
+			final var fontFile = fileToFont.get(file);
+			return fontFile != null && fontFile.timestamp == timestamp ? fontFile : null;
 		}
 	}
 

@@ -156,7 +156,7 @@ public class OpenTypeFont implements AutoCloseable {
 	 * @param tableType the table tag (e.g., {@link Table#CMAP}, {@link Table#KERN})
 	 * @return the table, or {@code null} if the table is not present or cannot be read
 	 */
-	public Table getTable(final int tableType) {
+	public synchronized Table getTable(final int tableType) {
 		// Special cases for tables that are pre-loaded
 		if (tableType == Table.HMTX) {
 			return this.hmtx;
@@ -224,7 +224,7 @@ public class OpenTypeFont implements AutoCloseable {
 	 * @param i the glyph index
 	 * @return the {@link Glyph}, or {@code null} if the index is out of range
 	 */
-	public Glyph getGlyph(final int i) {
+	public synchronized Glyph getGlyph(final int i) {
 		return this.glyphList.getGlyph(i);
 	}
 

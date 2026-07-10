@@ -17,7 +17,6 @@ import java.awt.image.RenderedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
@@ -336,18 +335,18 @@ public final class G2DUtils {
 		atts.put(TextAttribute.POSTURE, posture);
 	}
 
-	private static Map<String, String> normNameToAWTName = null;
+	private static final class AwtFontNames {
+		private static final Map<String, String> BY_NORMALIZED_NAME = load();
 
-	private static void buildNormNameToAWTName() {
-		if (normNameToAWTName == null) {
-			normNameToAWTName = new HashMap<String, String>();
-			Font[] fonts = GraphicsEnvironment.getLocalGraphicsEnvironment().getAllFonts();
-			for (int i = 0; i < fonts.length; ++i) {
-				String name = fonts[i].getFontName();
+		private static Map<String, String> load() {
+			final var names = new HashMap<String, String>();
+			final var fonts = GraphicsEnvironment.getLocalGraphicsEnvironment().getAllFonts();
+			for (final var font : fonts) {
+				final var name = font.getFontName();
 				LOGGER.fine(name);
-				normNameToAWTName.put(FontUtils.normalizeName(name), name);
+				names.put(FontUtils.normalizeName(name), name);
 			}
-			normNameToAWTName = Collections.unmodifiableMap(normNameToAWTName);
+			return Map.copyOf(names);
 		}
 	}
 
@@ -357,9 +356,8 @@ public final class G2DUtils {
 	 * @param fontName Font name to check
 	 * @return True if available
 	 */
-	public static synchronized boolean isAvailable(String fontName) {
-		buildNormNameToAWTName();
-		return normNameToAWTName.containsKey(FontUtils.normalizeName(fontName));
+	public static boolean isAvailable(final String fontName) {
+		return AwtFontNames.BY_NORMALIZED_NAME.containsKey(FontUtils.normalizeName(fontName));
 	}
 
 	/**
@@ -368,9 +366,8 @@ public final class G2DUtils {
 	 * @param fontName Normalized font name
 	 * @return AWT font name
 	 */
-	public static synchronized String toAwtFontName(String fontName) {
-		buildNormNameToAWTName();
-		return (String) normNameToAWTName.get(FontUtils.normalizeName(fontName));
+	public static String toAwtFontName(final String fontName) {
+		return AwtFontNames.BY_NORMALIZED_NAME.get(FontUtils.normalizeName(fontName));
 	}
 
 	/**

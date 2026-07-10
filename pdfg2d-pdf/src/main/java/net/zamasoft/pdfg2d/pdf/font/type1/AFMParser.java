@@ -232,7 +232,7 @@ public class AFMParser {
 			while (this.skipWhiteSpace()) {
 				this.skipLine();
 			}
-			StringBuffer buff = new StringBuffer();
+			StringBuilder buff = new StringBuilder();
 			for (; this.ch != -1 && !Character.isWhitespace((char) this.ch); this.ch = this.in.read()) {
 				buff.append((char) this.ch);
 			}
@@ -270,7 +270,7 @@ public class AFMParser {
 	}
 
 	private String readLine() throws IOException {
-		StringBuffer buff = new StringBuffer();
+		StringBuilder buff = new StringBuilder();
 		boolean cr = false;
 		FOR: for (; this.ch != -1; this.ch = this.in.read()) {
 			switch (this.ch) {
@@ -311,7 +311,7 @@ public class AFMParser {
 		if (this.skipWhiteSpace()) {
 			return null;
 		}
-		StringBuffer buff = new StringBuffer();
+		StringBuilder buff = new StringBuilder();
 		for (; this.ch != -1 && !Character.isWhitespace((char) this.ch); this.ch = this.in.read()) {
 			buff.append((char) this.ch);
 		}
