@@ -1,0 +1,80 @@
+# Rust 実装状況（pdfg2d-rust）
+
+2026-04-07 時点の `pdfg2d-rust`（別リポジトリ）の到達点です。
+Java 側の機能一覧は [`FEATURES.md`](./FEATURES.md) を参照。
+
+- 実装済み
+  - PDF バージョンヘッダ出力
+  - xref / trailer
+  - 文書情報 `Title` `Author` `Subject` `Keywords` `Creator` `Producer`
+  - Viewer Preferences の一部
+    - `NonFullScreenPageMode`
+    - `PickTrayByPDFSize`
+    - `ViewArea`
+    - `ViewClip`
+    - `PrintArea`
+    - `PrintClip`
+    - `PrintScaling`
+    - `PrintPageRange`
+    - `NumCopies`
+  - Open Action JavaScript
+  - しおり
+  - URI リンク注釈
+  - 添付ファイル
+  - 権限制御付き暗号化
+  - PDF 本文圧縮
+  - 画像圧縮 `FLATE` `JPEG`
+  - Core 14 フォント参照
+  - TrueType / OpenType(CFF 含む) / WOFF の最小読み込みと PDF 埋め込み
+  - TrueType / OpenType(CFF 含む) / WOFF の実バイナリ subset 化
+  - PDF レベルの最小 subset 化
+  - Type0 / CIDFontType2 による CID / CJK の最小実装
+  - CID 向け縦書き `Identity-V`
+  - font fallback
+  - 英語/日本語の最小テキストレイアウト
+  - 段落折り返し、justify、縦組み列配置
+  - mixed font / mixed size / bold / italic span
+  - plain text / styled span の `\n` `\t`
+  - 日本語禁則の最小実装
+  - 基本図形、変形、クリッピング、破線、複数ページ
+  - alpha / ExtGState
+  - ラスタ画像埋め込み
+  - linear / radial gradient
+  - Linearized PDF 出力
+  - SVG の最小実装
+    - `usvg` ベースの path / group / clip-path / opacity / linearGradient / radialGradient / colored pattern
+    - pattern 内の linearGradient / radialGradient
+    - raster `image` ノード
+    - pattern 内の raster `image` ノード
+    - nested pattern
+    - `usvg` flattened text による SVG `text`
+    - pattern 内の SVG `text`
+    - raster image alpha soft mask
+    - PDF 1.4+ 向け transparency-group Form XObject fallback
+  - `zstream-io` 相当の in-memory 分割出力、patch-back、position tracking、adapter / wrapper
+  - `zstream-resolver` 相当の `file:` `data:` `zip:` `http:` `https:`、cached resolver、restricted resolver、URL/stream/wrapper utilities
+  - HTTP resolver の最小設定 API
+    - timeout
+    - redirect
+    - user-agent
+    - TLS config
+    - https-only policy
+    - status policy
+  - remote HTTP/HTTPS body の lazy fetch と `release()` による cache clear
+  - remote HTTP/HTTPS response の status code / header / header name access
+  - remote metadata 取得時の `HEAD` と body 取得時の `GET` の分離
+- 未実装
+  - Java と同等レベルの高度な字形配置・shaping
+  - SVG の高度機能
+    - ネイティブ PDF text としての selectable な SVG text 出力
+    - pattern 内の text
+  - svg-emoji
+  - 2026-07 に Java 側へ追加された機能群（PDF/A・PDF/X 全プロファイル、タグ付き PDF、
+    面付け・トンボ、スポットカラー、ICCBased、OCG レイヤー、オブジェクトストリーム等）
+- Rust では不要
+  - Java2D / Graphics2D ブリッジ相当は parity 対象外
+- Rust テスト
+  - `tests/parity_smoke.rs` `tests/io_parity.rs` `tests/font_parity.rs` `tests/text_layout_parity.rs` `tests/resolver_parity.rs` `tests/linearized_pdf_parity.rs` で smoke/parity を確認
+  - `tests/java_parity.rs` で Java 生成 PDF との差分比較を確認
+  - 生成 PDF は `target/generated-test-files/` に保存
+  - 保存後の構文検証は Rust 側テストヘルパーで実行

@@ -32,9 +32,14 @@ implementation("io.github.mimidesunya:pdfg2d-svg:1.2.0")
 
 ## Features
 * **Java 21 Support**: Leverages modern Java features.
-* **PDF Versions**: PDF 1.2 to 1.7 and PDF 2.0.
+* **PDF Versions**: PDF 1.2 to 1.7 and PDF 2.0; Linearized PDF (Fast Web View).
 * **Archival / accessibility**: PDF/A-1b, 2b/2u/2a, 3b/3u/3a, 4/4f and PDF/UA-1 (all validated with veraPDF); Tagged PDF with an explicit structure API and automatic tagging fallback.
-* **Prepress**: PDF/X-1a, PDF/X-4, PDF/X-6 and PDF/VT-1 (CMYK enforcement, TrimBox/ArtBox validation, configurable OutputIntent).
+* **Prepress**: PDF/X-1a, PDF/X-4, PDF/X-6 and PDF/VT-1 (per-record DPart metadata), TrimBox/ArtBox validation, configurable OutputIntent.
+* **Commercial Printing**:
+    * Spot colors (Separation color spaces) with tint and overprint, including the registration color.
+    * ICC-based RGB color (sRGB profile bundled) and rendering intents — a true RGB workflow under PDF/X-4/X-6.
+    * Optional content layers (OCG): named layers with view/print visibility, initial state and locking (e.g. print-only watermarks).
+    * Imposition with printer's marks: single-page, N-up, step-and-repeat, saddle-stitch (with creep) and cut-and-stack — streamed with constant memory.
 * **Advanced Functionality**:
     * Bookmarks, Permissions, Viewer Preferences, Meta Information.
     * Encryption: Arcfour (RC4) and AES.
@@ -42,16 +47,19 @@ implementation("io.github.mimidesunya:pdfg2d-svg:1.2.0")
     * File Attachments, Hyperlinks, Open JavaScript Actions.
 * **Graphics Capabilities**:
     * Full `java.awt.Graphics2D` bridge.
-    * Group Images, Tiling Patterns, Shading Patterns.
+    * Group Images, Tiling Patterns, Shading Patterns (with alpha gradients via luminosity soft masks).
     * [SVG Images support](https://github.com/mimidesunya/pdfg2d/blob/main/pdfg2d-demo/src/main/java/net/zamasoft/pdfg2d/demo/SVGTigerApp.java).
     * [Emoji support](https://github.com/mimidesunya/pdfg2d/blob/main/pdfg2d-demo/src/main/java/net/zamasoft/pdfg2d/demo/EmojiApp.java).
-* **Compression**:
-    * PDF: Deflate, Deflate + Ascii85.
+* **Compression & Performance**:
+    * PDF: Deflate (configurable level), Deflate + Ascii85, object streams + cross-reference streams.
     * Images: Deflate, JPEG, JPEG2000.
+    * Parallel page rendering with byte-identical output; cross-document font subset cache.
 * **Fonts**:
     * Core 14 Fonts.
     * CID-Keyed Fonts (Chinese, Japanese, Korean, HK/Taiwanese).
-    * Embedded Fonts (TrueType, OpenType/CFF, WOFF).
+    * Embedded Fonts (TrueType, OpenType/CFF, WOFF) with real binary subsetting.
+
+See [`docs/`](docs/README.md) for the feature inventory, extension proposals and changelog (Japanese).
 
 ## Building from Source
 This project uses Gradle.

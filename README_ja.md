@@ -32,7 +32,16 @@ implementation("io.github.mimidesunya:pdfg2d-svg:1.2.0")
 
 ## 機能一覧
 * **Java 21 サポート**: 最新のJava機能を利用しています。
-* **対応PDFバージョン**: PDF 1.2 から 1.7、PDF/A-1b/2b/3b（veraPDF で検証済み）、PDF/X-1aに対応。
+* **対応PDFバージョン**: PDF 1.2 から 1.7、PDF 2.0。Linearized PDF（Fast Web View）。
+* **アーカイブ / アクセシビリティ**: PDF/A-1b、2b/2u/2a、3b/3u/3a、4/4f、PDF/UA-1
+  （すべて veraPDF で検証済み）。明示構造 API + 自動タグによるタグ付き PDF。
+* **プリプレス**: PDF/X-1a、PDF/X-4、PDF/X-6、PDF/VT-1（レコード単位の DPart メタデータ）、
+  TrimBox/ArtBox 検証、OutputIntent 設定。
+* **商業印刷**:
+    * スポットカラー（Separation 色空間、tint・オーバープリント、レジストレーションカラー）。
+    * ICCBased RGB（sRGB プロファイル同梱）とレンダリングインテント — PDF/X-4/X-6 での RGB 入稿ワークフロー。
+    * レイヤー（OCG）: 表示/印刷の可視性・初期状態・ロック付きの名前付きレイヤー（印刷時のみ表示のすかし等）。
+    * トンボ付き面付け: 1面付け・N-up・同一面付け・中綴じ（クリープ補正）・カット&スタック — ストリーム出力でメモリ一定。
 * **高度な機能**:
     * しおり、権限設定、ビューア設定、文書情報設定。
     * 暗号化: Arcfour (RC4) および AES。
@@ -40,16 +49,19 @@ implementation("io.github.mimidesunya:pdfg2d-svg:1.2.0")
     * ファイル添付、ハイパーリンク、Open JavaScriptアクション。
 * **グラフィックス機能**:
     * `java.awt.Graphics2D` との完全な互換性。
-    * グループイメージ、タイリングパターン、シェーディングパターン。
+    * グループイメージ、タイリングパターン、シェーディングパターン（アルファ付きグラデーションは輝度ソフトマスクで再現）。
     * [SVG画像サポート](https://github.com/mimidesunya/pdfg2d/blob/main/pdfg2d-demo/src/main/java/net/zamasoft/pdfg2d/demo/SVGTigerApp.java)。
     * [絵文字サポート](https://github.com/mimidesunya/pdfg2d/blob/main/pdfg2d-demo/src/main/java/net/zamasoft/pdfg2d/demo/EmojiApp.java)。
-* **圧縮**:
-    * PDF: Deflate, Deflate + Ascii85。
+* **圧縮・性能**:
+    * PDF: Deflate（レベル設定可）, Deflate + Ascii85, オブジェクトストリーム + XRef ストリーム。
     * 画像: Deflate, JPEG, JPEG2000。
+    * 出力バイト一致のページ並列生成、文書間フォントサブセットキャッシュ。
 * **フォント**:
     * Standard 14 Fonts (Core 14 Fonts)。
     * CID-Keyed Fonts (中国語、日本語、韓国語、香港/台湾)。
-    * 埋め込みフォント (TrueType, OpenType/CFF, WOFF)。
+    * 埋め込みフォント (TrueType, OpenType/CFF, WOFF)。実バイナリサブセット化。
+
+機能の詳細な一覧・拡張提案・変更履歴は [`docs/`](docs/README.md) を参照してください。
 
 ## ソースコードからのビルド
 このプロジェクトはGradleを使用しています。

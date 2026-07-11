@@ -2,6 +2,7 @@
 
 作成日: 2026-07-11。コード調査とウェブ調査（ISO 19005-1 / ISO 15930-4、veraPDF ルール、
 PDF Association TechNote）に基づく現状評価と対応計画。
+実施記録の全体は [`CHANGELOG.md`](./CHANGELOG.md) を参照。
 
 > **実施状況（2026-07-11）**: 第1弾〜第4弾まで実施済み。
 > P0 全件（conformance="B"、X-1a 暗号化拒否、OpenAction 拒否、透明グループ抑止）、
@@ -9,18 +10,23 @@ PDF Association TechNote）に基づく現状評価と対応計画。
 > PDF/A-1b/2b/3b の CI 検証（XMP の XML 宣言混入と CFF スペース幅欠落の 2 バグを検出・修正）、
 > X-1a の CMYK 強制・OutputIntent API（`PDFParams.withOutputIntent`）・
 > TrimBox/ArtBox 排他 + 包含検証、PDF/A-2b/3b 対応（透明許可、A-3 添付 +
-> AFRelationship + catalog /AF）まで完了。残: P2-10（注釈の位置ベース許可）、
-> P2-11 の網羅拡大（多様なフォントでの veraPDF 回帰）。
+> AFRelationship + catalog /AF）まで完了。残: P2-10（注釈の位置ベース許可）のみ。
 >
 > **追補（2026-07-11 第2次）**: 規格バリエーションを拡大実装。
-> PDF/X-4・PDF/X-6・PDF/VT-1（最小 DPart 階層）、PDF/A-2u/3u・2a/3a・4/4f、
+> PDF/X-4・PDF/X-6・PDF/VT-1、PDF/A-2u/3u・2a/3a・4/4f、
 > PDF 2.0 出力、タグ付き PDF 基盤（StructTreeRoot / ParentTree / 明示構造 API
 > `beginStructElement` + 自動タグ: テキスト=P・画像=Figure+Alt・図形=Artifact）、
 > PDF/UA-1（pdfuaid、DisplayDocTitle 強制、フォント埋め込み強制）。
 > PDF/A 全プロファイルと PDF/UA-1 は veraPDF で検証済み。PDF/X 系と VT は
 > 生成側ガード + 規則ベーステストで担保（OSS 検証器が存在しないため）。
-> 既知の制限: X-4/X-6 でも DeviceRGB は CMYK 変換される（ICCBased 色空間が未実装のため。
-> 対応すれば RGB ワークフローを X-4 で通せる）。VT の DPart は全ページ単一パート。
+> veraPDF 回帰は 5 フォント（和・韓・タイ、TTF/CFF-OTF）に拡大済み（P2-11 完了）。
+>
+> **追補（2026-07-11 第3次）**: 旧・既知の制限を解消。
+> ICCBased RGB 色空間 + レンダリングインテントを実装し、X-4/X-6 で RGB プロファイル
+> 設定時（`PDFParams.withSRGBProfile` 等）は CMYK 変換せず **RGB 入稿ワークフローを
+> 維持**できるようになった（X-1a は常に CMYK 強制。判定は `effectiveColorMode()`）。
+> PDF/VT の DPart は `nextDocumentPart(metadata)` によるレコード単位分割に対応。
+> スポットカラー（Separation）も PDF/A の OutputIntent 整合込みで実装済み。
 
 ## 1. 現状の実装（正しく出来ていること）
 
