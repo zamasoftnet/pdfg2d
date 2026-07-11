@@ -24,7 +24,9 @@ public abstract class Permissions {
 		/** Revision 3 — RC4 variable-length, PDF 1.4+. */
 		R3(3),
 		/** Revision 4 — AES cipher support, PDF 1.5+. */
-		R4(4);
+		R4(4),
+		/** Revision 6: AES-256 (PDF 2.0). */
+		R6(6);
 
 		/** Numeric revision number written to the PDF encryption dictionary. */
 		public final int r;

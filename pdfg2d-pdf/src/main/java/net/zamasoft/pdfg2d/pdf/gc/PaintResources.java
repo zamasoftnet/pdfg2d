@@ -612,19 +612,25 @@ final class PaintResources {
 	 * @param color     the color object
 	 * @throws IOException if an I/O error occurs
 	 */
-	/** Gradient stops: spot stops contribute their alternate's color type. */
+	/** Gradient stops: named-color stops contribute their alternate's type. */
 	private static Color.Type stopType(final Color color) {
-		return (color.getColorType() == Color.Type.SPOT)
-				? ((net.zamasoft.pdfg2d.gc.paint.SpotColor) color).effectiveColor().getColorType()
-				: color.getColorType();
+		return switch (color.getColorType()) {
+			case SPOT -> ((net.zamasoft.pdfg2d.gc.paint.SpotColor) color).effectiveColor().getColorType();
+			case DEVICEN -> ((net.zamasoft.pdfg2d.gc.paint.DeviceNColor) color).effectiveColor().getColorType();
+			default -> color.getColorType();
+		};
 	}
 
 	private static void writeColor(final PDFOutput sout, final Color.Type colorType, final Color color)
 			throws IOException {
-		// Gradient interpolation happens in a process color space; spot
-		// stops are flattened to their tinted alternates.
+		// Gradient interpolation happens in a process color space; spot and
+		// DeviceN stops are flattened to their tinted alternates.
 		if (color.getColorType() == Color.Type.SPOT) {
 			writeColor(sout, colorType, ((net.zamasoft.pdfg2d.gc.paint.SpotColor) color).effectiveColor());
+			return;
+		}
+		if (color.getColorType() == Color.Type.DEVICEN) {
+			writeColor(sout, colorType, ((net.zamasoft.pdfg2d.gc.paint.DeviceNColor) color).effectiveColor());
 			return;
 		}
 		switch (colorType) {

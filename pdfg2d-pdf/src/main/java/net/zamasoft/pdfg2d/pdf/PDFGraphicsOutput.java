@@ -197,9 +197,10 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 	 */
 	public void writeFillColor(final Color color) throws IOException {
 		final var params = this.pdfWriter.getParams();
-		// Spot colors are never converted; their alternate follows the color
-		// mode inside the Separation color space instead.
-		final var processedColor = (color.getColorType() == Type.SPOT) ? color : switch (params.effectiveColorMode()) {
+		// Spot/DeviceN colors are never converted; their alternates follow the
+		// color mode inside the Separation/DeviceN color space instead.
+		final var named = color.getColorType() == Type.SPOT || color.getColorType() == Type.DEVICEN;
+		final var processedColor = named ? color : switch (params.effectiveColorMode()) {
 			case GRAY -> (color.getColorType() != Type.GRAY) ? ColorUtils.toGray(color) : color;
 			case CMYK -> (color.getColorType() != Type.CMYK) ? ColorUtils.toCMYK(color) : color;
 			default -> color;
@@ -243,6 +244,17 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 				this.writeReal(spot.tint());
 				this.writeOperator("scn");
 			}
+			case DEVICEN -> {
+				final var devn = (net.zamasoft.pdfg2d.gc.paint.DeviceNColor) processedColor;
+				final var csName = this.pdfWriter.useDeviceN(devn.colorants());
+				this.useResource("ColorSpace", csName);
+				this.writeName(csName);
+				this.writeOperator("cs");
+				for (final var tint : devn.tints()) {
+					this.writeReal(tint);
+				}
+				this.writeOperator("scn");
+			}
 			default -> throw new IllegalStateException("Unsupported color type: " + processedColor.getColorType());
 		}
 	}
@@ -262,6 +274,18 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 			this.writeName(csName);
 			this.writeOperator("CS");
 			this.writeReal(spot.tint());
+			this.writeOperator("SCN");
+			return;
+		}
+		if (color.getColorType() == Type.DEVICEN) {
+			final var devn = (net.zamasoft.pdfg2d.gc.paint.DeviceNColor) color;
+			final var csName = this.pdfWriter.useDeviceN(devn.colorants());
+			this.useResource("ColorSpace", csName);
+			this.writeName(csName);
+			this.writeOperator("CS");
+			for (final var tint : devn.tints()) {
+				this.writeReal(tint);
+			}
 			this.writeOperator("SCN");
 			return;
 		}

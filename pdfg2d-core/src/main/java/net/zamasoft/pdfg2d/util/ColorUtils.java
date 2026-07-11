@@ -2,6 +2,7 @@ package net.zamasoft.pdfg2d.util;
 
 import net.zamasoft.pdfg2d.gc.paint.CMYKColor;
 import net.zamasoft.pdfg2d.gc.paint.Color;
+import net.zamasoft.pdfg2d.gc.paint.DeviceNColor;
 import net.zamasoft.pdfg2d.gc.paint.GrayColor;
 import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
 import net.zamasoft.pdfg2d.gc.paint.RGBColor;
@@ -42,6 +43,9 @@ public final class ColorUtils {
 			case SPOT -> {
 				// Non-separating targets see the tinted alternate color
 				return toGray(((SpotColor) color).effectiveColor());
+			}
+			case DEVICEN -> {
+				return toGray(((DeviceNColor) color).effectiveColor());
 			}
 			default -> throw new IllegalStateException();
 		}
@@ -103,6 +107,9 @@ public final class ColorUtils {
 			}
 			case SPOT -> {
 				return toCMYK(((SpotColor) color).effectiveColor());
+			}
+			case DEVICEN -> {
+				return toCMYK(((DeviceNColor) color).effectiveColor());
 			}
 			default -> throw new IllegalStateException();
 		}

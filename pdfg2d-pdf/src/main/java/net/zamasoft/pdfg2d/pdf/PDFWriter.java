@@ -174,6 +174,21 @@ public interface PDFWriter extends Closeable {
 	}
 
 	/**
+	 * Registers a {@code /DeviceN} color space for the given colorant set,
+	 * creating it on first use; the same set (by name, in order) always
+	 * resolves to the same resource within the document. The tint transform
+	 * (a PostScript calculator function) combines the colorants' alternate
+	 * colors in the document's process color space.
+	 *
+	 * @param colorants the colorants (2..32, distinct names)
+	 * @return the color space resource name
+	 * @throws IOException if an I/O error occurs
+	 */
+	default String useDeviceN(net.zamasoft.pdfg2d.gc.paint.SpotColor[] colorants) throws IOException {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
 	 * Registers the ICCBased color space for RGB content when an RGB profile
 	 * is configured, creating it on first use.
 	 *

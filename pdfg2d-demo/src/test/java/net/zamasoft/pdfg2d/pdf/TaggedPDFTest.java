@@ -161,4 +161,118 @@ public class TaggedPDFTest {
 				.withTagged(TaggedParams.pdfua("ja"));
 		assertCompliant(generate("tagged_pdfua1.pdf", params), PDFAFlavour.PDFUA_1);
 	}
+
+	/** Generates a tagged document with a header table and a body link. */
+	private File generateSemantic(final String name, final PDFParams params) throws Exception {
+		final var file = TestOutputFiles.outputFile(getClass(), name);
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder, params);
+			final var page = pdf.nextPage(595, 842);
+			try (final var gc = new PDFGC(page)) {
+				final var g2d = new BridgeGraphics2D(gc);
+				g2d.setColor(Color.BLACK);
+				g2d.setFont(new Font("IPAex明朝", Font.PLAIN, 12));
+
+				// A 2x2 table: header row (column scope) then a data row.
+				page.beginStructElement("Table");
+				page.beginStructElement("TR");
+				page.beginStructElement("TH", "Column");
+				g2d.drawString("氏名", 50, 100);
+				page.endStructElement();
+				page.beginStructElement("TH", "Column");
+				g2d.drawString("年齢", 200, 100);
+				page.endStructElement();
+				page.endStructElement();
+				page.beginStructElement("TR");
+				page.beginStructElement("TD");
+				g2d.drawString("山田", 50, 130);
+				page.endStructElement();
+				page.beginStructElement("TD");
+				g2d.drawString("42", 200, 130);
+				page.endStructElement();
+				page.endStructElement();
+				page.endStructElement();
+
+				// A link inside a paragraph: the annotation must be associated
+				// with the Link structure element.
+				page.beginStructElement("P");
+				page.beginStructElement("Link");
+				g2d.setColor(Color.BLUE);
+				g2d.drawString("example.com を参照", 50, 180);
+				final var link = new net.zamasoft.pdfg2d.pdf.annot.LinkAnnot();
+				link.setShape(new Rectangle2D.Double(50, 168, 160, 16));
+				link.setURI(java.net.URI.create("https://example.com"));
+				link.setContents("example.com へのリンク"); // PDF/UA alternate description
+				page.addAnnotation(link);
+				page.endStructElement();
+				page.endStructElement();
+
+				g2d.dispose();
+			}
+			pdf.close();
+			builder.close();
+		}
+		return file;
+	}
+
+	@Test
+	public void testTableAndLinkStructure() throws Exception {
+		final var params = PDFParams.createDefault()
+				.withFontSourceManager(embeddedFonts())
+				.withTagged(new TaggedParams("ja", false));
+		final var file = generateSemantic("tagged_semantic.pdf", params);
+
+		final var raw = new String(java.nio.file.Files.readAllBytes(file.toPath()),
+				java.nio.charset.StandardCharsets.ISO_8859_1);
+		assertTrue(raw.contains("/S /Table"), "Table element expected");
+		assertTrue(raw.contains("/S /TH"), "Header cells expected");
+		assertTrue(raw.contains("/S /TD"), "Data cells expected");
+		assertTrue(raw.contains("/O /Table") && raw.contains("/Scope /Column"),
+				"Header cells must carry a column scope attribute");
+		assertTrue(raw.contains("/S /Link"), "Link structure element expected");
+		assertTrue(raw.contains("/Type /OBJR"), "Link annotation must be referenced via OBJR");
+		assertTrue(raw.contains("/StructParent "), "Link annotation must carry a StructParent key");
+	}
+
+	@Test
+	public void testSemanticStructurePdfUa1Compliant() throws Exception {
+		final var meta = new PDFMetaInfo();
+		meta.setTitle("表とリンクのテスト");
+		final var params = PDFParams.createDefault()
+				.withFontSourceManager(embeddedFonts())
+				.withMetaInfo(meta)
+				.withTagged(TaggedParams.pdfua("ja"));
+		assertCompliant(generateSemantic("tagged_semantic_ua.pdf", params), PDFAFlavour.PDFUA_1);
+	}
+
+	@Test
+	public void testHeadingSkipIsRejectedUnderPdfUa() throws Exception {
+		final var meta = new PDFMetaInfo();
+		meta.setTitle("見出しスキップ");
+		final var params = PDFParams.createDefault()
+				.withFontSourceManager(embeddedFonts())
+				.withMetaInfo(meta)
+				.withTagged(TaggedParams.pdfua("ja"));
+		final var file = TestOutputFiles.outputFile(getClass(), "tagged_heading_skip.pdf");
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> {
+			try (final var out = new FileOutputStream(file)) {
+				final var builder = new StreamFragmentedOutput(out);
+				final var pdf = new PDFWriterImpl(builder, params);
+				final var page = pdf.nextPage(595, 842);
+				try (final var gc = new PDFGC(page)) {
+					final var g2d = new BridgeGraphics2D(gc);
+					g2d.setFont(new Font("IPAex明朝", Font.PLAIN, 12));
+					page.beginStructElement("H1");
+					g2d.drawString("一", 50, 100);
+					page.endStructElement();
+					page.beginStructElement("H3"); // skips H2
+					g2d.drawString("二", 50, 130);
+					page.endStructElement();
+				}
+				pdf.close();
+				builder.close();
+			}
+		}, "PDF/UA must reject a skipped heading level");
+	}
 }

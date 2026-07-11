@@ -116,4 +116,67 @@ public class PDFEncryptionTest {
             throw new RuntimeException(e);
         }
     }
+
+    @Test
+    public void testEncryptionAES256() {
+        final var file = TestOutputFiles.outputFile(getClass(), "encryption_aes256_test.pdf");
+        assertDoesNotThrow(() -> {
+            var params = PDFParams.createDefault();
+
+            final var encParams = new net.zamasoft.pdfg2d.pdf.params.V5EncryptionParams();
+            encParams.setUserPassword("user");
+            encParams.setOwnerPassword("owner");
+
+            final var perms = encParams.getPermissions();
+            perms.setPrintHigh(true);
+            perms.setCopy(false);
+            perms.setModify(false);
+
+            // AES-256 (R6) is the standard encryption for PDF 2.0.
+            params = params.withVersion(PDFParams.Version.V_2_0)
+                    .withEncryption(encParams);
+
+            try (final var g2d = new PDFGraphics2D(file, 595, 842, params)) {
+                g2d.setPaint(Color.BLACK);
+                g2d.drawString("Encryption AES-256 Test", 100, 100);
+            }
+        });
+
+        assertTrue(file.exists());
+
+        // Open with the user password.
+        try (final var doc = Loader.loadPDF(file, "user")) {
+            assertTrue(doc.isEncrypted());
+            assertTrue(doc.getEncryption().getVersion() == 5, "Encryption V must be 5");
+            final var currentAccess = doc.getCurrentAccessPermission();
+            assertTrue(currentAccess.canPrint());
+            assertFalse(currentAccess.canExtractContent());
+            assertFalse(currentAccess.canModify());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        // Open with the owner password: full access.
+        try (final var doc = Loader.loadPDF(file, "owner")) {
+            assertTrue(doc.isEncrypted());
+            assertTrue(doc.getCurrentAccessPermission().isOwnerPermission(),
+                    "Owner password must grant owner permissions");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    public void testAES256RequiresPdf17OrLater() {
+        final var params = PDFParams.createDefault();
+        final var encParams = new net.zamasoft.pdfg2d.pdf.params.V5EncryptionParams();
+        encParams.setUserPassword("u");
+        org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () -> {
+            final var p = params.withVersion(PDFParams.Version.V_1_6).withEncryption(encParams);
+            final var f = TestOutputFiles.outputFile(getClass(), "aes256_reject.pdf");
+            try (final var g2d = new PDFGraphics2D(f, 100, 100, p)) {
+                g2d.drawString("x", 10, 10);
+            }
+        }, "AES-256 must require PDF 1.7 or later");
+    }
 }

@@ -98,6 +98,16 @@ public class Encryption {
 
 		// Encryption dictionary
 		this.ref = xref.nextObjectRef();
+
+		if (params.getType() == EncryptionParams.Type.V5) {
+			// The V5/R6 (AES-256) handler shares nothing with the legacy key
+			// derivation below; it is written by its own routine.
+			this.cfm = V4EncryptionParams.CFM.AESV3;
+			this.length = 32;
+			this.key = this.writeV5(mainFlow, (net.zamasoft.pdfg2d.pdf.params.V5EncryptionParams) params);
+			return;
+		}
+
 		mainFlow.startObject(this.ref);
 		mainFlow.startHash();
 
@@ -306,6 +316,237 @@ public class Encryption {
 	}
 
 	/**
+	 * Writes the revision 6 (AES-256) encryption dictionary and returns the
+	 * random 256-bit file encryption key. Implements ISO 32000-2
+	 * Algorithms 2.A (hash) and 8/9 (U/O and UE/OE), plus the Perms entry.
+	 *
+	 * @param mainFlow the output stream for the encryption dictionary
+	 * @param params   the V5 encryption parameters
+	 * @return the file encryption key (32 bytes)
+	 * @throws IOException if writing fails
+	 */
+	private byte[] writeV5(final PDFFragmentOutput mainFlow, final net.zamasoft.pdfg2d.pdf.params.V5EncryptionParams params)
+			throws IOException {
+		final var random = new java.security.SecureRandom();
+		final MessageDigest sha256;
+		try {
+			sha256 = MessageDigest.getInstance("SHA-256");
+		} catch (NoSuchAlgorithmException e) {
+			throw new RuntimeException(e);
+		}
+
+		final byte[] userPass = utf8(params.getUserPassword());
+		byte[] ownerPass = utf8(params.getOwnerPassword());
+		if (ownerPass.length == 0) {
+			ownerPass = userPass;
+		}
+
+		// Random 256-bit file encryption key and per-password salts.
+		final byte[] fileKey = new byte[32];
+		random.nextBytes(fileKey);
+		final byte[] uValidation = new byte[8];
+		final byte[] uKeySalt = new byte[8];
+		final byte[] oValidation = new byte[8];
+		final byte[] oKeySalt = new byte[8];
+		random.nextBytes(uValidation);
+		random.nextBytes(uKeySalt);
+		random.nextBytes(oValidation);
+		random.nextBytes(oKeySalt);
+
+		// U = hash(pw, uValidation, "") || uValidation || uKeySalt
+		final byte[] uHash = hash2B(userPass, uValidation, null);
+		final byte[] u = concat(uHash, uValidation, uKeySalt);
+
+		// O depends on the full U entry per the spec.
+		final byte[] oHash = hash2B(ownerPass, oValidation, u);
+		final byte[] o = concat(oHash, oValidation, oKeySalt);
+
+		// UE/OE wrap the file key with a key derived from the key salt.
+		final byte[] ueKey = hash2B(userPass, uKeySalt, null);
+		final byte[] ue = aesNoPadNoIV(ueKey, fileKey, true);
+		final byte[] oeKey = hash2B(ownerPass, oKeySalt, u);
+		final byte[] oe = aesNoPadNoIV(oeKey, fileKey, true);
+
+		// Perms: 16 bytes encrypted with the file key (ECB, no padding).
+		final int p = params.getPermissions().getFlags();
+		final byte[] perms = new byte[16];
+		perms[0] = (byte) (p & 0xFF);
+		perms[1] = (byte) ((p >>> 8) & 0xFF);
+		perms[2] = (byte) ((p >>> 16) & 0xFF);
+		perms[3] = (byte) ((p >>> 24) & 0xFF);
+		perms[4] = perms[5] = perms[6] = perms[7] = (byte) 0xFF;
+		perms[8] = (byte) (params.getEncryptMetadata() ? 'T' : 'F');
+		perms[9] = 'a';
+		perms[10] = 'd';
+		perms[11] = 'b';
+		random.nextBytes(new byte[0]);
+		perms[12] = (byte) random.nextInt(256);
+		perms[13] = (byte) random.nextInt(256);
+		perms[14] = (byte) random.nextInt(256);
+		perms[15] = (byte) random.nextInt(256);
+		final byte[] permsEnc = aesEcbNoPad(fileKey, perms);
+
+		mainFlow.startObject(this.ref);
+		mainFlow.startHash();
+		mainFlow.writeName("Filter");
+		mainFlow.writeName("Standard");
+		mainFlow.lineBreak();
+		mainFlow.writeName("V");
+		mainFlow.writeInt(5);
+		mainFlow.lineBreak();
+		mainFlow.writeName("R");
+		mainFlow.writeInt(6);
+		mainFlow.lineBreak();
+		mainFlow.writeName("Length");
+		mainFlow.writeInt(256);
+		mainFlow.lineBreak();
+		if (!params.getEncryptMetadata()) {
+			mainFlow.writeName("EncryptMetadata");
+			mainFlow.writeBoolean(false);
+			mainFlow.lineBreak();
+		}
+		mainFlow.writeName("CF");
+		mainFlow.startHash();
+		mainFlow.writeName("StdCF");
+		mainFlow.startHash();
+		mainFlow.writeName("Type");
+		mainFlow.writeName("CryptFilter");
+		mainFlow.lineBreak();
+		mainFlow.writeName("CFM");
+		mainFlow.writeName("AESV3");
+		mainFlow.lineBreak();
+		mainFlow.writeName("Length");
+		mainFlow.writeInt(32);
+		mainFlow.lineBreak();
+		mainFlow.endHash();
+		mainFlow.endHash();
+		mainFlow.writeName("StmF");
+		mainFlow.writeName("StdCF");
+		mainFlow.lineBreak();
+		mainFlow.writeName("StrF");
+		mainFlow.writeName("StdCF");
+		mainFlow.lineBreak();
+		mainFlow.writeName("P");
+		mainFlow.writeInt(p);
+		mainFlow.lineBreak();
+		mainFlow.writeName("O");
+		mainFlow.writeBytes8(o, 0, o.length);
+		mainFlow.lineBreak();
+		mainFlow.writeName("U");
+		mainFlow.writeBytes8(u, 0, u.length);
+		mainFlow.lineBreak();
+		mainFlow.writeName("OE");
+		mainFlow.writeBytes8(oe, 0, oe.length);
+		mainFlow.lineBreak();
+		mainFlow.writeName("UE");
+		mainFlow.writeBytes8(ue, 0, ue.length);
+		mainFlow.lineBreak();
+		mainFlow.writeName("Perms");
+		mainFlow.writeBytes8(permsEnc, 0, permsEnc.length);
+		mainFlow.lineBreak();
+		mainFlow.endHash();
+		mainFlow.endObject();
+
+		return fileKey;
+	}
+
+	private static byte[] utf8(final String s) {
+		// SASLprep is required by the spec; for the printable ASCII/BMP
+		// passwords used here plain UTF-8 (truncated to 127 bytes) matches.
+		final byte[] b = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		return (b.length <= 127) ? b : java.util.Arrays.copyOf(b, 127);
+	}
+
+	private static byte[] concat(final byte[]... parts) {
+		var len = 0;
+		for (final var part : parts) {
+			len += part.length;
+		}
+		final byte[] out = new byte[len];
+		var off = 0;
+		for (final var part : parts) {
+			System.arraycopy(part, 0, out, off, part.length);
+			off += part.length;
+		}
+		return out;
+	}
+
+	/**
+	 * ISO 32000-2 Algorithm 2.B hardened password hash: SHA-256 seeded, then
+	 * repeated AES-128-CBC rounds mixing SHA-256/384/512 until the round
+	 * count and the last byte agree the work is done.
+	 */
+	private static byte[] hash2B(final byte[] password, final byte[] salt, final byte[] userKey) {
+		try {
+			final var sha256 = MessageDigest.getInstance("SHA-256");
+			sha256.update(password);
+			sha256.update(salt);
+			if (userKey != null) {
+				sha256.update(userKey, 0, 48);
+			}
+			byte[] k = sha256.digest();
+
+			for (var round = 0;; ++round) {
+				// K1 = 64 repetitions of (password || K || userKey[0..48])
+				final var one = concat(password, k, userKey != null ? java.util.Arrays.copyOf(userKey, 48) : new byte[0]);
+				final byte[] k1 = new byte[one.length * 64];
+				for (var i = 0; i < 64; ++i) {
+					System.arraycopy(one, 0, k1, i * one.length, one.length);
+				}
+				// E = AES-128-CBC(key = K[0..16], iv = K[16..32], K1), no pad
+				final var cipher = javax.crypto.Cipher.getInstance("AES/CBC/NoPadding");
+				cipher.init(javax.crypto.Cipher.ENCRYPT_MODE,
+						new javax.crypto.spec.SecretKeySpec(k, 0, 16, "AES"),
+						new javax.crypto.spec.IvParameterSpec(k, 16, 16));
+				final byte[] e = cipher.doFinal(k1);
+				// Modulo 3 of the first 16 bytes selects the digest.
+				var mod = 0;
+				for (var i = 0; i < 16; ++i) {
+					mod += e[i] & 0xFF;
+				}
+				mod %= 3;
+				final var md = MessageDigest.getInstance(switch (mod) {
+					case 0 -> "SHA-256";
+					case 1 -> "SHA-384";
+					default -> "SHA-512";
+				});
+				k = md.digest(e);
+				// Stop after at least 64 rounds once E's last byte <= round-32.
+				if (round >= 63 && (e[e.length - 1] & 0xFF) <= round - 32) {
+					break;
+				}
+			}
+			return java.util.Arrays.copyOf(k, 32);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	/** AES-256-CBC with a zero IV and no padding (for UE/OE key wrapping). */
+	private static byte[] aesNoPadNoIV(final byte[] key, final byte[] data, final boolean encrypt) {
+		try {
+			final var cipher = javax.crypto.Cipher.getInstance("AES/CBC/NoPadding");
+			cipher.init(encrypt ? javax.crypto.Cipher.ENCRYPT_MODE : javax.crypto.Cipher.DECRYPT_MODE,
+					new javax.crypto.spec.SecretKeySpec(key, "AES"),
+					new javax.crypto.spec.IvParameterSpec(new byte[16]));
+			return cipher.doFinal(data);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	/** AES-256-ECB with no padding (for the 16-byte Perms block). */
+	private static byte[] aesEcbNoPad(final byte[] key, final byte[] data) {
+		try {
+			final var cipher = javax.crypto.Cipher.getInstance("AES/ECB/NoPadding");
+			cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(key, "AES"));
+			return cipher.doFinal(data);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	/**
 	 * Returns an {@link Encryptor} configured to encrypt the content of the PDF
 	 * object identified by {@code keyRef}.
 	 * <p>
@@ -321,6 +562,14 @@ public class Encryption {
 	 * @return an {@link Encryptor} ready to encrypt data for the given object
 	 */
 	public Encryptor getEncryptor(ObjectRef keyRef) {
+		if (this.cfm == V4EncryptionParams.CFM.AESV3) {
+			// R6: every object is encrypted directly with the 256-bit file
+			// key; there is no per-object key derivation.
+			if (this.encryptor == null) {
+				this.encryptor = new AESEncryptor(this.key, 32);
+			}
+			return this.encryptor;
+		}
 		if (this.keyRef != keyRef) {
 			int keyLen = Math.min(this.length + 5, 16);
 			switch (this.cfm) {

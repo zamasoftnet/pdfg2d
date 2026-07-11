@@ -32,7 +32,9 @@ final class StructureTreeBuilder {
 		final Elem parent;
 		final String role;
 		String alt;
-		/** Children: either {@link Elem} or {@link Mcid}. */
+		/** Table-cell scope ({@code "Row"}/{@code "Column"}/{@code "Both"}), or null. */
+		String scope;
+		/** Children: {@link Elem}, {@link Mcid} or {@link ObjRef}. */
 		final List<Object> kids = new ArrayList<>();
 		/** Page of the first contained MCID; used for the /Pg entry. */
 		PDFPageOutputImpl page;
@@ -49,6 +51,17 @@ final class StructureTreeBuilder {
 	private record Mcid(PDFPageOutputImpl page, int mcid) {
 	}
 
+	/** An object reference (OBJR) to an annotation owned by an element. */
+	private record ObjRef(PDFPageOutputImpl page, ObjectRef annot) {
+	}
+
+	/** Structure types that must nest by increasing heading level. */
+	private static int headingLevel(final String role) {
+		return (role.length() == 2 && role.charAt(0) == 'H' && role.charAt(1) >= '1' && role.charAt(1) <= '6')
+				? role.charAt(1) - '0'
+				: -1;
+	}
+
 	/** Result of {@link #mark}: the MCID and the tag to use for BDC. */
 	record Mark(int mcid, String tag) {
 	}
@@ -56,6 +69,12 @@ final class StructureTreeBuilder {
 	private final Elem document = new Elem(null, "Document", null);
 
 	private Elem current = this.document;
+
+	/** Highest heading level seen so far (1..6), for skip detection. */
+	private int lastHeadingLevel = 0;
+
+	/** Set when a heading level was skipped (e.g. H1 then H3). */
+	private boolean headingSkip = false;
 
 	/** Page -> parent tree key (the page's /StructParents value). */
 	private final Map<PDFPageOutputImpl, Integer> pageKeys = new LinkedHashMap<>();
@@ -71,9 +90,31 @@ final class StructureTreeBuilder {
 	 *             {@code "Table"})
 	 */
 	void begin(final String role) {
+		this.begin(role, null);
+	}
+
+	/**
+	 * Opens a structure element with the given role and an optional table-cell
+	 * scope.
+	 *
+	 * @param role  the structure type
+	 * @param scope the table-header scope ({@code "Row"}, {@code "Column"},
+	 *              {@code "Both"}) for a {@code TH}, or {@code null}
+	 */
+	void begin(final String role, final String scope) {
 		final var child = new Elem(this.current, role, null);
+		child.scope = scope;
 		this.current.kids.add(child);
 		this.current = child;
+
+		final var level = headingLevel(role);
+		if (level > 0) {
+			// WCAG/PDF-UA: heading levels must not skip downward (H1 -> H3).
+			if (this.lastHeadingLevel > 0 && level > this.lastHeadingLevel + 1) {
+				this.headingSkip = true;
+			}
+			this.lastHeadingLevel = level;
+		}
 	}
 
 	/** Closes the innermost open structure element. */
@@ -82,6 +123,47 @@ final class StructureTreeBuilder {
 			this.current = this.current.parent;
 		}
 	}
+
+	/**
+	 * Associates an annotation (typically a Link) with the currently open
+	 * structure element via an object reference (OBJR), and returns the
+	 * element's parent-tree key for the annotation's {@code /StructParent}.
+	 *
+	 * @param page  the page carrying the annotation
+	 * @param annot the annotation object reference
+	 * @return the {@code /StructParent} key, or -1 when no element is open
+	 */
+	int associateAnnotation(final PDFPageOutputImpl page, final ObjectRef annot) {
+		if (this.current == this.document) {
+			return -1;
+		}
+		final var target = this.current;
+		target.kids.add(new ObjRef(page, annot));
+		if (target.page == null) {
+			target.page = page;
+		}
+		// The annotation gets its own parent-tree key resolving directly to
+		// the owning element (a single ref, not an MCID-indexed array).
+		final var annotKey = this.nextKey++;
+		this.annotOwners.put(annotKey, target);
+		return annotKey;
+	}
+
+	/**
+	 * Returns whether any heading level was skipped downward (a PDF/UA
+	 * violation). Meaningful only after all content has been marked.
+	 *
+	 * @return {@code true} if a heading level was skipped
+	 */
+	boolean hasHeadingSkip() {
+		return this.headingSkip;
+	}
+
+	/** Shared ascending parent-tree key counter (pages and annotations). */
+	private int nextKey = 0;
+
+	/** Annotation /StructParent key -> owning element. */
+	private final Map<Integer, Elem> annotOwners = new LinkedHashMap<>();
 
 	/**
 	 * Registers a marked-content sequence on the given page.
@@ -107,7 +189,7 @@ final class StructureTreeBuilder {
 		}
 
 		final var key = this.pageKeys.computeIfAbsent(page, p -> {
-			final var k = this.pageKeys.size();
+			final var k = this.nextKey++;
 			p.setStructParents(k);
 			return k;
 		});
@@ -134,20 +216,30 @@ final class StructureTreeBuilder {
 
 		this.writeElem(sink, this.document, rootRef);
 
-		// Parent tree: a number tree mapping each page's /StructParents key
-		// to the MCID-indexed array of owning structure elements.
+		// Parent tree: a number tree mapping each page's /StructParents key to
+		// the MCID-indexed array of owning elements, and each annotation's
+		// /StructParent key to its single owning element. Keys are emitted in
+		// ascending order as the number-tree format requires.
 		final var parentTreeRef = xref.nextObjectRef();
 		var out = sink.startObject(parentTreeRef);
 		out.startHash();
 		out.writeName("Nums");
 		out.startArray();
-		for (final var e : this.parentTree.entrySet()) {
-			out.writeInt(e.getKey());
-			out.startArray();
-			for (final var elem : e.getValue()) {
-				out.writeObjectRef(elem.ref);
+		final var keys = new java.util.TreeSet<Integer>();
+		keys.addAll(this.parentTree.keySet());
+		keys.addAll(this.annotOwners.keySet());
+		for (final var key : keys) {
+			out.writeInt(key);
+			final var elems = this.parentTree.get(key);
+			if (elems != null) {
+				out.startArray();
+				for (final var elem : elems) {
+					out.writeObjectRef(elem.ref);
+				}
+				out.endArray();
+			} else {
+				out.writeObjectRef(this.annotOwners.get(key).ref);
 			}
-			out.endArray();
 		}
 		out.endArray();
 		out.endHash();
@@ -162,7 +254,7 @@ final class StructureTreeBuilder {
 		out.writeName("ParentTree");
 		out.writeObjectRef(parentTreeRef);
 		out.writeName("ParentTreeNextKey");
-		out.writeInt(this.pageKeys.size());
+		out.writeInt(this.nextKey);
 		out.endHash();
 		sink.endObject();
 		return rootRef;
@@ -198,6 +290,17 @@ final class StructureTreeBuilder {
 			out.writeText(elem.alt);
 			out.lineBreak();
 		}
+		if (elem.scope != null) {
+			// Table-header scope attribute (PDF/UA Table requirement).
+			out.writeName("A");
+			out.startHash();
+			out.writeName("O");
+			out.writeName("Table");
+			out.writeName("Scope");
+			out.writeName(elem.scope);
+			out.endHash();
+			out.lineBreak();
+		}
 		out.writeName("K");
 		out.startArray();
 		for (final var kid : elem.kids) {
@@ -218,6 +321,16 @@ final class StructureTreeBuilder {
 					out.writeInt(m.mcid());
 					out.endHash();
 				}
+			} else if (kid instanceof ObjRef o) {
+				// Object reference to an associated annotation (e.g. a Link).
+				out.startHash();
+				out.writeName("Type");
+				out.writeName("OBJR");
+				out.writeName("Pg");
+				out.writeObjectRef(o.page().getPageRef());
+				out.writeName("Obj");
+				out.writeObjectRef(o.annot());
+				out.endHash();
 			}
 		}
 		out.endArray();

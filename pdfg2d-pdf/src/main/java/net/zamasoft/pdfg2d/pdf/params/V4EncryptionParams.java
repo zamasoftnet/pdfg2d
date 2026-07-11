@@ -22,7 +22,9 @@ public final class V4EncryptionParams extends EncryptionParams {
 		/** RC4 stream cipher (variable-length key). */
 		V2("V2"),
 		/** AES-128 block cipher in CBC mode. */
-		AESV2("AESV2");
+		AESV2("AESV2"),
+		/** AES-256 block cipher in CBC mode (V5/R6 handler only). */
+		AESV3("AESV3");
 
 		/** PDF name string for this crypt filter method. */
 		public final String name;

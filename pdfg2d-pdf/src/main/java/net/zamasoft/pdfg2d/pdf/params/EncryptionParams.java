@@ -25,7 +25,9 @@ public abstract class EncryptionParams {
 		/** RC4 variable-length key (PDF 1.4+). */
 		V2(2),
 		/** AES cipher support (PDF 1.5+). */
-		V4(4);
+		V4(4),
+		/** AES-256 with the revision 6 handler (PDF 2.0 / ISO 32000-2). */
+		V5(5);
 
 		/** Numeric version identifier. */
 		public final int v;

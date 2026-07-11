@@ -32,6 +32,7 @@ import net.zamasoft.pdfg2d.pdf.PDFNamedGraphicsOutput;
 import net.zamasoft.pdfg2d.pdf.PDFNamedOutput;
 import net.zamasoft.pdfg2d.pdf.PDFOptionalContentGroup;
 
+import net.zamasoft.pdfg2d.pdf.PDFOutput;
 import net.zamasoft.pdfg2d.pdf.PDFOutput.Destination;
 import net.zamasoft.pdfg2d.pdf.PDFPageOutput;
 import net.zamasoft.pdfg2d.pdf.PDFWriter;
@@ -316,6 +317,11 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 					throw new IllegalArgumentException("AESV2 encryption requires PDF 1.6 or later.");
 				}
 			}
+			if (encType == EncryptionParams.Type.V5 && pdfVersion.v < PDFParams.Version.V_1_7.v) {
+				// AES-256 (R6) is standard in PDF 2.0 and accepted by PDF 1.7
+				// extension level 8 viewers.
+				throw new IllegalArgumentException("V5 (AES-256) encryption requires PDF 1.7 or later.");
+			}
 
 			this.encryption = new Encryption(this.mainFlow, this.xref, this.fileid, encryptionParams);
 		}
@@ -442,8 +448,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 					PDFWriterImpl.this.afRefs.add(specRef);
 					this.out.writeObjectRef(specRef);
 
-					final var flow = PDFWriterImpl.this.objectsFlow;
-					flow.startObject(specRef);
+					final var sink = PDFWriterImpl.this.objectSink();
+					final var flow = sink.startObject(specRef);
 					flow.startHash();
 					flow.writeName("Type");
 					flow.writeName("Filespec");
@@ -479,7 +485,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 					flow.endHash();
 
 					flow.endHash();
-					flow.endObject();
+					sink.endObject();
 				}
 			};
 		} else {
@@ -642,8 +648,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.ocgs.add(new OCGEntry(ocgRef, initiallyOn, locked));
 		final var resourceName = this.addResource("Properties", "MC", ocgRef);
 
-		final var flow = this.objectsFlow;
-		flow.startObject(ocgRef);
+		final var sink = this.objectSink();
+		final var flow = sink.startObject(ocgRef);
 		flow.startHash();
 		flow.writeName("Type");
 		flow.writeName("OCG");
@@ -664,7 +670,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		flow.endHash();
 		flow.endHash();
 		flow.endHash();
-		flow.endObject();
+		sink.endObject();
 		return new PDFOptionalContentGroup(ocgRef, resourceName, name);
 	}
 
@@ -949,6 +955,12 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	/** Separation color space resource names by colorant name. */
 	private Map<String, String> separationNames = null;
 
+	/** Separation colorant names to their color space object references. */
+	private Map<String, ObjectRef> separationRefs = null;
+
+	/** DeviceN colorant-set keys to color space resource names. */
+	private Map<String, String> deviceNNames = null;
+
 	/** ICCBased RGB color space resource name, or {@code null}. */
 	private String iccBasedRGBName = null;
 
@@ -991,28 +1003,21 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		return name;
 	}
 
-	@Override
-	public String useSeparation(final String colorantName, final net.zamasoft.pdfg2d.gc.paint.Color alternate)
-			throws IOException {
-		if (this.separationNames == null) {
-			this.separationNames = new HashMap<>();
-		}
-		var name = this.separationNames.get(colorantName);
-		if (name != null) {
-			return name;
-		}
-
-		// The alternate follows the document color mode so that separations
-		// remain conforming under CMYK-only profiles (PDF/X).
+	/**
+	 * Aligns a named color's alternate with the document's process color
+	 * space: the effective color mode first (PDF/X CMYK enforcement), then
+	 * the PDF/A OutputIntent color space, which device color spaces (and
+	 * therefore Separation/DeviceN alternates) must match.
+	 *
+	 * @param alternate the alternate color as given by the caller
+	 * @return the aligned alternate
+	 */
+	private net.zamasoft.pdfg2d.gc.paint.Color alignAlternate(final net.zamasoft.pdfg2d.gc.paint.Color alternate) {
 		var alt = switch (this.params.effectiveColorMode()) {
 			case GRAY -> net.zamasoft.pdfg2d.util.ColorUtils.toGray(alternate);
 			case CMYK -> net.zamasoft.pdfg2d.util.ColorUtils.toCMYK(alternate);
 			default -> alternate;
 		};
-
-		// PDF/A requires device color spaces (here: the Separation's
-		// alternate) to match the OutputIntent's color space; convert the
-		// alternate accordingly.
 		if (this.params.version().isPdfA()) {
 			final var intent = this.params.outputIntent();
 			final var components = (intent != null) ? intent.colorComponents()
@@ -1024,6 +1029,21 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 						alt.getBlue());
 			};
 		}
+		return alt;
+	}
+
+	@Override
+	public String useSeparation(final String colorantName, final net.zamasoft.pdfg2d.gc.paint.Color alternate)
+			throws IOException {
+		if (this.separationNames == null) {
+			this.separationNames = new HashMap<>();
+		}
+		var name = this.separationNames.get(colorantName);
+		if (name != null) {
+			return name;
+		}
+
+		final var alt = this.alignAlternate(alternate);
 
 		final String altSpace;
 		final float[] white;
@@ -1083,6 +1103,167 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		flow.endObject();
 
 		this.separationNames.put(colorantName, name);
+		if (this.separationRefs == null) {
+			this.separationRefs = new HashMap<>();
+		}
+		this.separationRefs.put(colorantName, ref);
+		return name;
+	}
+
+	@Override
+	public String useDeviceN(final net.zamasoft.pdfg2d.gc.paint.SpotColor[] colorants) throws IOException {
+		final var keyBuilder = new StringBuilder();
+		for (final var colorant : colorants) {
+			keyBuilder.append(colorant.name()).append((char) 0);
+		}
+		final var key = keyBuilder.toString();
+		if (this.deviceNNames == null) {
+			this.deviceNNames = new HashMap<>();
+		}
+		var name = this.deviceNNames.get(key);
+		if (name != null) {
+			return name;
+		}
+
+		// Align each alternate with the process space, then bring all of them
+		// to one common space (CMYK when mixed) for the tint transform range.
+		final var alts = new net.zamasoft.pdfg2d.gc.paint.Color[colorants.length];
+		var mixed = false;
+		for (var i = 0; i < colorants.length; ++i) {
+			alts[i] = this.alignAlternate(colorants[i].alternate());
+			mixed |= alts[i].getColorType() != alts[0].getColorType();
+		}
+		if (mixed) {
+			for (var i = 0; i < alts.length; ++i) {
+				alts[i] = net.zamasoft.pdfg2d.util.ColorUtils.toCMYK(alts[i]);
+			}
+		}
+
+		// The output channels of the tint transform. CMYK channels are ink
+		// amounts and combine additively (clamped); RGB/Gray channels combine
+		// on their complements (ink absorption).
+		final String altSpace;
+		final int outComponents;
+		final boolean complement;
+		switch (alts[0].getColorType()) {
+			case GRAY -> {
+				altSpace = "DeviceGray";
+				outComponents = 1;
+				complement = true;
+			}
+			case CMYK -> {
+				altSpace = "DeviceCMYK";
+				outComponents = 4;
+				complement = false;
+			}
+			default -> {
+				altSpace = "DeviceRGB";
+				outComponents = 3;
+				complement = true;
+			}
+		}
+
+		// PostScript calculator (FunctionType 4) program. Inputs t1..tN are on
+		// the stack (tN topmost). For each output channel the weighted sum of
+		// the inputs is accumulated and clamped to 1; complement-space
+		// channels weight by (1 - component) and finish with 1 - sum.
+		final var n = colorants.length;
+		final var ps = new StringBuilder("{\n");
+		for (var j = 0; j < outComponents; ++j) {
+			ps.append("0.0");
+			for (var i = 0; i < n; ++i) {
+				final var component = alts[i].getComponent(j);
+				final var coefficient = complement
+						? 1 - (j == 0 && alts[i].getColorType() == net.zamasoft.pdfg2d.gc.paint.Color.Type.GRAY
+								? alts[i].getComponent(0)
+								: switch (j) {
+									case 0 -> alts[i].getRed();
+									case 1 -> alts[i].getGreen();
+									default -> alts[i].getBlue();
+								})
+						: component;
+				if (coefficient != 0) {
+					// Copy input t_i: it sits below the accumulator and the
+					// j outputs computed so far.
+					ps.append(' ').append(n - 1 - i + j + 1).append(" index ")
+							.append(coefficient).append(" mul add");
+				}
+			}
+			ps.append(" dup 1.0 gt {pop 1.0} if");
+			if (complement) {
+				ps.append(" neg 1.0 add");
+			}
+			ps.append('\n');
+		}
+		// Drop the inputs, keeping the outputs in order.
+		ps.append(n + outComponents).append(' ').append(outComponents).append(" roll\n");
+		for (var i = 0; i < n; ++i) {
+			ps.append("pop ");
+		}
+		ps.append("\n}");
+		final var program = ps.toString().getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+
+		final var funcRef = this.xref.nextObjectRef();
+		final var flow = this.objectsFlow;
+		flow.startObject(funcRef);
+		flow.startHash();
+		flow.writeName("FunctionType");
+		flow.writeInt(4);
+		flow.writeName("Domain");
+		flow.startArray();
+		for (var i = 0; i < n; ++i) {
+			flow.writeInt(0);
+			flow.writeInt(1);
+		}
+		flow.endArray();
+		flow.writeName("Range");
+		flow.startArray();
+		for (var j = 0; j < outComponents; ++j) {
+			flow.writeInt(0);
+			flow.writeInt(1);
+		}
+		flow.endArray();
+		flow.lineBreak();
+		try (final var sout = flow.startStreamFromHash(PDFFragmentOutput.Mode.RAW)) {
+			sout.write(program);
+		}
+		flow.endObject();
+
+		// PDF/A-2 (6.2.4.4) requires a Colorants dictionary entry for every
+		// spot colorant of a DeviceN space, each one a Separation color
+		// space; reuse the document-wide Separation resources.
+		final var sepRefs = new ObjectRef[n];
+		for (var i = 0; i < n; ++i) {
+			this.useSeparation(colorants[i].name(), colorants[i].alternate());
+			sepRefs[i] = this.separationRefs.get(colorants[i].name());
+		}
+
+		final var ref = this.xref.nextObjectRef();
+		name = this.addResource("ColorSpace", "CS", ref);
+		final var sink = this.objectSink();
+		final var csFlow = sink.startObject(ref);
+		csFlow.startArray();
+		csFlow.writeName("DeviceN");
+		csFlow.startArray();
+		for (final var colorant : colorants) {
+			csFlow.writeName(colorant.name());
+		}
+		csFlow.endArray();
+		csFlow.writeName(altSpace);
+		csFlow.writeObjectRef(funcRef);
+		csFlow.startHash();
+		csFlow.writeName("Colorants");
+		csFlow.startHash();
+		for (var i = 0; i < n; ++i) {
+			csFlow.writeName(colorants[i].name());
+			csFlow.writeObjectRef(sepRefs[i]);
+		}
+		csFlow.endHash();
+		csFlow.endHash();
+		csFlow.endArray();
+		sink.endObject();
+
+		this.deviceNNames.put(key, name);
 		return name;
 	}
 
@@ -1433,31 +1614,32 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 				this.catalogFlow.writeObjectRef(this.dpartRootRef);
 				this.catalogFlow.lineBreak();
 
-				this.objectsFlow.startObject(this.dpartRootRef);
-				this.objectsFlow.startHash();
-				this.objectsFlow.writeName("Type");
-				this.objectsFlow.writeName("DPartRoot");
-				this.objectsFlow.writeName("DPartRootNode");
-				this.objectsFlow.writeObjectRef(this.dpartNodeRef);
-				this.objectsFlow.endHash();
-				this.objectsFlow.endObject();
+				final var dpartSink = this.objectSink();
+				var flow = dpartSink.startObject(this.dpartRootRef);
+				flow.startHash();
+				flow.writeName("Type");
+				flow.writeName("DPartRoot");
+				flow.writeName("DPartRootNode");
+				flow.writeObjectRef(this.dpartNodeRef);
+				flow.endHash();
+				dpartSink.endObject();
 
-				this.objectsFlow.startObject(this.dpartNodeRef);
-				this.objectsFlow.startHash();
-				this.objectsFlow.writeName("Type");
-				this.objectsFlow.writeName("DPart");
-				this.objectsFlow.writeName("Parent");
-				this.objectsFlow.writeObjectRef(this.dpartRootRef);
-				this.objectsFlow.writeName("DParts");
-				this.objectsFlow.startArray();
-				this.objectsFlow.startArray();
+				flow = dpartSink.startObject(this.dpartNodeRef);
+				flow.startHash();
+				flow.writeName("Type");
+				flow.writeName("DPart");
+				flow.writeName("Parent");
+				flow.writeObjectRef(this.dpartRootRef);
+				flow.writeName("DParts");
+				flow.startArray();
+				flow.startArray();
 				for (final var part : this.dparts) {
-					this.objectsFlow.writeObjectRef(part.ref);
+					flow.writeObjectRef(part.ref);
 				}
-				this.objectsFlow.endArray();
-				this.objectsFlow.endArray();
-				this.objectsFlow.endHash();
-				this.objectsFlow.endObject();
+				flow.endArray();
+				flow.endArray();
+				flow.endHash();
+				dpartSink.endObject();
 
 				for (var i = 0; i < this.dparts.size(); ++i) {
 					final var part = this.dparts.get(i);
@@ -1468,36 +1650,43 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 						// A part without pages (nextDocumentPart called but
 						// no page created); still emitted for structure.
 					}
-					this.objectsFlow.startObject(part.ref);
-					this.objectsFlow.startHash();
-					this.objectsFlow.writeName("Type");
-					this.objectsFlow.writeName("DPart");
-					this.objectsFlow.writeName("Parent");
-					this.objectsFlow.writeObjectRef(this.dpartNodeRef);
+					flow = dpartSink.startObject(part.ref);
+					flow.startHash();
+					flow.writeName("Type");
+					flow.writeName("DPart");
+					flow.writeName("Parent");
+					flow.writeObjectRef(this.dpartNodeRef);
 					if (part.startPage <= endPage) {
-						this.objectsFlow.writeName("Start");
-						this.objectsFlow.writeObjectRef(this.pageOutputs.get(part.startPage).getPageRef());
+						flow.writeName("Start");
+						flow.writeObjectRef(this.pageOutputs.get(part.startPage).getPageRef());
 						if (endPage > part.startPage) {
-							this.objectsFlow.writeName("End");
-							this.objectsFlow.writeObjectRef(this.pageOutputs.get(endPage).getPageRef());
+							flow.writeName("End");
+							flow.writeObjectRef(this.pageOutputs.get(endPage).getPageRef());
 						}
 					}
 					if (part.metadata != null && !part.metadata.isEmpty()) {
-						this.objectsFlow.writeName("DPM");
-						this.objectsFlow.startHash();
+						flow.writeName("DPM");
+						flow.startHash();
 						for (final var e : part.metadata.entrySet()) {
-							this.objectsFlow.writeName(e.getKey());
-							this.objectsFlow.writeText(e.getValue());
+							flow.writeName(e.getKey());
+							flow.writeText(e.getValue());
 						}
-						this.objectsFlow.endHash();
+						flow.endHash();
 					}
-					this.objectsFlow.endHash();
-					this.objectsFlow.endObject();
+					flow.endHash();
+					dpartSink.endObject();
 				}
 			}
 
 			// Logical structure (tagged PDF)
 			if (this.structure != null) {
+				final var taggedForStruct = this.params.tagged();
+				if (taggedForStruct != null && taggedForStruct.pdfua() && this.structure.hasHeadingSkip()) {
+					// PDF/UA (Matterhorn 14-002): heading levels must not be
+					// skipped. Fail fast rather than emit a non-conforming file.
+					throw new IllegalStateException(
+							"PDF/UA forbids skipping heading levels (e.g. H1 followed by H3).");
+				}
 				final var structRootRef = this.structure.writeTo(this.objectSink(), this.xref);
 				this.catalogFlow.writeName("StructTreeRoot");
 				this.catalogFlow.writeObjectRef(structRootRef);
@@ -1585,52 +1774,53 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.catalogFlow.writeName("OCProperties");
 		this.catalogFlow.writeObjectRef(ref);
 
-		this.objectsFlow.startObject(ref);
-		this.objectsFlow.startHash();
-		this.objectsFlow.writeName("OCGs");
-		this.objectsFlow.startArray();
+		final var sink = this.objectSink();
+		final var flow = sink.startObject(ref);
+		flow.startHash();
+		flow.writeName("OCGs");
+		flow.startArray();
 		for (final var entry : this.ocgs) {
-			this.objectsFlow.writeObjectRef(entry.ref());
+			flow.writeObjectRef(entry.ref());
 		}
-		this.objectsFlow.endArray();
+		flow.endArray();
 
-		this.objectsFlow.writeName("D");
-		this.objectsFlow.startHash();
-		this.objectsFlow.writeName("Name");
-		this.objectsFlow.writeText("Default");
-		this.objectsFlow.writeName("ON");
-		this.objectsFlow.startArray();
+		flow.writeName("D");
+		flow.startHash();
+		flow.writeName("Name");
+		flow.writeText("Default");
+		flow.writeName("ON");
+		flow.startArray();
 		for (final var entry : this.ocgs) {
 			if (entry.initiallyOn()) {
-				this.objectsFlow.writeObjectRef(entry.ref());
+				flow.writeObjectRef(entry.ref());
 			}
 		}
-		this.objectsFlow.endArray();
-		this.objectsFlow.writeName("OFF");
-		this.objectsFlow.startArray();
+		flow.endArray();
+		flow.writeName("OFF");
+		flow.startArray();
 		for (final var entry : this.ocgs) {
 			if (!entry.initiallyOn()) {
-				this.objectsFlow.writeObjectRef(entry.ref());
+				flow.writeObjectRef(entry.ref());
 			}
 		}
-		this.objectsFlow.endArray();
-		this.objectsFlow.writeName("Locked");
-		this.objectsFlow.startArray();
+		flow.endArray();
+		flow.writeName("Locked");
+		flow.startArray();
 		for (final var entry : this.ocgs) {
 			if (entry.locked()) {
-				this.objectsFlow.writeObjectRef(entry.ref());
+				flow.writeObjectRef(entry.ref());
 			}
 		}
-		this.objectsFlow.endArray();
+		flow.endArray();
 		// PDF/A forbids the usage application dictionaries (/AS); without
 		// them the per-OCG /Usage states are informational only.
 		if (!this.params.version().isPdfA()) {
-			this.writeOCUsageApplications();
+			this.writeOCUsageApplications(flow);
 		}
-		this.objectsFlow.endHash();
+		flow.endHash();
 
-		this.objectsFlow.endHash();
-		this.objectsFlow.endObject();
+		flow.endHash();
+		sink.endObject();
 	}
 
 	/**
@@ -1640,40 +1830,40 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	 *
 	 * @throws IOException if an I/O error occurs
 	 */
-	private void writeOCUsageApplications() throws IOException {
-		this.objectsFlow.writeName("AS");
-		this.objectsFlow.startArray();
+	private void writeOCUsageApplications(final PDFOutput flow) throws IOException {
+		flow.writeName("AS");
+		flow.startArray();
 
-		this.objectsFlow.startHash();
-		this.objectsFlow.writeName("Event");
-		this.objectsFlow.writeName("View");
-		this.objectsFlow.writeName("OCGs");
-		this.objectsFlow.startArray();
+		flow.startHash();
+		flow.writeName("Event");
+		flow.writeName("View");
+		flow.writeName("OCGs");
+		flow.startArray();
 		for (final var entry : this.ocgs) {
-			this.objectsFlow.writeObjectRef(entry.ref());
+			flow.writeObjectRef(entry.ref());
 		}
-		this.objectsFlow.endArray();
-		this.objectsFlow.writeName("Category");
-		this.objectsFlow.startArray();
-		this.objectsFlow.writeName("View");
-		this.objectsFlow.endArray();
-		this.objectsFlow.endHash();
+		flow.endArray();
+		flow.writeName("Category");
+		flow.startArray();
+		flow.writeName("View");
+		flow.endArray();
+		flow.endHash();
 
-		this.objectsFlow.startHash();
-		this.objectsFlow.writeName("Event");
-		this.objectsFlow.writeName("Print");
-		this.objectsFlow.writeName("OCGs");
-		this.objectsFlow.startArray();
+		flow.startHash();
+		flow.writeName("Event");
+		flow.writeName("Print");
+		flow.writeName("OCGs");
+		flow.startArray();
 		for (final var entry : this.ocgs) {
-			this.objectsFlow.writeObjectRef(entry.ref());
+			flow.writeObjectRef(entry.ref());
 		}
-		this.objectsFlow.endArray();
-		this.objectsFlow.writeName("Category");
-		this.objectsFlow.startArray();
-		this.objectsFlow.writeName("Print");
-		this.objectsFlow.endArray();
-		this.objectsFlow.endHash();
+		flow.endArray();
+		flow.writeName("Category");
+		flow.startArray();
+		flow.writeName("Print");
+		flow.endArray();
+		flow.endHash();
 
-		this.objectsFlow.endArray();
+		flow.endArray();
 	}
 }

@@ -115,6 +115,18 @@ public abstract class PDFPageOutput extends PDFGraphicsOutput {
 	public void beginStructElement(final String role) {
 	}
 
+	/**
+	 * Opens a table-header ({@code TH}) structure element with a cell scope.
+	 * No-op for untagged documents.
+	 *
+	 * @param role  the structure type (typically {@code "TH"})
+	 * @param scope the header scope: {@code "Row"}, {@code "Column"} or
+	 *              {@code "Both"}
+	 */
+	public void beginStructElement(final String role, final String scope) {
+		this.beginStructElement(role);
+	}
+
 	/** Closes the innermost structure element opened by {@link #beginStructElement}. */
 	public void endStructElement() {
 	}

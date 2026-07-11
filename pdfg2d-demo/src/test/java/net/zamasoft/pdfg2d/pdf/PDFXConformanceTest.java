@@ -174,6 +174,47 @@ public class PDFXConformanceTest {
 	}
 
 	@Test
+	public void testAnnotationOutsideBleedIsAllowed() throws Exception {
+		// ISO 15930 permits annotations entirely outside the bleed area, so
+		// proofing notes can live in the slug/marks area.
+		final var file = TestOutputFiles.outputFile(getClass(), "pdfx_annot_slug.pdf");
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder,
+					PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX1A));
+			final var page = pdf.nextPage(595, 842);
+			page.setTrimBox(new Rectangle2D.Double(60, 60, 475, 722));
+			final var link = new net.zamasoft.pdfg2d.pdf.annot.LinkAnnot();
+			link.setShape(new Rectangle2D.Double(5, 5, 40, 20)); // in the slug area
+			link.setURI(java.net.URI.create("https://example.com/proof"));
+			page.addAnnotation(link);
+			page.close();
+			pdf.close();
+			builder.close();
+		}
+		final var raw = new String(Files.readAllBytes(file.toPath()), StandardCharsets.ISO_8859_1);
+		assertTrue(raw.contains("/Annots"), "The slug-area annotation must be emitted");
+	}
+
+	@Test
+	public void testAnnotationInsideTrimIsRejected() throws Exception {
+		final var file = TestOutputFiles.outputFile(getClass(), "pdfx_annot_inside.pdf");
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder,
+					PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX1A));
+			final var page = pdf.nextPage(595, 842);
+			page.setTrimBox(new Rectangle2D.Double(60, 60, 475, 722));
+			final var link = new net.zamasoft.pdfg2d.pdf.annot.LinkAnnot();
+			link.setShape(new Rectangle2D.Double(100, 100, 50, 50)); // on the printed page
+			link.setURI(java.net.URI.create("https://example.com"));
+			page.addAnnotation(link);
+			org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, page::close,
+					"An annotation inside the finished page area must be rejected under PDF/X");
+		}
+	}
+
+	@Test
 	public void testConfiguredOutputIntentIsWritten() throws Exception {
 		// A characterized printing condition registered at color.org
 		// (identifier-only reference with registry name and embedded profile).

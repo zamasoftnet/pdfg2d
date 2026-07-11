@@ -133,6 +133,66 @@ public class CommercialPrintTest {
 	}
 
 	@Test
+	public void testDeviceNDuotoneEmitsColorSpaceAndRenders() throws Exception {
+		final var file = TestOutputFiles.outputFile(getClass(), "devicen_duotone.pdf");
+		final var blue = SpotColor.create("SPOT-BLUE", CMYKColor.create(1, 0.5f, 0, 0));
+		final var black = SpotColor.create("SPOT-K", CMYKColor.create(0, 0, 0, 1));
+		final var duo = net.zamasoft.pdfg2d.gc.paint.DeviceNColor.create(blue, black);
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder,
+					PDFParams.createDefault().withCompression(PDFParams.Compression.NONE));
+			try (final var gc = new PDFGC(pdf.nextPage(200, 200))) {
+				gc.setFillPaint(duo.tints(1, 0.3f)); // blue plate + 30% black
+				gc.fill(new Rectangle2D.Double(0, 0, 200, 100));
+				gc.setFillPaint(duo.tints(0.5f, 0)); // 50% blue only, same space
+				gc.fill(new Rectangle2D.Double(0, 100, 200, 100));
+			}
+			pdf.close();
+			builder.close();
+		}
+
+		final var raw = new String(Files.readAllBytes(file.toPath()), StandardCharsets.ISO_8859_1);
+		assertTrue(raw.contains("/DeviceN"), "DeviceN color space expected");
+		assertTrue(raw.contains("/SPOT-BLUE"), "First colorant name expected");
+		assertTrue(raw.contains("/SPOT-K"), "Second colorant name expected");
+		assertTrue(raw.contains("/FunctionType 4"), "Tint transform must be a calculator function");
+		assertEquals(1, raw.split("/DeviceN", -1).length - 1,
+				"The same colorant set must reuse one color space object");
+
+		// PDFBox evaluates the Type 4 tint transform when rendering
+		try (final var doc = Loader.loadPDF(file)) {
+			final var image = new PDFRenderer(doc).renderImage(0);
+			final var full = new java.awt.Color(image.getRGB(100, 40));
+			assertTrue(full.getBlue() > full.getRed() + 30,
+					"Blue+black duotone must render blueish, was " + full);
+			assertTrue(full.getRed() < 120, "30% black must darken the color, was " + full);
+			final var half = new java.awt.Color(image.getRGB(100, 160));
+			assertTrue(half.getRed() > full.getRed() + 40,
+					"50% blue-only must be much lighter, was " + half + " vs " + full);
+		}
+	}
+
+	@Test
+	public void testDeviceNPdfA2bCompliant() throws Exception {
+		final var file = TestOutputFiles.outputFile(getClass(), "devicen_pdfa.pdf");
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder,
+					PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFA2B));
+			try (final var gc = new PDFGC(pdf.nextPage(200, 200))) {
+				gc.setFillPaint(net.zamasoft.pdfg2d.gc.paint.DeviceNColor.create(
+						SpotColor.create("DIC-620", CMYKColor.create(0.8f, 0.2f, 0, 0)),
+						SpotColor.create("DIC-156", CMYKColor.create(0, 0.9f, 0.6f, 0))));
+				gc.fill(new Rectangle2D.Double(20, 20, 160, 160));
+			}
+			pdf.close();
+			builder.close();
+		}
+		assertCompliant(file, PDFAFlavour.PDFA_2_B);
+	}
+
+	@Test
 	public void testICCBasedRGBContent() throws Exception {
 		final var file = TestOutputFiles.outputFile(getClass(), "icc_rgb.pdf");
 		final var params = PDFParams.createDefault()

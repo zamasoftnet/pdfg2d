@@ -120,6 +120,46 @@ public class ObjectStreamTest {
 	}
 
 	@Test
+	public void testSmallDictionariesArePacked() throws Exception {
+		// OCGs, filespecs and OCProperties are stream-less dictionaries; with
+		// object streams enabled they must live inside an /ObjStm rather than
+		// as top-level "N 0 obj" bodies.
+		final var file = TestOutputFiles.outputFile(getClass(), "objstm_dicts.pdf");
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder, PDFParams.createDefault()
+					.withObjectStreams(true).withCompression(PDFParams.Compression.NONE));
+			final var layer = pdf.createOptionalContentGroup("Proof", true, false, true, false);
+			try (final var attachOut = pdf.addAttachment("readme.txt",
+					new Attachment("attached note", "text/plain"))) {
+				attachOut.write("hello".getBytes(StandardCharsets.ISO_8859_1));
+			}
+			try (final var gc = new PDFGC(pdf.nextPage(200, 200))) {
+				gc.beginLayer(layer);
+				gc.fill(new java.awt.geom.Rectangle2D.Double(10, 10, 100, 100));
+				gc.endLayer();
+			}
+			pdf.close();
+			builder.close();
+		}
+
+		final var raw = new String(Files.readAllBytes(file.toPath()), StandardCharsets.ISO_8859_1);
+		// The three stream-less dictionaries (OCG, Filespec, OCProperties)
+		// must live inside the object stream, not as top-level objects.
+		assertTrue(raw.contains("/ObjStm /N 3"), "OCG + Filespec + OCProperties must be packed");
+		for (final var marker : new String[] { "/Type /OCG", "/Type /Filespec" }) {
+			assertTrue(!raw.contains(marker),
+					marker + " must not appear as a top-level object body");
+		}
+		try (final var doc = Loader.loadPDF(file)) {
+			assertTrue(doc.getDocumentCatalog().getOCProperties().getGroupNames().length == 1,
+					"OCG must stay reachable through type-2 entries");
+			assertNotNull(doc.getDocumentCatalog().getNames().getEmbeddedFiles(),
+					"Attachment name tree must stay reachable");
+		}
+	}
+
+	@Test
 	public void testInvalidCombinationsAreRejected() {
 		assertThrows(IllegalArgumentException.class, () -> PDFParams.createDefault()
 				.withVersion(PDFParams.Version.V_1_4).withObjectStreams(true), "requires PDF 1.5+");

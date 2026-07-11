@@ -160,6 +160,14 @@ class PDFPageOutputImpl extends PDFPageOutput {
 	}
 
 	@Override
+	public void beginStructElement(final String role, final String scope) {
+		final var structure = this.getPDFWriterImpl().structure;
+		if (structure != null) {
+			structure.begin(role, scope);
+		}
+	}
+
+	@Override
 	public void endStructElement() {
 		final var structure = this.getPDFWriterImpl().structure;
 		if (structure != null) {
@@ -192,6 +200,9 @@ class PDFPageOutputImpl extends PDFPageOutput {
 
 	private final List<ObjectRef> annotRefs = new ArrayList<>();
 
+	/** Bounds of annotations to validate against the PDF/X boxes on close. */
+	private final List<Rectangle2D> pdfxAnnotBounds = new ArrayList<>();
+
 	public List<ObjectRef> getAnnotRefs() {
 		return this.annotRefs;
 	}
@@ -206,7 +217,11 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		final var pdfWriterImpl = this.getPDFWriterImpl();
 		final var params = pdfWriterImpl.getParams();
 		if (params.version().isPdfX()) {
-			throw new UnsupportedOperationException("Annotations are not allowed in PDF/X standards.");
+			// ISO 15930 permits annotations only when they lie entirely
+			// outside the bleed area (or the finished page when there is no
+			// BleedBox). The boxes may be set after this call, so the bounds
+			// are validated when the page closes.
+			this.pdfxAnnotBounds.add(annot.getShape().getBounds2D());
 		}
 
 		if (!this.hasAnnots) {
@@ -219,6 +234,12 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		this.annotRefs.add(annotRef);
 		this.annotsFlow.writeObjectRef(annotRef);
 
+		// When a structure element is open, associate the annotation with it
+		// (OBJR child + /StructParent) so assistive technology reads the link
+		// in document order — a PDF/UA requirement for link annotations.
+		final var structure = pdfWriterImpl.structure;
+		final var structParent = (structure != null) ? structure.associateAnnotation(this, annotRef) : -1;
+
 		// Write annotation object to a separate fragment
 		try (final var objectsFlow = pdfWriterImpl.objectsFlow.forkFragment()) {
 			objectsFlow.startObject(annotRef);
@@ -229,6 +250,12 @@ class PDFPageOutputImpl extends PDFPageOutput {
 			if (params.version().isPdfA() || params.version().isPdfX()) {
 				objectsFlow.writeName("F");
 				objectsFlow.writeInt(0x04); // Print flag
+				objectsFlow.lineBreak();
+			}
+
+			if (structParent >= 0) {
+				objectsFlow.writeName("StructParent");
+				objectsFlow.writeInt(structParent);
 				objectsFlow.lineBreak();
 			}
 
@@ -363,6 +390,19 @@ class PDFPageOutputImpl extends PDFPageOutput {
 			throw new IllegalStateException(
 					(this.trimBox != null ? "TrimBox" : "ArtBox") + " must lie within the MediaBox.");
 		}
+
+		// ISO 15930: annotations must lie entirely outside the bleed area
+		// (the BleedBox, or the finished-size box when no bleed is defined).
+		// This allows proofing notes in the slug/marks area while keeping
+		// the printed area clean.
+		final var keepOut = (this.bleedBox != null) ? this.bleedBox : finished;
+		for (final var bounds : this.pdfxAnnotBounds) {
+			if (bounds.intersects(keepOut)) {
+				throw new IllegalStateException(
+						"PDF/X allows annotations only entirely outside the bleed/finished area; "
+								+ "annotation " + bounds + " intersects " + keepOut + ".");
+			}
+		}
 	}
 
 	public void close() throws IOException {
@@ -379,6 +419,14 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		if (this.structParents >= 0) {
 			this.paramsFlow.writeName("StructParents");
 			this.paramsFlow.writeInt(this.structParents);
+			this.paramsFlow.lineBreak();
+		}
+
+		// PDF/UA (ISO 14289-1 7.18.3): a page carrying annotations must set a
+		// tab order; /S follows the structure order.
+		if (this.hasAnnots) {
+			this.paramsFlow.writeName("Tabs");
+			this.paramsFlow.writeName("S");
 			this.paramsFlow.lineBreak();
 		}
 

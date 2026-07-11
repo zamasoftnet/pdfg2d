@@ -39,6 +39,10 @@
 
 ## C. テキスト（優先度: 中）
 
+> 以下 5〜9 を単発で足すのではなく、段落スコープのパイプラインへ再設計して
+> まとめて受け止める設計案を [`TEXT_PIPELINE_REDESIGN.md`](./TEXT_PIPELINE_REDESIGN.md)
+> にまとめた（box-glue-penalty 行分割 + HarfBuzz 型字形モデル + UAX #9 bidi）。
+
 5. **ハイフネーション**
    justify の既知の制限。Liang アルゴリズム + TeX パターン（LGPL 注意、または
    libhyphen 形式）で `PageLayoutGlyphHandler` の行分割候補を増やす。
