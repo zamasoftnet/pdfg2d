@@ -151,7 +151,20 @@ public class CFFGenerator {
 					}
 					final Shape shape = this.font.getShape(i);
 					if (shape == null) {
-						fonts.add(Type2OutputStream.ENDCHAR);
+						// Outline-less glyph (e.g. space). The width operand
+						// must still be encoded, otherwise the glyph falls
+						// back to defaultWidthX and no longer matches the /W
+						// array (PDF/A 6.3.6 width consistency).
+						if (defaultWidth != width) {
+							final ByteArrayOutputStream bout3 = new ByteArrayOutputStream();
+							try (final Type2OutputStream tout3 = new Type2OutputStream(bout3)) {
+								tout3.writeShort((short) (width - defaultWidth));
+								tout3.writeOperator(Type2OutputStream.ENDCHAR);
+							}
+							fonts.add(bout3.toByteArray());
+						} else {
+							fonts.add(Type2OutputStream.ENDCHAR);
+						}
 						continue;
 					}
 					try (final ByteArrayOutputStream bout3 = new ByteArrayOutputStream();

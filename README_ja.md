@@ -32,7 +32,7 @@ implementation("io.github.mimidesunya:pdfg2d-svg:1.2.0")
 
 ## 機能一覧
 * **Java 21 サポート**: 最新のJava機能を利用しています。
-* **対応PDFバージョン**: PDF 1.2 から 1.7、PDF/A-1b、PDF/X-1aに対応。
+* **対応PDFバージョン**: PDF 1.2 から 1.7、PDF/A-1b/2b/3b（veraPDF で検証済み）、PDF/X-1aに対応。
 * **高度な機能**:
     * しおり、権限設定、ビューア設定、文書情報設定。
     * 暗号化: Arcfour (RC4) および AES。

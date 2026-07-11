@@ -376,7 +376,19 @@ public class PDFGC implements GC, Closeable {
 
 	private int qDepth = 0;
 
+	/**
+	 * True while a marked-content sequence opened by this GC is active;
+	 * suppresses nested marks (e.g. fills performed inside outline text).
+	 */
+	private boolean inMark = false;
+
+	/** Alternate text for the image currently being drawn, if any. */
+	private String pendingAlt = null;
+
 	final PDFParams.Version pdfVersion;
+
+	/** True when the target profile forbids non-embedded fonts (PDF/A, PDF/X, PDF/UA). */
+	private final boolean requireEmbeddedFonts;
 
 	@SuppressWarnings("unchecked")
 	PDFGC(final PDFGraphicsOutput out, final Map<Object, String> resourceCache) {
@@ -392,7 +404,10 @@ public class PDFGC implements GC, Closeable {
 		} else {
 			this.resourceCache = resourceCache;
 		}
-		this.pdfVersion = this.out.getPdfWriter().getParams().version();
+		final var params = this.out.getPdfWriter().getParams();
+		this.pdfVersion = params.version();
+		this.requireEmbeddedFonts = this.pdfVersion.isPdfA() || this.pdfVersion.isPdfX()
+				|| (params.tagged() != null && params.tagged().pdfua());
 		this.stack.add(new GraphicsState(this));
 	}
 
@@ -667,6 +682,10 @@ public class PDFGC implements GC, Closeable {
 		}
 		try {
 			this.applyStates();
+			// Plain vector paths default to artifacts (typically decoration
+			// such as backgrounds and rules); real content is marked by
+			// drawText/drawImage.
+			final var marked = this.beginArtifactTagged();
 			final int winding;
 			if (shape instanceof Rectangle2D r) {
 				if (this.out.equals(r.getWidth(), 0.0) || this.out.equals(r.getHeight(), 0.0)) {
@@ -686,6 +705,7 @@ public class PDFGC implements GC, Closeable {
 				default -> throw new IllegalStateException("Unknown winding rule: " + winding);
 			};
 			this.out.writeOperator(operator);
+			this.endTagged(marked);
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		}
@@ -698,6 +718,7 @@ public class PDFGC implements GC, Closeable {
 		}
 		try {
 			this.applyStates();
+			final var marked = this.beginArtifactTagged();
 			final boolean close;
 			if (shape instanceof Rectangle2D r) {
 				close = false;
@@ -708,6 +729,7 @@ public class PDFGC implements GC, Closeable {
 			}
 
 			this.out.writeOperator(close ? "s" : "S");
+			this.endTagged(marked);
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		}
@@ -720,6 +742,7 @@ public class PDFGC implements GC, Closeable {
 		}
 		try {
 			this.applyStates();
+			final var marked = this.beginArtifactTagged();
 			final int winding;
 			final boolean close;
 			if (shape instanceof Rectangle2D r) {
@@ -738,6 +761,7 @@ public class PDFGC implements GC, Closeable {
 				default -> throw new IllegalStateException("Unknown winding rule: " + winding);
 			};
 			this.out.writeOperator(operator);
+			this.endTagged(marked);
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		}
@@ -753,13 +777,23 @@ public class PDFGC implements GC, Closeable {
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		}
-		image.drawTo(this);
+		this.pendingAlt = image.getAltString();
+		try {
+			image.drawTo(this);
+		} finally {
+			this.pendingAlt = null;
+		}
 	}
 
 	public void drawPDFImage(final String name, final double width, final double height) throws GraphicsException {
 		try {
 			this.applyStates();
 			this.begin();
+
+			// Images are real content: tag as Figure with an alternate
+			// description when available.
+			final var alt = (this.pendingAlt != null) ? this.pendingAlt : "Image";
+			final var mcid = this.beginTagged("Figure", alt);
 
 			this.gsave();
 			this.out.writeReal(width);
@@ -774,6 +808,7 @@ public class PDFGC implements GC, Closeable {
 			this.out.writeOperator("Do");
 
 			this.end();
+			this.endTagged(mcid >= 0);
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		}
@@ -788,6 +823,24 @@ public class PDFGC implements GC, Closeable {
 			return;
 		}
 
+		final int textMcid;
+		try {
+			textMcid = this.beginTagged("P", null);
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+		try {
+			this.drawTextContent(text, x, y);
+		} finally {
+			try {
+				this.endTagged(textMcid >= 0);
+			} catch (IOException e) {
+				throw new GraphicsException(e);
+			}
+		}
+	}
+
+	private void drawTextContent(final Text text, final double x, final double y) throws GraphicsException {
 		final var font = ((FontMetricsImpl) text.getFontMetrics()).getFont();
 		final var fpl = text.getFontStyle().getPolicy();
 		boolean outline = false;
@@ -841,11 +894,10 @@ public class PDFGC implements GC, Closeable {
 
 			FontMetricsImpl fm = (FontMetricsImpl) text.getFontMetrics();
 			PDFFontSource source = (PDFFontSource) fm.getFontSource();
-			if (this.pdfVersion.v == PDFParams.Version.V_PDFA1B.v
-					|| this.pdfVersion.v == PDFParams.Version.V_PDFX1A.v) {
+			if (this.requireEmbeddedFonts) {
 				Type type = source.getType();
 				if (type != Type.EMBEDDED && type != Type.MISSING) {
-					throw new IllegalStateException("Only embedded fonts can be used in PDF/A-1 or PDF/X-1a.");
+					throw new IllegalStateException("Only embedded fonts can be used in PDF/A, PDF/X or PDF/UA.");
 				}
 			}
 			FontStyle fontStyle = text.getFontStyle();
@@ -1026,6 +1078,42 @@ public class PDFGC implements GC, Closeable {
 	}
 
 	/**
+	 * Opens a real-content marked-content sequence when this GC draws onto a
+	 * page of a tagged document. Nested calls are suppressed.
+	 *
+	 * @return the MCID, or {@code -1} when nothing was opened
+	 */
+	private int beginTagged(final String role, final String alt) throws IOException {
+		if (this.inMark) {
+			return -1;
+		}
+		final var mcid = this.out.beginMark(role, alt);
+		if (mcid >= 0) {
+			this.inMark = true;
+		}
+		return mcid;
+	}
+
+	/** Opens an artifact sequence (decorative content) when tagged. */
+	private boolean beginArtifactTagged() throws IOException {
+		if (this.inMark) {
+			return false;
+		}
+		final var began = this.out.beginArtifact();
+		if (began) {
+			this.inMark = true;
+		}
+		return began;
+	}
+
+	private void endTagged(final boolean began) throws IOException {
+		if (began) {
+			this.out.endMark();
+			this.inMark = false;
+		}
+	}
+
+	/**
 	 * Outputs the current transform instruction (cm) and clears the transform
 	 * buffer.
 	 *
@@ -1185,9 +1273,7 @@ public class PDFGC implements GC, Closeable {
 		}
 
 		// Opacity
-		final var supportAlpha = this.pdfVersion.v >= PDFParams.Version.V_1_4.v
-				&& this.pdfVersion.v != PDFParams.Version.V_PDFA1B.v
-				&& this.pdfVersion.v != PDFParams.Version.V_PDFX1A.v;
+		final var supportAlpha = this.pdfVersion.allowsTransparency();
 		// When transparency is supported
 		if ((supportAlpha && (!this.out.equals(this.strokeAlpha, this.xstrokeAlpha)
 				|| !this.out.equals(this.fillAlpha, this.xfillAlpha)))

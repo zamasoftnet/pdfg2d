@@ -38,6 +38,7 @@ import net.zamasoft.pdfg2d.pdf.action.Action;
 import net.zamasoft.pdfg2d.pdf.font.FontManagerImpl;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGroupImage;
 import net.zamasoft.pdfg2d.pdf.params.EncryptionParams;
+import net.zamasoft.pdfg2d.pdf.params.OutputIntent;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.params.V4EncryptionParams;
 import net.zamasoft.pdfg2d.pdf.params.ViewerPreferences;
@@ -66,18 +67,6 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	protected static final int BUFFER_SIZE = 8192;
 
 	private static final byte[] HEADER = { '%', 'P', 'D', 'F', '-' };
-
-	private static final byte[] PDF12 = { '1', '.', '2' };
-
-	private static final byte[] PDF13 = { '1', '.', '3' };
-
-	private static final byte[] PDF14 = { '1', '.', '4' };
-
-	private static final byte[] PDF15 = { '1', '.', '5' };
-
-	private static final byte[] PDF16 = { '1', '.', '6' };
-
-	private static final byte[] PDF17 = { '1', '.', '7' };
 
 	final FragmentedOutput builder;
 
@@ -153,6 +142,15 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 	private List<ObjectRef> ocgs = null;
 
+	/** Filespec references for the PDF/A-3 catalog /AF (associated files) array. */
+	private List<ObjectRef> afRefs = null;
+
+	/** Logical structure collector for tagged PDF output, or {@code null}. */
+	final StructureTreeBuilder structure;
+
+	/** PDF/VT document part hierarchy references, or {@code null}. */
+	ObjectRef dpartRootRef, dpartNodeRef, dpartLeafRef;
+
 	private ObjectRef linDictRef;
 	private PDFFragmentOutputImpl linDictFlow;
 
@@ -162,6 +160,22 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.params = (params != null) ? params : PDFParams.createDefault();
 		this.builder = builder.supportsPositionInfo() ? builder : new PositionTrackingOutput(builder);
 
+		// PDF/A-1 forbids JavaScript actions and PDF/X forbids actions
+		// entirely; the only supported open action is JavaScript, so reject
+		// the combination up front rather than emitting a non-conformant file.
+		if (this.params.openAction() != null
+				&& (this.params.version().isPdfA() || this.params.version().isPdfX())) {
+			throw new IllegalArgumentException("OpenAction is not allowed in PDF/A or PDF/X.");
+		}
+
+		final var tagged = this.params.tagged();
+		this.structure = (tagged != null) ? new StructureTreeBuilder() : null;
+		if (tagged != null && tagged.pdfua()) {
+			// PDF/UA requires the window title to come from the document
+			// title rather than the file name.
+			this.params.viewerPreferences().setDisplayDocTitle(true);
+		}
+
 		final var id = this.nextId();
 		this.builder.addFragment();
 		final var out = new FragmentOutputAdapter(this.builder, id);
@@ -170,22 +184,15 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		// Header
 		final var pdfVersion = this.params.version();
 		this.mainFlow.write(HEADER);
-		switch (pdfVersion) {
-			case V_1_2 -> this.mainFlow.write(PDF12);
-			case V_1_3 -> this.mainFlow.write(PDF13);
-			case V_1_4, V_PDFX1A -> this.mainFlow.write(PDF14);
-			case V_PDFA1B -> {
-				this.mainFlow.write(PDF14);
-				this.mainFlow.lineBreak();
-				// PDF/A-1 binary identification
-				this.mainFlow.write('%');
-				for (var i = 0; i < 4; ++i) {
-					this.mainFlow.write(RND.nextInt(128) + 127);
-				}
-			}
-			case V_1_5 -> this.mainFlow.write(PDF15);
-			case V_1_6 -> this.mainFlow.write(PDF16);
-			case V_1_7 -> this.mainFlow.write(PDF17);
+		this.mainFlow.write(pdfVersion.baseVersion().getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+		this.mainFlow.lineBreak();
+		// Binary identification comment: four bytes with values above 127
+		// mark the file as binary for transfer tools. Required in practice by
+		// PDF/A and PDF/X validators and recommended for every PDF.
+		// (128..255: the spec demands strictly greater than 127.)
+		this.mainFlow.write('%');
+		for (var i = 0; i < 4; ++i) {
+			this.mainFlow.write(RND.nextInt(128) + 128);
 		}
 		this.mainFlow.lineBreak();
 
@@ -195,6 +202,14 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 		// Start root element (Catalog)
 		this.xref = new XRefImpl(this.mainFlow);
+
+		// PDF/VT: pages reference their document part, so the (minimal,
+		// single-part) DPart hierarchy is allocated up front.
+		if (pdfVersion.isPdfVT()) {
+			this.dpartRootRef = this.xref.nextObjectRef();
+			this.dpartNodeRef = this.xref.nextObjectRef();
+			this.dpartLeafRef = this.xref.nextObjectRef();
+		}
 
 		if (this.params.linearized()) {
 			this.linDictRef = this.xref.nextObjectRef();
@@ -207,30 +222,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.mainFlow.writeName("Catalog");
 		this.mainFlow.lineBreak();
 
-		// Version
-		if (pdfVersion.v >= PDFParams.Version.V_1_4.v) {
+		// Version (deprecated in PDF 2.0, where the header is authoritative)
+		if (pdfVersion.v >= PDFParams.Version.V_1_4.v && pdfVersion.v < PDFParams.Version.V_2_0.v) {
 			this.mainFlow.writeName("Version");
-			switch (pdfVersion) {
-				case V_1_4:
-				case V_PDFA1B:
-				case V_PDFX1A:
-					this.mainFlow.writeName("1.4");
-					break;
-
-				case V_1_5:
-					this.mainFlow.writeName("1.5");
-					break;
-
-				case V_1_6:
-					this.mainFlow.writeName("1.6");
-					break;
-
-				case V_1_7:
-					this.mainFlow.writeName("1.7");
-					break;
-				default:
-					throw new IllegalStateException();
-			}
+			this.mainFlow.writeName(pdfVersion.baseVersion());
 			this.mainFlow.lineBreak();
 		}
 
@@ -278,8 +273,11 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		// Encryption
 		final var encryptionParams = this.params.encryption();
 		if (encryptionParams != null) {
-			if (pdfVersion == PDFParams.Version.V_PDFA1B) {
-				throw new IllegalArgumentException("Encryption cannot be used in PDF/A-1.");
+			if (pdfVersion.isPdfA()) {
+				throw new IllegalArgumentException("Encryption cannot be used in PDF/A.");
+			}
+			if (pdfVersion.isPdfX()) {
+				throw new IllegalArgumentException("Encryption cannot be used in PDF/X.");
 			}
 			final var encType = encryptionParams.getType();
 			if (encType == EncryptionParams.Type.V2 && pdfVersion.v < PDFParams.Version.V_1_3.v) {
@@ -317,46 +315,70 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			this.mainFlow.lineBreak();
 
 			this.mainFlow.writeName("S");
-			this.mainFlow.writeName(pdfVersion == PDFParams.Version.V_PDFA1B ? "GTS_PDFA1" : "GTS_PDFX");
+			this.mainFlow.writeName(pdfVersion.isPdfX() ? "GTS_PDFX" : "GTS_PDFA1");
 			this.mainFlow.lineBreak();
 
-			String iccName, iccFile;
-			int colors;
-			if (pdfVersion == PDFParams.Version.V_PDFX1A) {
-				iccName = "Probe Profile";
-				iccFile = "Probev1_ICCv2.icc";
-				colors = 4;
-			} else {
-				iccName = "sRGB IEC61966-2.1";
-				iccFile = "sRGB_IEC61966-2-1_no_black_scaling.icc";
-				colors = 3;
+			// Resolve the intent: explicit configuration wins; otherwise a
+			// built-in profile is chosen so that the intent's color space
+			// matches the device color space actually emitted (PDF/A-1
+			// requires DeviceRGB/DeviceCMYK content to be backed by an
+			// output intent of the same type).
+			var intent = this.params.outputIntent();
+			if (intent == null) {
+				if (pdfVersion == PDFParams.Version.V_PDFX1A
+						|| this.params.colorMode() == PDFParams.ColorMode.CMYK) {
+					intent = new OutputIntent("Probe Profile", null, null, "Probe CMYK profile",
+							loadResource("Probev1_ICCv2.icc"), 4);
+				} else {
+					intent = new OutputIntent("sRGB IEC61966-2.1", null, null, null,
+							loadResource("sRGB_IEC61966-2-1_no_black_scaling.icc"), 3);
+				}
 			}
 
 			this.mainFlow.writeName("OutputConditionIdentifier");
-			this.mainFlow.writeString(iccName);
+			this.mainFlow.writeString(intent.outputConditionIdentifier());
 			this.mainFlow.lineBreak();
 
-			final var profRef = this.xref.nextObjectRef();
-			this.mainFlow.writeName("DestOutputProfile");
-			this.mainFlow.writeObjectRef(profRef);
-			this.mainFlow.lineBreak();
+			if (intent.outputCondition() != null) {
+				this.mainFlow.writeName("OutputCondition");
+				this.mainFlow.writeText(intent.outputCondition());
+				this.mainFlow.lineBreak();
+			}
 
-			this.mainFlow.endHash();
-			this.mainFlow.endObject();
+			if (intent.registryName() != null) {
+				this.mainFlow.writeName("RegistryName");
+				this.mainFlow.writeString(intent.registryName());
+				this.mainFlow.lineBreak();
+			}
 
-			this.mainFlow.startObject(profRef);
-			this.mainFlow.startHash();
+			if (intent.info() != null) {
+				this.mainFlow.writeName("Info");
+				this.mainFlow.writeText(intent.info());
+				this.mainFlow.lineBreak();
+			}
 
-			this.mainFlow.writeName("N");
-			this.mainFlow.writeInt(colors);
-			this.mainFlow.lineBreak();
+			final var profileData = intent.iccProfile();
+			if (profileData != null) {
+				final var profRef = this.xref.nextObjectRef();
+				this.mainFlow.writeName("DestOutputProfile");
+				this.mainFlow.writeObjectRef(profRef);
+				this.mainFlow.lineBreak();
 
-			try (final var pout = this.mainFlow.startStreamFromHash(PDFFragmentOutput.Mode.BINARY);
-					final var in = PDFWriterImpl.class.getResourceAsStream(iccFile)) {
-				final var buff = this.mainFlow.getBuffer();
-				for (int len = in.read(buff); len != -1; len = in.read(buff)) {
-					pout.write(buff, 0, len);
+				this.mainFlow.endHash();
+				this.mainFlow.endObject();
+
+				this.mainFlow.startObject(profRef);
+				this.mainFlow.startHash();
+
+				this.mainFlow.writeName("N");
+				this.mainFlow.writeInt(intent.colorComponents());
+				this.mainFlow.lineBreak();
+
+				try (final var pout = this.mainFlow.startStreamFromHash(PDFFragmentOutput.Mode.BINARY)) {
+					pout.write(profileData);
 				}
+			} else {
+				this.mainFlow.endHash();
 			}
 			this.mainFlow.endObject();
 		}
@@ -379,36 +401,60 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		};
 
 		// Attachments
-		if (pdfVersion.v >= PDFParams.Version.V_1_4.v && pdfVersion.v != PDFParams.Version.V_PDFA1B.v) {
+		// Attachment permission depends on the profile: forbidden in PDF/A-1,
+		// PDF/A-2 and PDF/X; allowed with AFRelationship in PDF/A-3 and A-4f.
+		if (pdfVersion.allowsAttachments()) {
 			this.embeddedFiles = new NameTreeFlow(this, "EmbeddedFiles") {
 				@Override
 				protected void writeEntry(final Object entry) throws IOException {
-					this.out.startHash();
-					this.out.writeName("Type");
-					this.out.writeName("Filespec");
-					this.out.lineBreak();
+					// The filespec is written as an indirect object so that the
+					// PDF/A-3 catalog /AF array can reference the same object,
+					// making the attachment an "associated file".
+					final var specRef = PDFWriterImpl.this.xref.nextObjectRef();
+					if (PDFWriterImpl.this.afRefs == null) {
+						PDFWriterImpl.this.afRefs = new ArrayList<>();
+					}
+					PDFWriterImpl.this.afRefs.add(specRef);
+					this.out.writeObjectRef(specRef);
+
+					final var flow = PDFWriterImpl.this.objectsFlow;
+					flow.startObject(specRef);
+					flow.startHash();
+					flow.writeName("Type");
+					flow.writeName("Filespec");
+					flow.lineBreak();
 
 					final var spec = (Filespec) entry;
 					final var att = spec.attachment();
 
-					this.out.writeName("F");
-					this.out.writeFileName(new String[] { spec.name() },
+					flow.writeName("F");
+					flow.writeFileName(new String[] { spec.name() },
 							PDFWriterImpl.this.params.platformEncoding());
-					this.out.lineBreak();
+					flow.lineBreak();
 
-					if (pdfVersion.v >= PDFParams.Version.V_1_7.v && att.description() != null) {
-						this.out.writeName("UF");
-						this.out.writeUTF16(att.description());
-						this.out.lineBreak();
+					if (pdfVersion.v >= PDFParams.Version.V_1_7.v
+							&& (att.description() != null || pdfVersion.isPdfA())) {
+						flow.writeName("UF");
+						flow.writeUTF16(att.description() != null ? att.description() : spec.name());
+						flow.lineBreak();
 					}
 
-					this.out.writeName("EF");
-					this.out.startHash();
-					this.out.writeName("F");
-					this.out.writeObjectRef(spec.ref());
-					this.out.endHash();
+					if (pdfVersion.isPdfA()) {
+						// ISO 19005-3 requires every embedded file to declare its
+						// relationship to the document content.
+						flow.writeName("AFRelationship");
+						flow.writeName("Unspecified");
+						flow.lineBreak();
+					}
 
-					this.out.endHash();
+					flow.writeName("EF");
+					flow.startHash();
+					flow.writeName("F");
+					flow.writeObjectRef(spec.ref());
+					flow.endHash();
+
+					flow.endHash();
+					flow.endObject();
 				}
 			};
 		} else {
@@ -469,6 +515,23 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	 */
 	protected int nextId() {
 		return this.sequence++;
+	}
+
+	/**
+	 * Loads a classpath resource bundled with this library (e.g. a built-in
+	 * ICC profile) into a byte array.
+	 *
+	 * @param name the resource name relative to this class
+	 * @return the resource contents
+	 * @throws IOException if the resource is missing or cannot be read
+	 */
+	private static byte[] loadResource(final String name) throws IOException {
+		try (final var in = PDFWriterImpl.class.getResourceAsStream(name)) {
+			if (in == null) {
+				throw new IOException("Missing bundled resource: " + name);
+			}
+			return in.readAllBytes();
+		}
 	}
 
 	ObjectRef ensurePageResourceRef() {
@@ -596,13 +659,19 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		objectsFlow.writeInt(1);
 		objectsFlow.lineBreak();
 
-		objectsFlow.writeName("Group");
-		objectsFlow.startHash();
-		objectsFlow.writeName("Type");
-		objectsFlow.writeName("Group");
-		objectsFlow.writeName("S");
-		objectsFlow.writeName("Transparency");
-		objectsFlow.endHash();
+		// PDF/A-1 and PDF/X-1a forbid transparency, including transparency
+		// group XObjects; emit a plain Form XObject there instead. Alpha and
+		// soft masks are suppressed for these targets elsewhere, so the group
+		// semantics are not needed.
+		if (this.params.version().allowsTransparency()) {
+			objectsFlow.writeName("Group");
+			objectsFlow.startHash();
+			objectsFlow.writeName("Type");
+			objectsFlow.writeName("Group");
+			objectsFlow.writeName("S");
+			objectsFlow.writeName("Transparency");
+			objectsFlow.endHash();
+		}
 
 		objectsFlow.writeName("Resources");
 		final var newResourceFlow = new ResourceFlow(objectsFlow);
@@ -785,11 +854,9 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		if (this.params.version().v < PDFParams.Version.V_1_4.v) {
 			throw new UnsupportedOperationException("File attachment requires PDF 1.4 or later.");
 		}
-		if (this.params.version() == PDFParams.Version.V_PDFA1B) {
-			throw new UnsupportedOperationException("File attachment cannot be used in PDF/A.");
-		}
-		if (this.params.version() == PDFParams.Version.V_PDFX1A) {
-			throw new UnsupportedOperationException("File attachment cannot be used in PDF/X.");
+		if (!this.params.version().allowsAttachments()) {
+			throw new UnsupportedOperationException(
+					"File attachments are not allowed in " + this.params.version() + ".");
 		}
 
 		var desc = attachment.description();
@@ -809,9 +876,12 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		objectsFlow.writeName("EmbeddedFile");
 		objectsFlow.lineBreak();
 
-		if (attachment.mimeType() != null) {
+		// PDF/A-3 requires embedded file streams to declare a MIME subtype.
+		final var mimeType = (attachment.mimeType() != null) ? attachment.mimeType()
+				: (this.params.version().isPdfA() ? "application/octet-stream" : null);
+		if (mimeType != null) {
 			objectsFlow.writeName("Subtype");
-			objectsFlow.writeName(attachment.mimeType());
+			objectsFlow.writeName(mimeType);
 			objectsFlow.lineBreak();
 		}
 
@@ -872,6 +942,87 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		return this.pages.createPage(width, height);
 	}
 
+	/**
+	 * Writes the document information dictionary and returns its reference.
+	 * For PDF/X profiles the {@code GTS_PDFXVersion} identification is
+	 * included as required by ISO 15930.
+	 *
+	 * @return the reference of the written Info dictionary
+	 * @throws IOException if an I/O error occurs
+	 */
+	private ObjectRef writeDocumentInfo(final String author, final String creator, final String producer,
+			final String title, final String subject, final String keywords, final long create, final long modify)
+			throws IOException {
+		final var zone = TimeZone.getDefault();
+		final var infoRef = this.xref.nextObjectRef();
+		this.objectsFlow.startObject(infoRef);
+		this.objectsFlow.startHash();
+
+		final var pdfxVersion = this.params.version().pdfxVersion();
+		if (pdfxVersion != null) {
+			this.objectsFlow.writeName("GTS_PDFXVersion");
+			this.objectsFlow.writeText(pdfxVersion);
+			this.objectsFlow.lineBreak();
+		}
+		if (this.params.version().isPdfVT()) {
+			this.objectsFlow.writeName("GTS_PDFVTVersion");
+			this.objectsFlow.writeText("PDF/VT-1");
+			this.objectsFlow.lineBreak();
+		}
+
+		if (author != null) {
+			this.objectsFlow.writeName("Author");
+			this.objectsFlow.writeText(author);
+			this.objectsFlow.lineBreak();
+		}
+
+		this.objectsFlow.writeName("CreationDate");
+		this.objectsFlow.writeDate(create, zone);
+		this.objectsFlow.lineBreak();
+
+		this.objectsFlow.writeName("ModDate");
+		this.objectsFlow.writeDate(modify, zone);
+		this.objectsFlow.lineBreak();
+
+		if (creator != null) {
+			this.objectsFlow.writeName("Creator");
+			this.objectsFlow.writeText(creator);
+			this.objectsFlow.lineBreak();
+		}
+
+		if (producer != null) {
+			this.objectsFlow.writeName("Producer");
+			this.objectsFlow.writeText(producer);
+			this.objectsFlow.lineBreak();
+		}
+
+		if (title != null) {
+			this.objectsFlow.writeName("Title");
+			this.objectsFlow.writeText(title);
+			this.objectsFlow.lineBreak();
+		}
+
+		if (subject != null) {
+			this.objectsFlow.writeName("Subject");
+			this.objectsFlow.writeText(subject);
+			this.objectsFlow.lineBreak();
+		}
+
+		if (keywords != null) {
+			this.objectsFlow.writeName("Keywords");
+			this.objectsFlow.writeText(keywords);
+			this.objectsFlow.lineBreak();
+		}
+
+		this.objectsFlow.writeName("Trapped");
+		this.objectsFlow.writeName("False");
+		this.objectsFlow.lineBreak();
+
+		this.objectsFlow.endHash();
+		this.objectsFlow.endObject();
+		return infoRef;
+	}
+
 	public void close() throws IOException {
 		try {
 			// Meta Info
@@ -883,86 +1034,36 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			var title = info.getTitle();
 			final var subject = info.getSubject();
 			final var keywords = info.getKeywords();
-			final var zone = TimeZone.getDefault();
 			var create = info.getCreationDate();
 			if (create == -1L) {
 				create = System.currentTimeMillis();
 			}
 			var modify = info.getModDate();
-
-			final var infoRef = this.xref.nextObjectRef();
-			this.objectsFlow.startObject(infoRef);
-			this.objectsFlow.startHash();
-
-			if (this.params.version() == PDFParams.Version.V_PDFX1A) {
-				if (title == null || title.isEmpty()) {
-					title = "Untitled";
-				}
-				this.objectsFlow.writeName("GTS_PDFXVersion");
-				this.objectsFlow.writeText("PDF/X-1a:2003");
-				this.objectsFlow.lineBreak();
-			}
-
-			if (author != null) {
-				this.objectsFlow.writeName("Author");
-				this.objectsFlow.writeText(author);
-				this.objectsFlow.lineBreak();
-			}
-
-			this.objectsFlow.writeName("CreationDate");
-			this.objectsFlow.writeDate(create, zone);
-			this.objectsFlow.lineBreak();
-
 			if (modify == -1L) {
 				modify = create;
 			}
-			this.objectsFlow.writeName("ModDate");
-			this.objectsFlow.writeDate(modify, zone);
-			this.objectsFlow.lineBreak();
 
-			if (creator != null) {
-				this.objectsFlow.writeName("Creator");
-				this.objectsFlow.writeText(creator);
-				this.objectsFlow.lineBreak();
+			final var taggedParams = this.params.tagged();
+			if ((this.params.version().isPdfX() || (taggedParams != null && taggedParams.pdfua()))
+					&& (title == null || title.isEmpty())) {
+				title = "Untitled";
 			}
 
-			if (producer != null) {
-				this.objectsFlow.writeName("Producer");
-				this.objectsFlow.writeText(producer);
-				this.objectsFlow.lineBreak();
+			// PDF/A-4 (PDF 2.0 based) forbids the document information
+			// dictionary; all metadata lives in the XMP packet instead.
+			final ObjectRef infoRef;
+			if (this.params.version().pdfaPart() == 4) {
+				infoRef = null;
+			} else {
+				infoRef = this.writeDocumentInfo(author, creator, producer, title, subject, keywords, create, modify);
 			}
-
-			if (title != null) {
-				this.objectsFlow.writeName("Title");
-				this.objectsFlow.writeText(title);
-				this.objectsFlow.lineBreak();
-			}
-
-			if (subject != null) {
-				this.objectsFlow.writeName("Subject");
-				this.objectsFlow.writeText(subject);
-				this.objectsFlow.lineBreak();
-			}
-
-			if (keywords != null) {
-				this.objectsFlow.writeName("Keywords");
-				this.objectsFlow.writeText(keywords);
-				this.objectsFlow.lineBreak();
-			}
-
-			this.objectsFlow.writeName("Trapped");
-			this.objectsFlow.writeName("False");
-			this.objectsFlow.lineBreak();
-
-			this.objectsFlow.endHash();
-			this.objectsFlow.endObject();
 
 			// XML Metadata
 			if (this.xmpmetaFlow != null) {
-				XMPMetadataWriter.write(this.xmpmetaFlow, this.params.version(), author, creator, producer, title,
+				XMPMetadataWriter.write(this.xmpmetaFlow, this.params.version(),
+						taggedParams != null && taggedParams.pdfua(), author, creator, producer, title,
 						keywords, create, modify);
 			}
-
 			// Catalog - Page Info
 			this.pages.close();
 
@@ -982,8 +1083,89 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			// Name Dictionary
 			this.nameDict.close();
 
+			// Associated files (PDF/A-3): every embedded file must be linked
+			// from the catalog /AF array to qualify as an associated file.
+			if (this.params.version().isPdfA() && this.afRefs != null) {
+				this.catalogFlow.writeName("AF");
+				this.catalogFlow.startArray();
+				for (final var afRef : this.afRefs) {
+					this.catalogFlow.writeObjectRef(afRef);
+				}
+				this.catalogFlow.endArray();
+				this.catalogFlow.lineBreak();
+			}
+
 			// OCGs
 			this.writeOCProperties();
+
+			// PDF/VT document part hierarchy: a minimal tree whose single
+			// leaf spans all pages. Callers producing per-recipient parts can
+			// be supported later via an explicit DPart API.
+			if (this.dpartRootRef != null && !this.pageOutputs.isEmpty()) {
+				this.catalogFlow.writeName("DPartRoot");
+				this.catalogFlow.writeObjectRef(this.dpartRootRef);
+				this.catalogFlow.lineBreak();
+
+				this.objectsFlow.startObject(this.dpartRootRef);
+				this.objectsFlow.startHash();
+				this.objectsFlow.writeName("Type");
+				this.objectsFlow.writeName("DPartRoot");
+				this.objectsFlow.writeName("DPartRootNode");
+				this.objectsFlow.writeObjectRef(this.dpartNodeRef);
+				this.objectsFlow.endHash();
+				this.objectsFlow.endObject();
+
+				this.objectsFlow.startObject(this.dpartNodeRef);
+				this.objectsFlow.startHash();
+				this.objectsFlow.writeName("Type");
+				this.objectsFlow.writeName("DPart");
+				this.objectsFlow.writeName("Parent");
+				this.objectsFlow.writeObjectRef(this.dpartRootRef);
+				this.objectsFlow.writeName("DParts");
+				this.objectsFlow.startArray();
+				this.objectsFlow.startArray();
+				this.objectsFlow.writeObjectRef(this.dpartLeafRef);
+				this.objectsFlow.endArray();
+				this.objectsFlow.endArray();
+				this.objectsFlow.endHash();
+				this.objectsFlow.endObject();
+
+				this.objectsFlow.startObject(this.dpartLeafRef);
+				this.objectsFlow.startHash();
+				this.objectsFlow.writeName("Type");
+				this.objectsFlow.writeName("DPart");
+				this.objectsFlow.writeName("Parent");
+				this.objectsFlow.writeObjectRef(this.dpartNodeRef);
+				this.objectsFlow.writeName("Start");
+				this.objectsFlow.writeObjectRef(this.pageOutputs.get(0).getPageRef());
+				if (this.pageOutputs.size() > 1) {
+					this.objectsFlow.writeName("End");
+					this.objectsFlow.writeObjectRef(
+							this.pageOutputs.get(this.pageOutputs.size() - 1).getPageRef());
+				}
+				this.objectsFlow.endHash();
+				this.objectsFlow.endObject();
+			}
+
+			// Logical structure (tagged PDF)
+			if (this.structure != null) {
+				final var structRootRef = this.structure.writeTo(this.objectsFlow, this.xref);
+				this.catalogFlow.writeName("StructTreeRoot");
+				this.catalogFlow.writeObjectRef(structRootRef);
+				this.catalogFlow.lineBreak();
+				this.catalogFlow.writeName("MarkInfo");
+				this.catalogFlow.startHash();
+				this.catalogFlow.writeName("Marked");
+				this.catalogFlow.writeBoolean(true);
+				this.catalogFlow.endHash();
+				this.catalogFlow.lineBreak();
+				final var lang = this.params.tagged().lang();
+				if (lang != null) {
+					this.catalogFlow.writeName("Lang");
+					this.catalogFlow.writeString(lang);
+					this.catalogFlow.lineBreak();
+				}
+			}
 
 			// ViewerPreferences
 			ViewerPreferencesWriter.write(this.catalogFlow, this.params);
@@ -1057,12 +1239,33 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 		this.objectsFlow.writeName("D");
 		this.objectsFlow.startHash();
+		this.objectsFlow.writeName("Name");
+		this.objectsFlow.writeText("Default");
 		this.objectsFlow.writeName("ON");
 		this.objectsFlow.startArray();
 		for (final var ocgRef : this.ocgs) {
 			this.objectsFlow.writeObjectRef(ocgRef);
 		}
 		this.objectsFlow.endArray();
+		// PDF/A forbids the usage application dictionaries (/AS); without
+		// them the per-OCG /Usage states are informational only.
+		if (!this.params.version().isPdfA()) {
+			this.writeOCUsageApplications();
+		}
+		this.objectsFlow.endHash();
+
+		this.objectsFlow.endHash();
+		this.objectsFlow.endObject();
+	}
+
+	/**
+	 * Writes the usage application dictionaries ({@code /AS}) that make
+	 * viewers apply each OCG's {@code /Usage} states for the View and Print
+	 * events automatically.
+	 *
+	 * @throws IOException if an I/O error occurs
+	 */
+	private void writeOCUsageApplications() throws IOException {
 		this.objectsFlow.writeName("AS");
 		this.objectsFlow.startArray();
 
@@ -1097,9 +1300,5 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.objectsFlow.endHash();
 
 		this.objectsFlow.endArray();
-		this.objectsFlow.endHash();
-
-		this.objectsFlow.endHash();
-		this.objectsFlow.endObject();
 	}
 }

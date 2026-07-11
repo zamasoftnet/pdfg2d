@@ -13,6 +13,8 @@ dependencies {
     implementation 'xml-apis:xml-apis:1.4.01'
     implementation 'org.apache.pdfbox:pdfbox:3.0.7'
     implementation 'de.rototor.pdfbox:graphics2d:3.0.5'
+    // veraPDF (greenfield parser) for automated PDF/A conformance validation
+    testImplementation 'org.verapdf:validation-model:1.26.5'
 }
 
 publishing {

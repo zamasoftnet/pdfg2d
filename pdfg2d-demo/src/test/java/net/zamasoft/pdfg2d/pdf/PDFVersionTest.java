@@ -37,28 +37,15 @@ public class PDFVersionTest {
         try (final var doc = Loader.loadPDF(tempFile)) {
             final var pdfVersion = doc.getVersion();
             // Map our enum to float version
-            final var expected = switch (version) {
-                case V_1_2 -> 1.2f;
-                case V_1_3 -> 1.3f;
-                case V_1_4, V_PDFA1B, V_PDFX1A -> 1.4f; // PDF/A-1b and PDF/X-1a are based on 1.4
-                case V_1_5 -> 1.5f;
-                case V_1_6 -> 1.6f;
-                case V_1_7 -> 1.7f;
-            };
+            // Derived from the profile metadata so new versions are covered
+            // automatically.
+            final var expected = Float.parseFloat(version.baseVersion());
 
             Assertions.assertEquals(expected, pdfVersion, 0.001f, "PDF Version mismatch for " + version);
         }
     }
 
     private static Stream<Version> provideVersions() {
-        return Stream.of(
-                Version.V_1_2,
-                Version.V_1_3,
-                Version.V_1_4,
-                Version.V_1_5,
-                Version.V_1_6,
-                Version.V_1_7,
-                Version.V_PDFA1B,
-                Version.V_PDFX1A);
+        return Stream.of(Version.values());
     }
 }

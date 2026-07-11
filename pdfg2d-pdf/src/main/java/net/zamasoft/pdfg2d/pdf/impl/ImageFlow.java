@@ -257,8 +257,7 @@ class ImageFlow {
 			final PDFParams.Compression streamCompression = this.params.compression();
 			final PDFParams.ImageCompression imageCompression = this.params.imageCompression();
 			final PDFParams.Version pdfVersion = this.params.version();
-			final boolean softMaskSupport = pdfVersion.v >= PDFParams.Version.V_1_4.v
-					&& pdfVersion.v != PDFParams.Version.V_PDFA1B.v && pdfVersion.v != PDFParams.Version.V_PDFX1A.v;
+			final boolean softMaskSupport = pdfVersion.allowsTransparency();
 			final boolean jpeg2000Support = pdfVersion.v >= PDFParams.Version.V_1_5.v;
 			PDFParams.ImageCompression imageType = PDFParams.ImageCompression.FLATE;
 

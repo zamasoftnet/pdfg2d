@@ -103,4 +103,19 @@ public abstract class PDFPageOutput extends PDFGraphicsOutput {
 	 * @param artBox the art box rectangle, or {@code null}
 	 */
 	public abstract void setArtBox(Rectangle2D artBox);
+
+	/**
+	 * Opens a logical structure element in a tagged PDF; content drawn until
+	 * the matching {@link #endStructElement()} is attached to it. No-op for
+	 * untagged documents. May be nested.
+	 *
+	 * @param role the structure type (e.g. {@code "P"}, {@code "H1"},
+	 *             {@code "Table"}, {@code "Figure"})
+	 */
+	public void beginStructElement(final String role) {
+	}
+
+	/** Closes the innermost structure element opened by {@link #beginStructElement}. */
+	public void endStructElement() {
+	}
 }

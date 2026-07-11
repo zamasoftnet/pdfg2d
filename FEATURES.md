@@ -92,7 +92,12 @@ pdfg2d は、Java の `Graphics2D`/独自 `GC` API を PDF 出力へ変換する
   - 保存後の構文検証は Rust 側テストヘルパーで実行
 
 ## PDF 文書機能
-- PDF 1.2 から 1.7、PDF/A-1b、PDF/X-1a を出力できます。
+- PDF 1.2〜1.7 および PDF 2.0 を出力できます。
+- アーカイブ/アクセシビリティ: PDF/A-1b、2b/2u/2a、3b/3u/3a、4/4f、PDF/UA-1（すべて veraPDF 自動検証テスト付き）。
+  - タグ付き PDF: `PDFPageOutput.beginStructElement/endStructElement` による明示構造 + 自動タグ（テキスト=P、画像=Figure+Alt、図形=Artifact）。
+  - PDF/A-3/4f は添付ファイル（AFRelationship / catalog AF 配列）に対応。
+- プリプレス: PDF/X-1a、PDF/X-4、PDF/X-6、PDF/VT-1（最小 DPart 階層）。
+  - CMYK 強制、TrimBox/ArtBox 排他・包含検証、OutputIntent（RegistryName / Info / 印刷条件設定 API `PDFParams.withOutputIntent`）。
 - Linearized PDF を生成できます。
 - 文書情報として `Title` `Author` `Subject` `Keywords` `Creator` `Producer` を設定できます。
 - Viewer Preferences を設定できます。

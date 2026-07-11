@@ -89,6 +89,42 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 	public abstract void useResource(String type, String name) throws IOException;
 
 	/**
+	 * Opens a marked-content sequence for real content in a tagged PDF and
+	 * returns its MCID. The base implementation (patterns, group images,
+	 * untagged documents) does nothing and returns {@code -1}; page outputs
+	 * of tagged documents override this.
+	 *
+	 * @param role the structure type used when no structure element is open
+	 * @param alt  an alternate description (for figures), or {@code null}
+	 * @return the MCID, or {@code -1} when no sequence was opened
+	 * @throws IOException if an I/O error occurs
+	 */
+	public int beginMark(final String role, final String alt) throws IOException {
+		return -1;
+	}
+
+	/**
+	 * Opens an artifact marked-content sequence (decorative content that is
+	 * not part of the logical structure). Returns {@code false} when the
+	 * document is not tagged.
+	 *
+	 * @return {@code true} when a sequence was opened
+	 * @throws IOException if an I/O error occurs
+	 */
+	public boolean beginArtifact() throws IOException {
+		return false;
+	}
+
+	/**
+	 * Closes the innermost marked-content sequence opened by
+	 * {@link #beginMark} or {@link #beginArtifact}.
+	 *
+	 * @throws IOException if an I/O error occurs
+	 */
+	public void endMark() throws IOException {
+	}
+
+	/**
 	 * Writes coordinates relative to the bottom-left origin of PDF.
 	 * 
 	 * @param x X coordinate (top-left origin)

@@ -5,12 +5,6 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.sax.SAXTransformerFactory;
-import javax.xml.transform.stream.StreamResult;
-
-import org.xml.sax.helpers.AttributesImpl;
-
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 
@@ -18,6 +12,13 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * Writes the XMP metadata stream ({@code /Metadata} in the catalog) that
  * mirrors the document information dictionary, as required for PDF/A
  * conformance and recommended for PDF 1.4+.
+ * <p>
+ * The packet is serialized by hand rather than through
+ * {@code javax.xml.transform}: an XMP packet is an XML <em>fragment</em>
+ * wrapped in {@code <?xpacket?>} processing instructions and must not carry
+ * an XML declaration, but the JDK identity transformer emits one regardless
+ * of {@code OMIT_XML_DECLARATION}, which makes validators reject the packet.
+ * </p>
  *
  * @author MIYABE Tatsuhiko
  * @since 1.2
@@ -34,6 +35,21 @@ final class XMPMetadataWriter {
 
 	private XMPMetadataWriter() {
 		// static use only
+	}
+
+	/** Escapes text for use in XML element content. */
+	private static String xml(final String s) {
+		final var sb = new StringBuilder(s.length() + 16);
+		for (var i = 0; i < s.length(); ++i) {
+			final char c = s.charAt(i);
+			switch (c) {
+				case '&' -> sb.append("&amp;");
+				case '<' -> sb.append("&lt;");
+				case '>' -> sb.append("&gt;");
+				default -> sb.append(c);
+			}
+		}
+		return sb.toString();
 	}
 
 	/**
@@ -53,9 +69,9 @@ final class XMPMetadataWriter {
 	 *                    {@code -1} to omit
 	 * @throws IOException if an I/O error occurs
 	 */
-	static void write(final PDFFragmentOutputImpl xmpmetaFlow, final PDFParams.Version version, final String author,
-			final String creator, final String producer, final String title, final String keywords, final long create,
-			final long modify) throws IOException {
+	static void write(final PDFFragmentOutputImpl xmpmetaFlow, final PDFParams.Version version, final boolean pdfua,
+			final String author, final String creator, final String producer, final String title,
+			final String keywords, final long create, final long modify) throws IOException {
 		xmpmetaFlow.startHash();
 
 		xmpmetaFlow.writeName("Type");
@@ -66,139 +82,104 @@ final class XMPMetadataWriter {
 		xmpmetaFlow.writeName("XML");
 		xmpmetaFlow.lineBreak();
 
+		// The metadata stream must stay uncompressed (Mode.RAW) so that
+		// non-PDF-aware tools can locate the XMP packet.
 		try (final var xout = xmpmetaFlow.startStreamFromHash(PDFFragmentOutput.Mode.RAW)) {
 			xout.write("<?xpacket begin='".getBytes(StandardCharsets.UTF_8));
 			xout.write(new byte[] { (byte) 0xEF, (byte) 0xBB, (byte) 0xBF });
 			xout.write("' id='W5M0MpCehiHzreSzNTczkc9d'?>\n".getBytes(StandardCharsets.UTF_8));
-			final var handler = ((SAXTransformerFactory) SAXTransformerFactory.newInstance()).newTransformerHandler();
-			handler.setResult(new StreamResult(xout));
-			final var t = handler.getTransformer();
-			t.setOutputProperty(OutputKeys.METHOD, "xml");
-			t.setOutputProperty(OutputKeys.INDENT, "yes");
-			t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-			t.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
 
-			final var attsi = new AttributesImpl();
-			final var xURI = "adobe:ns:meta/";
-			final var rdfURI = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-			final var pdfaidURI = "http://www.aiim.org/pdfa/ns/id/";
-			final var pdfURI = "http://ns.adobe.com/pdf/1.3/";
-			final var dcURI = "http://purl.org/dc/elements/1.1/";
-			final var xmpURI = "http://ns.adobe.com/xap/1.0/";
+			final var sb = new StringBuilder(2048);
+			sb.append("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n");
+			sb.append(" <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n");
 
-			handler.startDocument();
-			attsi.addAttribute("", "x", "xmlns:x", "CDATA", xURI);
-
-			handler.startElement(xURI, "xmpmeta", "x:xmpmeta", attsi);
-			attsi.clear();
-			attsi.addAttribute("", "rdf", "xmlns:rdf", "CDATA", rdfURI);
-			handler.startElement(rdfURI, "RDF", "rdf:RDF", attsi);
-			attsi.clear();
-
-			// PDF/A ID
-			if (version == PDFParams.Version.V_PDFA1B) {
-				attsi.addAttribute("", "pdfaid", "xmlns:pdfaid", "CDATA", pdfaidURI);
-				attsi.addAttribute(rdfURI, "about", "rdf:about", "CDATA", "");
-				handler.startElement(rdfURI, "Description", "rdf:Description", attsi);
-				attsi.clear();
-				handler.startElement(pdfaidURI, "part", "pdfaid:part", attsi);
-				handler.characters("1".toCharArray(), 0, 1);
-				handler.endElement(pdfaidURI, "part", "pdfaid:part");
-				handler.startElement(pdfaidURI, "conformance", "pdfaid:conformance", attsi);
-				handler.characters("A".toCharArray(), 0, 1);
-				handler.endElement(pdfaidURI, "conformance", "pdfaid:conformance");
-				handler.endElement(rdfURI, "Description", "rdf:Description");
+			// PDF/A identification schema
+			if (version.isPdfA()) {
+				sb.append("  <rdf:Description rdf:about=\"\"")
+						.append(" xmlns:pdfaid=\"http://www.aiim.org/pdfa/ns/id/\">\n");
+				sb.append("   <pdfaid:part>").append(version.pdfaPart()).append("</pdfaid:part>\n");
+				if (version.pdfaPart() >= 4) {
+					// PDF/A-4 identifies the standard's revision year instead
+					// of a conformance level (except the E/F variants).
+					sb.append("   <pdfaid:rev>2020</pdfaid:rev>\n");
+				}
+				if (version.pdfaConformance() != null) {
+					sb.append("   <pdfaid:conformance>").append(version.pdfaConformance())
+							.append("</pdfaid:conformance>\n");
+				}
+				sb.append("  </rdf:Description>\n");
 			}
 
-			// PDF
-			attsi.addAttribute("", "pdf", "xmlns:pdf", "CDATA", pdfURI);
-			attsi.addAttribute(rdfURI, "about", "rdf:about", "CDATA", "");
-			handler.startElement(rdfURI, "Description", "rdf:Description", attsi);
-			attsi.clear();
-			if (keywords != null) {
-				handler.startElement(pdfURI, "Keywords", "pdf:Keywords", attsi);
-				handler.characters(keywords.toCharArray(), 0, keywords.length());
-				handler.endElement(pdfURI, "Keywords", "pdf:Keywords");
+			// PDF/UA identification schema
+			if (pdfua) {
+				sb.append("  <rdf:Description rdf:about=\"\"")
+						.append(" xmlns:pdfuaid=\"http://www.aiim.org/pdfua/ns/id/\">\n");
+				sb.append("   <pdfuaid:part>1</pdfuaid:part>\n");
+				sb.append("  </rdf:Description>\n");
 			}
-			if (producer != null) {
-				handler.startElement(pdfURI, "Producer", "pdf:Producer", attsi);
-				handler.characters(producer.toCharArray(), 0, producer.length());
-				handler.endElement(pdfURI, "Producer", "pdf:Producer");
+
+			// PDF/X identification schema (required by PDF/X-4 and later;
+			// harmless and recommended for PDF/X-1a)
+			if (version.isPdfX()) {
+				sb.append("  <rdf:Description rdf:about=\"\"")
+						.append(" xmlns:pdfxid=\"http://www.npes.org/pdfx/ns/id/\">\n");
+				sb.append("   <pdfxid:GTS_PDFXVersion>").append(xml(version.pdfxVersion()))
+						.append("</pdfxid:GTS_PDFXVersion>\n");
+				sb.append("  </rdf:Description>\n");
 			}
-			handler.endElement(rdfURI, "Description", "rdf:Description");
 
-			// DC
-			attsi.addAttribute(rdfURI, "about", "rdf:about", "CDATA", "");
-			attsi.addAttribute("", "dc", "xmlns:dc", "CDATA", dcURI);
-			handler.startElement(rdfURI, "Description", "rdf:Description", attsi);
-			attsi.clear();
+			// Adobe PDF schema
+			if (keywords != null || producer != null) {
+				sb.append("  <rdf:Description rdf:about=\"\"")
+						.append(" xmlns:pdf=\"http://ns.adobe.com/pdf/1.3/\">\n");
+				if (keywords != null) {
+					sb.append("   <pdf:Keywords>").append(xml(keywords)).append("</pdf:Keywords>\n");
+				}
+				if (producer != null) {
+					sb.append("   <pdf:Producer>").append(xml(producer)).append("</pdf:Producer>\n");
+				}
+				sb.append("  </rdf:Description>\n");
+			}
 
-			final String format = "application/pdf";
-			handler.startElement(dcURI, "format", "dc:format", attsi);
-			handler.characters(format.toCharArray(), 0, format.length());
-			handler.endElement(dcURI, "format", "dc:format");
-
+			// Dublin Core schema
+			sb.append("  <rdf:Description rdf:about=\"\"")
+					.append(" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">\n");
+			sb.append("   <dc:format>application/pdf</dc:format>\n");
 			if (title != null) {
-				handler.startElement(dcURI, "title", "dc:title", attsi);
-				handler.startElement(rdfURI, "Alt", "rdf:Alt", attsi);
-				attsi.addAttribute("", "lang", "xml:lang", "CDATA", "x-default");
-				handler.startElement(rdfURI, "li", "rdf:li", attsi);
-				attsi.clear();
-				handler.characters(title.toCharArray(), 0, title.length());
-				handler.endElement(rdfURI, "li", "rdf:li");
-				handler.endElement(rdfURI, "Alt", "rdf:Alt");
-				handler.endElement(dcURI, "title", "dc:title");
+				sb.append("   <dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">").append(xml(title))
+						.append("</rdf:li></rdf:Alt></dc:title>\n");
 			}
-
 			if (author != null) {
-				handler.startElement(dcURI, "creator", "dc:creator", attsi);
-				handler.startElement(rdfURI, "Seq", "rdf:Seq", attsi);
-				handler.startElement(rdfURI, "li", "rdf:li", attsi);
-				handler.characters(author.toCharArray(), 0, author.length());
-				handler.endElement(rdfURI, "li", "rdf:li");
-				handler.endElement(rdfURI, "Seq", "rdf:Seq");
-				handler.endElement(dcURI, "creator", "dc:creator");
+				sb.append("   <dc:creator><rdf:Seq><rdf:li>").append(xml(author))
+						.append("</rdf:li></rdf:Seq></dc:creator>\n");
 			}
-			attsi.clear();
-			handler.endElement(rdfURI, "Description", "rdf:Description");
+			sb.append("  </rdf:Description>\n");
 
-			// XMP
-			attsi.addAttribute("", "xmp", "xmlns:xmp", "CDATA", xmpURI);
-			attsi.addAttribute(rdfURI, "about", "rdf:about", "CDATA", "");
-			handler.startElement(rdfURI, "Description", "rdf:Description", attsi);
-			attsi.clear();
+			// XMP basic schema
+			sb.append("  <rdf:Description rdf:about=\"\"")
+					.append(" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\">\n");
 			if (creator != null) {
-				handler.startElement(xmpURI, "CreatorTool", "xmp:CreatorTool", attsi);
-				handler.characters(creator.toCharArray(), 0, creator.length());
-				handler.endElement(xmpURI, "CreatorTool", "xmp:CreatorTool");
+				sb.append("   <xmp:CreatorTool>").append(xml(creator)).append("</xmp:CreatorTool>\n");
 			}
 			final var dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX");
-			handler.startElement(xmpURI, "CreateDate", "xmp:CreateDate", attsi);
-			final var createStr = dateFormat.format(new Date(create));
-			handler.characters(createStr.toCharArray(), 0, createStr.length());
-			handler.endElement(xmpURI, "CreateDate", "xmp:CreateDate");
+			sb.append("   <xmp:CreateDate>").append(dateFormat.format(new Date(create)))
+					.append("</xmp:CreateDate>\n");
 			if (modify != -1L) {
-				handler.startElement(xmpURI, "ModifyDate", "xmp:ModifyDate", attsi);
-				final var modifyStr = dateFormat.format(new Date(modify));
-				handler.characters(modifyStr.toCharArray(), 0, modifyStr.length());
-				handler.endElement(xmpURI, "ModifyDate", "xmp:ModifyDate");
+				sb.append("   <xmp:ModifyDate>").append(dateFormat.format(new Date(modify)))
+						.append("</xmp:ModifyDate>\n");
 			}
-			handler.endElement(rdfURI, "Description", "rdf:Description");
+			sb.append("  </rdf:Description>\n");
 
-			handler.endElement(rdfURI, "RDF", "rdf:RDF");
-			handler.endElement(xURI, "xmpmeta", "x:xmpmeta");
+			sb.append(" </rdf:RDF>\n");
+			sb.append("</x:xmpmeta>\n");
+			xout.write(sb.toString().getBytes(StandardCharsets.UTF_8));
 
-			handler.endDocument();
 			// The XMP spec recommends 2-4KB of trailing padding so tools can
 			// update the packet in place without rewriting the file.
 			for (var i = 0; i < 26; ++i) {
 				xout.write(XMP_PADDING);
 			}
 			xout.write("<?xpacket end='w'?>\n".getBytes(StandardCharsets.UTF_8));
-		} catch (IOException e) {
-			throw e;
-		} catch (Exception e) {
-			throw new RuntimeException(e);
 		}
 		xmpmetaFlow.endObject();
 	}

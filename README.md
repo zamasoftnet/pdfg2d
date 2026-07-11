@@ -32,7 +32,9 @@ implementation("io.github.mimidesunya:pdfg2d-svg:1.2.0")
 
 ## Features
 * **Java 21 Support**: Leverages modern Java features.
-* **PDF Versions**: Supports PDF 1.2 to 1.7, PDF/A-1b, and PDF/X-1a.
+* **PDF Versions**: PDF 1.2 to 1.7 and PDF 2.0.
+* **Archival / accessibility**: PDF/A-1b, 2b/2u/2a, 3b/3u/3a, 4/4f and PDF/UA-1 (all validated with veraPDF); Tagged PDF with an explicit structure API and automatic tagging fallback.
+* **Prepress**: PDF/X-1a, PDF/X-4, PDF/X-6 and PDF/VT-1 (CMYK enforcement, TrimBox/ArtBox validation, configurable OutputIntent).
 * **Advanced Functionality**:
     * Bookmarks, Permissions, Viewer Preferences, Meta Information.
     * Encryption: Arcfour (RC4) and AES.

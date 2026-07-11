@@ -49,6 +49,9 @@ class PDFPageOutputImpl extends PDFPageOutput {
 
 	private Rectangle2D mediaBox, cropBox, bleedBox, trimBox, artBox;
 
+	/** The page's parent tree key ({@code /StructParents}), or {@code -1}. */
+	private int structParents = -1;
+
 	public PDFPageOutputImpl(final PDFWriterImpl pdfWriter, final ObjectRef rootPageRef,
 			final PDFFragmentOutputImpl pagesKidsFlow, final double width, final double height) throws IOException {
 		super(pdfWriter, null, width, height);
@@ -57,11 +60,6 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		}
 		if (width > PDFWriter.MAX_PAGE_WIDTH || height > PDFWriter.MAX_PAGE_HEIGHT) {
 			throw new IllegalArgumentException("Page size exceeds limits: " + width + "x" + height);
-		}
-
-		final var params = pdfWriter.getParams();
-		if (params.version() == PDFParams.Version.V_PDFX1A) {
-			this.artBox = new Rectangle2D.Double(0, 0, width, height);
 		}
 
 		final var mainFlow = pdfWriter.mainFlow;
@@ -113,6 +111,58 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		return (PDFWriterImpl) this.pdfWriter;
 	}
 
+	/** Records the parent tree key assigned by the structure tree builder. */
+	void setStructParents(final int key) {
+		this.structParents = key;
+	}
+
+	@Override
+	public int beginMark(final String role, final String alt) throws IOException {
+		final var structure = this.getPDFWriterImpl().structure;
+		if (structure == null) {
+			return -1;
+		}
+		final var mark = structure.mark(this, role, alt);
+		this.writeName(mark.tag());
+		this.startHash();
+		this.writeName("MCID");
+		this.writeInt(mark.mcid());
+		this.endHash();
+		this.writeOperator("BDC");
+		return mark.mcid();
+	}
+
+	@Override
+	public boolean beginArtifact() throws IOException {
+		if (this.getPDFWriterImpl().structure == null) {
+			return false;
+		}
+		this.writeName("Artifact");
+		this.writeOperator("BMC");
+		return true;
+	}
+
+	@Override
+	public void endMark() throws IOException {
+		this.writeOperator("EMC");
+	}
+
+	@Override
+	public void beginStructElement(final String role) {
+		final var structure = this.getPDFWriterImpl().structure;
+		if (structure != null) {
+			structure.begin(role);
+		}
+	}
+
+	@Override
+	public void endStructElement() {
+		final var structure = this.getPDFWriterImpl().structure;
+		if (structure != null) {
+			structure.end();
+		}
+	}
+
 	/**
 	 * Ensures that the named resource is declared in the page resource dictionary.
 	 * <p>
@@ -151,7 +201,7 @@ class PDFPageOutputImpl extends PDFPageOutput {
 	public void addAnnotation(final Annot annot) throws IOException {
 		final var pdfWriterImpl = this.getPDFWriterImpl();
 		final var params = pdfWriterImpl.getParams();
-		if (params.version() == PDFParams.Version.V_PDFX1A) {
+		if (params.version().isPdfX()) {
 			throw new UnsupportedOperationException("Annotations are not allowed in PDF/X standards.");
 		}
 
@@ -172,8 +222,7 @@ class PDFPageOutputImpl extends PDFPageOutput {
 			annot.writeTo(objectsFlow, this);
 
 			// Required flags for PDF/A or PDF/X
-			if (params.version() == PDFParams.Version.V_PDFA1B
-					|| params.version() == PDFParams.Version.V_PDFX1A) {
+			if (params.version().isPdfA() || params.version().isPdfX()) {
 				objectsFlow.writeName("F");
 				objectsFlow.writeInt(0x04); // Print flag
 				objectsFlow.lineBreak();
@@ -273,11 +322,68 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		this.artBox = artBox;
 	}
 
+	/**
+	 * Returns whether {@code outer} contains {@code inner}, with a small
+	 * tolerance for floating-point rounding.
+	 */
+	private static boolean containsBox(final Rectangle2D outer, final Rectangle2D inner) {
+		final double e = 0.01;
+		return inner.getMinX() >= outer.getMinX() - e && inner.getMinY() >= outer.getMinY() - e
+				&& inner.getMaxX() <= outer.getMaxX() + e && inner.getMaxY() <= outer.getMaxY() + e;
+	}
+
+	/**
+	 * Enforces the PDF/X-1a page box rules (ISO 15930): every page carries
+	 * exactly one of TrimBox or ArtBox (a full-page TrimBox is supplied when
+	 * neither was set), and the finished-size box must lie inside the
+	 * BleedBox (when present), which in turn must lie inside the MediaBox.
+	 */
+	private void validatePdfxBoxes() {
+		if (this.trimBox != null && this.artBox != null) {
+			throw new IllegalStateException(
+					"PDF/X requires exactly one of TrimBox or ArtBox per page, not both.");
+		}
+		if (this.trimBox == null && this.artBox == null) {
+			this.trimBox = new Rectangle2D.Double(0, 0, this.width, this.height);
+		}
+		final var finished = (this.trimBox != null) ? this.trimBox : this.artBox;
+		if (this.bleedBox != null) {
+			if (!containsBox(this.mediaBox, this.bleedBox)) {
+				throw new IllegalStateException("BleedBox must lie within the MediaBox.");
+			}
+			if (!containsBox(this.bleedBox, finished)) {
+				throw new IllegalStateException(
+						(this.trimBox != null ? "TrimBox" : "ArtBox") + " must lie within the BleedBox.");
+			}
+		} else if (!containsBox(this.mediaBox, finished)) {
+			throw new IllegalStateException(
+					(this.trimBox != null ? "TrimBox" : "ArtBox") + " must lie within the MediaBox.");
+		}
+	}
+
 	public void close() throws IOException {
 		super.close();
 
 		if (this.mediaBox == null) {
 			throw new IllegalStateException();
+		}
+
+		if (this.pdfWriter.getParams().version().isPdfX()) {
+			this.validatePdfxBoxes();
+		}
+
+		if (this.structParents >= 0) {
+			this.paramsFlow.writeName("StructParents");
+			this.paramsFlow.writeInt(this.structParents);
+			this.paramsFlow.lineBreak();
+		}
+
+		// PDF/VT: every page belongs to a document part
+		final var dpartLeafRef = this.getPDFWriterImpl().dpartLeafRef;
+		if (dpartLeafRef != null) {
+			this.paramsFlow.writeName("DPart");
+			this.paramsFlow.writeObjectRef(dpartLeafRef);
+			this.paramsFlow.lineBreak();
 		}
 		this.paramsFlow.writeName("MediaBox");
 		this.paramRect(this.mediaBox);
