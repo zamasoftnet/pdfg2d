@@ -81,6 +81,44 @@ public final class G2DUtils {
 					new Color[] { fromAwtColor(gpaint.getColor1()), fromAwtColor(gpaint.getColor2()) },
 					new AffineTransform());
 		}
+		// The standard java.awt multi-stop gradients and the Batik ones used by
+		// the SVG bridge are distinct class hierarchies; both must be handled.
+		if (paint instanceof java.awt.LinearGradientPaint gpaint) {
+			if (gpaint.getCycleMethod() != java.awt.MultipleGradientPaint.CycleMethod.NO_CYCLE) {
+				return null;
+			}
+			float[] fs = gpaint.getFractions();
+			double[] fractions = new double[fs.length];
+			for (int i = 0; i < fs.length; ++i) {
+				fractions[i] = fs[i];
+			}
+			java.awt.Color[] cs = gpaint.getColors();
+			Color[] colors = new Color[cs.length];
+			for (int i = 0; i < cs.length; ++i) {
+				colors[i] = fromAwtColor(cs[i]);
+			}
+			return new LinearGradient(gpaint.getStartPoint().getX(), gpaint.getStartPoint().getY(),
+					gpaint.getEndPoint().getX(), gpaint.getEndPoint().getY(), fractions, colors,
+					gpaint.getTransform());
+		}
+		if (paint instanceof java.awt.RadialGradientPaint gpaint) {
+			if (gpaint.getCycleMethod() != java.awt.MultipleGradientPaint.CycleMethod.NO_CYCLE) {
+				return null;
+			}
+			float[] fs = gpaint.getFractions();
+			double[] fractions = new double[fs.length];
+			for (int i = 0; i < fs.length; ++i) {
+				fractions[i] = fs[i];
+			}
+			java.awt.Color[] cs = gpaint.getColors();
+			Color[] colors = new Color[cs.length];
+			for (int i = 0; i < cs.length; ++i) {
+				colors[i] = fromAwtColor(cs[i]);
+			}
+			return new RadialGradient(gpaint.getCenterPoint().getX(), gpaint.getCenterPoint().getY(),
+					gpaint.getRadius(), gpaint.getFocusPoint().getX(), gpaint.getFocusPoint().getY(), fractions,
+					colors, gpaint.getTransform());
+		}
 		if (paint instanceof RadialGradientPaint) {
 			RadialGradientPaint gpaint = (RadialGradientPaint) paint;
 			float[] fs = gpaint.getFractions();
@@ -396,7 +434,12 @@ public final class G2DUtils {
 				try {
 					// Use ImageIO
 
-					// HACK: Fix for Java bug where JFIF colors are inverted
+					// Workaround for an ImageIO JPEG decoder defect: streams whose
+					// SOI marker (FFD8) is immediately followed by DQT (FFDB) carry
+					// no JFIF/EXIF/Adobe APPn segment, and ImageIO then guesses the
+					// wrong color transform, producing inverted colors. Detect that
+					// shape and bail out so decoding falls through to the AWT
+					// Toolkit decoder below, which handles these files correctly.
 					if ("JPEG".equalsIgnoreCase(reader.getFormatName())) {
 						for (int i = 0; i < 100; ++i) {
 							if (imageIn.read() == 0xFF) {

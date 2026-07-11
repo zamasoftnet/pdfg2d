@@ -95,8 +95,16 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 
 	private double advance = 0;
 
+	// A "text unit" is the run of elements/glyphs accumulated since the last
+	// break opportunity (i.e. since the caller last invoked flush()). When a
+	// line overflows, endLine(false) keeps the current unit intact and moves
+	// it wholesale to the next line; only these counters tell it where the
+	// unit begins.
+
+	/** Elements added to {@link #textBuffer} since the last break opportunity. */
 	private int textUnitElementCount = 0;
 
+	/** Glyphs appended to {@link #text} since the last break opportunity. */
 	private int textUnitGlyphCount = 0;
 
 	private boolean justifyPage = false;
@@ -353,6 +361,18 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 		this.floatHeight = height;
 	}
 
+	/**
+	 * Closes the current line and queues it for drawing.
+	 *
+	 * @param last {@code true} for a forced break (explicit newline or end of
+	 *             text): the whole pending content, including the open text
+	 *             unit, ends the line. {@code false} for an overflow break:
+	 *             only content up to the last break opportunity ends the
+	 *             line, and the current text unit (identified by
+	 *             {@link #textUnitElementCount}/{@link #textUnitGlyphCount},
+	 *             possibly splitting the open {@link #text} run) is carried
+	 *             over as the beginning of the next line.
+	 */
 	private void endLine(final boolean last) {
 		double advance;
 		if (last) {
@@ -400,9 +420,11 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 				advance += e.getAdvance();
 			}
 
-			// Justify
+			// Justify by distributing the leftover width as extra letter
+			// spacing across all glyphs of the line. Known limitation: there
+			// is no hyphenation, so an overlong unbreakable word wraps early
+			// and the previous line may be stretched noticeably.
 			if (this.align == Alignment.JUSTIFY) {
-				// TODO Hyphenation
 				int glyphCount = 0;
 				for (final Element e : this.elements) {
 					if (e instanceof Text text) {
@@ -507,11 +529,12 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 		final double pageAdvance2 = maxDescent + lineMargin + this.lineFactor;
 		this.pageOffset += pageAdvance1;
 
-		// Calculate current position
-		// Calculate current position
+		// Calculate current position. Known limitation: RTL lines are placed
+		// exactly like LTR ones (no bidi reordering, no right-aligned line
+		// origin); RTL text must be supplied in visual order.
 		double lineAxis = this.lineOffset;
 		double pageAxis = switch (this.direction) {
-			case LTR, RTL -> this.pageOffset; // TODO RTL
+			case LTR, RTL -> this.pageOffset;
 			case TB -> -this.pageOffset;
 		};
 		if (this.align == Alignment.END || this.align == Alignment.CENTER) {
@@ -602,6 +625,14 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 		this.advance += control.getAdvance();
 	}
 
+	/**
+	 * Marks a break opportunity. The upstream layout driver calls this after
+	 * each breakable text unit (typically at word boundaries or between CJK
+	 * characters as decided by the breaking rules); if the accumulated line
+	 * overflows the measure at this point, everything up to the previous
+	 * break opportunity is emitted as a finished line and the current unit
+	 * carries over to the next line.
+	 */
 	@Override
 	public void flush() {
 		if (this.advance > this.getMaxAdvance()) {

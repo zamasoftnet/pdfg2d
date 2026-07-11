@@ -8,6 +8,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.TimeZone;
 
 import net.zamasoft.pdfg2d.pdf.util.PDFUtils;
@@ -48,6 +50,13 @@ public class PDFOutput extends FilterOutputStream {
 
 	// Buffer for efficient byte writing.
 	private ByteBuffer bbuff = null;
+
+	// Encoded-name cache: dictionary keys and resource names repeat heavily,
+	// and encoding allocates a fresh byte[] per call. Bounded to keep
+	// pathological documents from growing it without limit.
+	private Map<String, byte[]> nameCache = null;
+
+	private static final int NAME_CACHE_LIMIT = 512;
 
 	// Reusable buffer for number formatting.
 	private final byte[] numBuf = new byte[20];
@@ -140,9 +149,18 @@ public class PDFOutput extends FilterOutputStream {
 	public void writeName(final String name) throws IOException {
 		this.spaceBefore();
 		this.write('/');
-		final var b = PDFUtils.encodeName(name, this.nameEncoding);
-		if (b.length <= 0 || b.length > 127) {
-			throw new IllegalArgumentException("Name length must be between 1 and 127 bytes.");
+		if (this.nameCache == null) {
+			this.nameCache = new HashMap<>();
+		}
+		var b = this.nameCache.get(name);
+		if (b == null) {
+			b = PDFUtils.encodeName(name, this.nameEncoding);
+			if (b.length <= 0 || b.length > 127) {
+				throw new IllegalArgumentException("Name length must be between 1 and 127 bytes.");
+			}
+			if (this.nameCache.size() < NAME_CACHE_LIMIT) {
+				this.nameCache.put(name, b);
+			}
 		}
 		this.write(b);
 	}
@@ -395,53 +413,56 @@ public class PDFOutput extends FilterOutputStream {
 	 */
 	public void writeString(final String str) throws IOException {
 		this.spaceBefore();
-		this.write('(');
+		// Worst case every character escapes to two bytes, plus parentheses.
+		this.buffAllocate(2 + 2 * str.length());
+		this.buffWrite((byte) '(');
 		var len = 0;
 		for (var i = 0; i < str.length(); ++i) {
 			final char c = str.charAt(i);
 			switch (c) {
 				case '\n' -> {
 					len += ESC_N.length;
-					this.write(ESC_N);
+					this.bbuff.put(ESC_N);
 				}
 				case '\r' -> {
 					len += ESC_R.length;
-					this.write(ESC_R);
+					this.bbuff.put(ESC_R);
 				}
 				case '\t' -> {
 					len += ESC_T.length;
-					this.write(ESC_T);
+					this.bbuff.put(ESC_T);
 				}
 				case '\b' -> {
 					len += ESC_B.length;
-					this.write(ESC_B);
+					this.bbuff.put(ESC_B);
 				}
 				case '\f' -> {
 					len += ESC_F.length;
-					this.write(ESC_F);
+					this.bbuff.put(ESC_F);
 				}
 				case '\\' -> {
 					len += ESC_BS.length;
-					this.write(ESC_BS);
+					this.bbuff.put(ESC_BS);
 				}
 				case '(' -> {
 					len += ESC_LP.length;
-					this.write(ESC_LP);
+					this.bbuff.put(ESC_LP);
 				}
 				case ')' -> {
 					len += ESC_RP.length;
-					this.write(ESC_RP);
+					this.bbuff.put(ESC_RP);
 				}
 				default -> {
 					++len;
-					this.write(c);
+					this.bbuff.put((byte) c);
 				}
 			}
 		}
-		this.write(')');
+		this.bbuff.put((byte) ')');
 		if (len > 65535) {
 			throw new IllegalArgumentException("String length exceeds 65535 bytes.");
 		}
+		this.buffFlush();
 	}
 
 	/**

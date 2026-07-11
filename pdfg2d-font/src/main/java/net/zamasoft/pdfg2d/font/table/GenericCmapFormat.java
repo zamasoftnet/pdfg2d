@@ -166,8 +166,22 @@ public record GenericCmapFormat(int[] glyphIdToCharacterCode, Map<Integer, Integ
 				|| ((startCode + numChars) >= 0x0000D800 && (startCode + numChars) <= 0x0000DFFF)) {
 			throw new IOException("Invalid Characters codes");
 		}
-		// TODO: Map characters for format 10?
-		return new CmapData(newGlyphIdToCharacterCode(numGlyphs), new HashMap<>());
+		// Format 10 is a trivial dense mapping: glyphIdArray[i] maps the
+		// character (startCode + i). It is rare in practice (used by some Apple
+		// fonts for a contiguous supplementary-plane range).
+		int[] glyphIdToCharacterCode = newGlyphIdToCharacterCode(numGlyphs);
+		Map<Integer, Integer> characterCodeToGlyphId = new HashMap<Integer, Integer>((int) numChars);
+		for (int i = 0; i < numChars; ++i) {
+			int glyphIndex = data.readUnsignedShort();
+			if (glyphIndex >= numGlyphs) {
+				LOG.log(Level.WARNING, "Format 10 cmap contains an invalid glyph index");
+				break;
+			}
+			int charCode = (int) (startCode + i);
+			glyphIdToCharacterCode[glyphIndex] = charCode;
+			characterCodeToGlyphId.put(charCode, glyphIndex);
+		}
+		return new CmapData(glyphIdToCharacterCode, characterCodeToGlyphId);
 	}
 
 	/**
@@ -314,6 +328,12 @@ public record GenericCmapFormat(int[] glyphIdToCharacterCode, Map<Integer, Integ
 						tmpGlyphToChar.put(glyphid, j);
 						characterCodeToGlyphId.put(j, glyphid);
 					} else {
+						// idRangeOffset is defined relative to its own slot in
+						// the idRangeOffset array. currentPosition is the end
+						// of that array, so the slot address is
+						// currentPosition - (segCount - i) * 2, and the glyph
+						// index lives rangeOffset + (j - start) * 2 bytes
+						// beyond the slot — folded into one expression here.
 						long glyphOffset = currentPosition + ((rangeOffset / 2) + (j - start) + (i - segCount)) * 2;
 						raf.seek(glyphOffset);
 						int glyphIndex = raf.readUnsignedShort();

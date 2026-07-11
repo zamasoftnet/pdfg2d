@@ -301,8 +301,9 @@ public class CIDKeyedFontSource extends AbstractFontSource implements CIDFontSou
 	public PDFFont createFont(String name, ObjectRef fontRef) {
 		switch (this.getDirection()) {
 			case LTR:
-			case RTL:// TODO RTL
-				// Horizontal writing
+			case RTL:
+				// Horizontal writing. RTL uses the same horizontal CMap as
+				// LTR; bidi reordering is out of scope at the font layer.
 				return new CIDKeyedFont(this, name, fontRef, this.hcmap);
 			case TB:
 				// Vertical writing

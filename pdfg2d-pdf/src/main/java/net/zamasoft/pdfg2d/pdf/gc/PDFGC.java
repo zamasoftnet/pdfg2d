@@ -11,7 +11,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -31,10 +30,8 @@ import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.paint.CMYKColor;
 import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.pdfg2d.gc.paint.GrayColor;
-import net.zamasoft.pdfg2d.gc.paint.LinearGradient;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.paint.Pattern;
-import net.zamasoft.pdfg2d.gc.paint.RadialGradient;
 import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
 import net.zamasoft.pdfg2d.gc.text.Text;
 import net.zamasoft.pdfg2d.pdf.PDFGraphicsOutput;
@@ -44,7 +41,6 @@ import net.zamasoft.pdfg2d.pdf.font.PDFFont;
 import net.zamasoft.pdfg2d.pdf.font.PDFFontSource;
 import net.zamasoft.pdfg2d.pdf.font.PDFFontSource.Type;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
-import net.zamasoft.pdfg2d.util.ColorUtils;
 
 /* PDF Operator Reference
  * 
@@ -171,61 +167,6 @@ public class PDFGC implements GC, Closeable {
 	private static final double TWO_THIRD = 2.0 / 3.0;
 
 	private record ExtGStateKey(float strokeAlpha, float fillAlpha, byte strokeOverprint, byte fillOverprint) {
-	}
-
-	private record ShadingKey(double pageHeight, AffineTransform transform, Paint paint) {
-		@Override
-		public boolean equals(Object o) {
-			if (this == o)
-				return true;
-			if (!(o instanceof ShadingKey other))
-				return false;
-			if (Double.compare(pageHeight, other.pageHeight) != 0)
-				return false;
-			if (!Objects.equals(transform, other.transform))
-				return false;
-			if (paint == other.paint)
-				return true;
-			if (paint == null || other.paint == null)
-				return false;
-			if (paint.getClass() != other.paint.getClass())
-				return false;
-			if (paint instanceof LinearGradient lg1 && other.paint instanceof LinearGradient lg2) {
-				return Double.compare(lg1.x1(), lg2.x1()) == 0 &&
-						Double.compare(lg1.y1(), lg2.y1()) == 0 &&
-						Double.compare(lg1.x2(), lg2.x2()) == 0 &&
-						Double.compare(lg1.y2(), lg2.y2()) == 0 &&
-						Arrays.equals(lg1.colors(), lg2.colors()) &&
-						Arrays.equals(lg1.fractions(), lg2.fractions());
-			}
-			if (paint instanceof RadialGradient rg1 && other.paint instanceof RadialGradient rg2) {
-				return Double.compare(rg1.cx(), rg2.cx()) == 0 &&
-						Double.compare(rg1.cy(), rg2.cy()) == 0 &&
-						Double.compare(rg1.radius(), rg2.radius()) == 0 &&
-						Double.compare(rg1.fx(), rg2.fx()) == 0 &&
-						Double.compare(rg1.fy(), rg2.fy()) == 0 &&
-						Arrays.equals(rg1.colors(), rg2.colors()) &&
-						Arrays.equals(rg1.fractions(), rg2.fractions());
-			}
-			return paint.equals(other.paint);
-		}
-
-		@Override
-		public int hashCode() {
-			int result = Objects.hash(pageHeight, transform);
-			if (paint instanceof LinearGradient lg) {
-				result = 31 * result + Objects.hash(lg.x1(), lg.y1(), lg.x2(), lg.y2());
-				result = 31 * result + Arrays.hashCode(lg.colors());
-				result = 31 * result + Arrays.hashCode(lg.fractions());
-			} else if (paint instanceof RadialGradient rg) {
-				result = 31 * result + Objects.hash(rg.cx(), rg.cy(), rg.radius(), rg.fx(), rg.fy());
-				result = 31 * result + Arrays.hashCode(rg.colors());
-				result = 31 * result + Arrays.hashCode(rg.fractions());
-			} else {
-				result = 31 * result + Objects.hashCode(paint);
-			}
-			return result;
-		}
 	}
 
 	/**
@@ -428,19 +369,17 @@ public class PDFGC implements GC, Closeable {
 	/** Current PDF fill overprint mode. */
 	public byte xfillOverprint = 0;
 
-	private record PatternKey(double pageWidth, double pageHeight, Image image, AffineTransform at) {
-	}
-
-	private final Map<Object, String> resourceCache;
+	/** Document-wide cache of pattern/shading resource names (see {@link PaintResources}). */
+	final Map<Object, String> resourceCache;
 
 	private final double[] cord = new double[6];
 
 	private int qDepth = 0;
 
-	private final PDFParams.Version pdfVersion;
+	final PDFParams.Version pdfVersion;
 
 	@SuppressWarnings("unchecked")
-	private PDFGC(final PDFGraphicsOutput out, final Map<Object, String> resourceCache) {
+	PDFGC(final PDFGraphicsOutput out, final Map<Object, String> resourceCache) {
 		this.out = out;
 		if (resourceCache == null) {
 			final var writer = out.getPdfWriter();
@@ -956,8 +895,10 @@ public class PDFGC implements GC, Closeable {
 			double center = 0;
 			boolean verticalFont = false;
 			switch (direction) {
-				case LTR, RTL -> { // TODO RTL
-					// Horizontal
+				case LTR, RTL -> {
+					// Horizontal. Known limitation: RTL runs are emitted in
+					// logical order without bidi reordering or glyph mirroring;
+					// callers must pass text in visual order for RTL scripts.
 				}
 				case TB -> {
 					// Vertical
@@ -1137,140 +1078,13 @@ public class PDFGC implements GC, Closeable {
 	 * @throws GraphicsException if an error occurs while creating the resource.
 	 */
 	private String getPaintName(final Paint paint) throws GraphicsException {
-		return switch (paint.getPaintType()) {
-			case PATTERN -> {
-				final var pattern = (Pattern) paint;
-				final var image = pattern.getImage();
-				var at = this.getTransform();
-				if (at == null) {
-					at = pattern.getTransform();
-				} else if (pattern.getTransform() != null) {
-					at.concatenate(pattern.getTransform());
-				}
-
-				final var pout = this.out;
-				final var key = new PatternKey(pout.getWidth(), pout.getHeight(), image, at);
-
-				var name = this.resourceCache.get(key);
-				if (name == null) {
-					final var width = image.getWidth();
-					final var height = image.getHeight();
-					try (final var tout = pout.getPdfWriter().createTilingPattern(width, height, pout.getHeight(),
-							at)) {
-						final var pgc = new PDFGC(tout, this.resourceCache);
-						image.drawTo(pgc);
-						name = tout.getName();
-					} catch (IOException e) {
-						throw new GraphicsException(e);
-					}
-					this.resourceCache.put(key, name);
-				}
-				yield name;
-			}
-			case LINEAR_GRADIENT -> {
-				// PDF Axial(Type 2) Shading
-				if (this.pdfVersion.v < PDFParams.Version.V_1_3.v) {
-					yield null;
-				}
-				final var gradient = (LinearGradient) paint;
-
-				var at = this.getTransform();
-				if (at == null) {
-					at = gradient.transform();
-				} else if (gradient.transform() != null) {
-					at.concatenate(gradient.transform());
-				}
-
-				final var pout = this.out;
-				final var key = new ShadingKey(pout.getHeight(), at, gradient);
-				var name = this.resourceCache.get(key);
-				if (name != null) {
-					yield name;
-				}
-
-				try (final var sout = pout.getPdfWriter().createShadingPattern(pout.getHeight(), at)) {
-					sout.writeName("ShadingType");
-					sout.writeInt(2);
-					sout.lineBreak();
-
-					sout.writeName("Coords");
-					sout.startArray();
-					sout.writeReal(gradient.x1());
-					sout.writeReal(gradient.y1());
-					sout.writeReal(gradient.x2());
-					sout.writeReal(gradient.y2());
-					sout.endArray();
-					sout.lineBreak();
-					this.shadingFunction(sout, gradient.colors(), gradient.fractions());
-
-					name = sout.getName();
-					this.resourceCache.put(key, name);
-					yield name;
-				} catch (IOException e) {
-					throw new GraphicsException(e);
-				}
-			}
-			case RADIAL_GRADIENT -> {
-				// PDF Radial(Type 3) Shading
-				if (this.pdfVersion.v < PDFParams.Version.V_1_3.v) {
-					yield null;
-				}
-				final var gp = (RadialGradient) paint;
-				final var radius = gp.radius();
-
-				var at = this.getTransform();
-				if (at == null) {
-					at = gp.transform();
-				} else if (gp.transform() != null) {
-					at.concatenate(gp.transform());
-				}
-
-				final var pout = this.out;
-				final var key = new ShadingKey(pout.getHeight(), at, gp);
-				var name = this.resourceCache.get(key);
-				if (name != null) {
-					yield name;
-				}
-
-				var dx = gp.fx() - gp.cx();
-				var dy = gp.fy() - gp.cy();
-				final var d = Math.sqrt(dx * dx + dy * dy);
-				if (d > radius) {
-					final var scale = (radius * .9999) / d;
-					dx *= scale;
-					dy *= scale;
-				}
-
-				try (final var sout = pout.getPdfWriter().createShadingPattern(pout.getHeight(), at)) {
-					sout.writeName("ShadingType");
-					sout.writeInt(3);
-					sout.lineBreak();
-
-					sout.writeName("Coords");
-					sout.startArray();
-					sout.writeReal(gp.cx() + dx);
-					sout.writeReal(gp.cy() + dy);
-					sout.writeReal(0);
-					sout.writeReal(gp.cx());
-					sout.writeReal(gp.cy());
-					sout.writeReal(radius);
-					sout.endArray();
-					sout.lineBreak();
-
-					this.shadingFunction(sout, gp.colors(), gp.fractions());
-					name = sout.getName();
-					this.resourceCache.put(key, name);
-					yield name;
-				} catch (IOException e) {
-					throw new GraphicsException(e);
-				}
-			}
-			case COLOR -> null;
-		};
+		return PaintResources.paintName(this, paint);
 	}
 
 	/**
-	 * Configures the shading function for gradients.
+	 * Writes the shading function entries for gradients. This remains a
+	 * protected hook so subclasses can customize gradient encoding; the default
+	 * implementation lives in {@link PaintResources}.
 	 *
 	 * @param sout      The output stream.
 	 * @param colors    Array of colors.
@@ -1279,210 +1093,7 @@ public class PDFGC implements GC, Closeable {
 	 */
 	protected void shadingFunction(final PDFOutput sout, final Color[] colors, final double[] fractions)
 			throws IOException {
-		// TODO Alpha gradient
-		sout.writeName("ColorSpace");
-		final var params = this.getPdfWriter().getParams();
-		final Color.Type colorType;
-		if (params.colorMode() == PDFParams.ColorMode.GRAY) {
-			colorType = Color.Type.GRAY;
-		} else if (params.colorMode() == PDFParams.ColorMode.CMYK) {
-			colorType = Color.Type.CMYK;
-		} else {
-			var type = colors[0].getColorType();
-			for (var i = 1; i < colors.length; ++i) {
-				if (type != colors[i].getColorType()) {
-					type = Color.Type.RGB;
-				}
-			}
-			if (type == Color.Type.RGBA) {
-				type = Color.Type.RGB;
-			}
-			colorType = type;
-		}
-
-		final var colorSpaceName = switch (colorType) {
-			case GRAY -> "DeviceGray";
-			case RGB -> "DeviceRGB";
-			case CMYK -> "DeviceCMYK";
-			default -> throw new IllegalStateException("Unexpected color type: " + colorType);
-		};
-		sout.writeName(colorSpaceName);
-		sout.lineBreak();
-
-		sout.writeName("Extend");
-		sout.startArray();
-		sout.writeBoolean(true);
-		sout.writeBoolean(true);
-		sout.endArray();
-		sout.lineBreak();
-
-		sout.writeName("Function");
-		sout.startHash();
-		if (colors.length <= 2
-				&& (fractions == null || fractions.length == 0 || (fractions.length == 1 && fractions[0] == 0)
-						|| (fractions.length == 2 && fractions[0] == 0 && fractions[1] == 1))) {
-			// Simple case
-			sout.writeName("FunctionType");
-			sout.writeInt(2);
-			sout.lineBreak();
-
-			sout.writeName("Domain");
-			sout.startArray();
-			sout.writeReal(0.0);
-			sout.writeReal(1.0);
-			sout.endArray();
-			sout.lineBreak();
-
-			sout.writeName("N");
-			sout.writeReal(1.0);
-			sout.lineBreak();
-
-			sout.writeName("C0");
-			sout.startArray();
-			writeColor(sout, colorType, colors[0]);
-			sout.endArray();
-			sout.lineBreak();
-
-			sout.writeName("C1");
-			sout.startArray();
-			writeColor(sout, colorType, colors[1]);
-			sout.endArray();
-			sout.lineBreak();
-		} else {
-			// Complex case
-			var segments = fractions.length - 1;
-			if (fractions[0] != 0) {
-				++segments;
-			}
-			if (fractions[fractions.length - 1] != 1) {
-				++segments;
-			}
-
-			sout.writeName("FunctionType");
-			sout.writeInt(3);
-			sout.lineBreak();
-
-			sout.writeName("Domain");
-			sout.startArray();
-			sout.writeReal(0.0);
-			sout.writeReal(1.0);
-			sout.endArray();
-			sout.lineBreak();
-
-			sout.writeName("Encode");
-			sout.startArray();
-			for (var i = 0; i < segments; ++i) {
-				sout.writeReal(0.0);
-				sout.writeReal(1.0);
-			}
-			sout.endArray();
-			sout.lineBreak();
-
-			sout.writeName("Bounds");
-			sout.startArray();
-			if (fractions[0] != 0) {
-				sout.writeReal(fractions[0]);
-			}
-			for (var i = 1; i < fractions.length - 1; ++i) {
-				sout.writeReal(fractions[i]);
-			}
-			if (fractions[fractions.length - 1] != 1) {
-				sout.writeReal(fractions[fractions.length - 1]);
-			}
-			sout.endArray();
-			sout.lineBreak();
-
-			sout.writeName("Functions");
-			sout.startArray();
-			for (var i = -1; i < fractions.length; ++i) {
-				final Color c0, c1;
-				if (i == -1) {
-					if (fractions[0] != 0) {
-						c0 = colors[0];
-						c1 = colors[0];
-					} else {
-						continue;
-					}
-				} else if (i == fractions.length - 1) {
-					if (fractions[i] != 1) {
-						c0 = colors[i];
-						c1 = colors[i];
-					} else {
-						break;
-					}
-				} else {
-					c0 = colors[i];
-					c1 = colors[i + 1];
-				}
-
-				sout.startHash();
-				sout.writeName("FunctionType");
-				sout.writeInt(2);
-				sout.lineBreak();
-
-				sout.writeName("Domain");
-				sout.startArray();
-				sout.writeReal(0.0);
-				sout.writeReal(1.0);
-				sout.endArray();
-				sout.lineBreak();
-
-				sout.writeName("N");
-				sout.writeReal(1.0);
-				sout.lineBreak();
-
-				sout.writeName("C0");
-				sout.startArray();
-				writeColor(sout, colorType, c0);
-				sout.endArray();
-				sout.lineBreak();
-
-				sout.writeName("C1");
-				sout.startArray();
-				writeColor(sout, colorType, c1);
-				sout.endArray();
-				sout.lineBreak();
-				sout.endHash();
-			}
-			sout.endArray();
-			sout.lineBreak();
-		}
-		sout.endHash();
-		sout.lineBreak();
-	}
-
-	/**
-	 * Writes color components to the output.
-	 *
-	 * @param sout      The output stream.
-	 * @param colorType The target color space type.
-	 * @param color     The color object.
-	 * @throws IOException if an I/O error occurs.
-	 */
-	private static void writeColor(final PDFOutput sout, final Color.Type colorType, final Color color)
-			throws IOException {
-		switch (colorType) {
-			case GRAY -> {
-				if (color instanceof GrayColor gray) {
-					sout.writeReal(gray.getComponent(0));
-				} else {
-					sout.writeReal(ColorUtils.toGray(color.getRed(), color.getGreen(), color.getBlue()));
-				}
-			}
-			case RGB -> {
-				sout.writeReal(color.getRed());
-				sout.writeReal(color.getGreen());
-				sout.writeReal(color.getBlue());
-			}
-			case CMYK -> {
-				final var cmyk = ColorUtils.toCMYK(color);
-				sout.writeReal(cmyk.getComponent(CMYKColor.C));
-				sout.writeReal(cmyk.getComponent(CMYKColor.M));
-				sout.writeReal(cmyk.getComponent(CMYKColor.Y));
-				sout.writeReal(cmyk.getComponent(CMYKColor.K));
-			}
-			default -> throw new IllegalStateException("Unexpected color type: " + colorType);
-		}
+		PaintResources.writeShadingFunction(sout, this.getPdfWriter().getParams(), colors, fractions);
 	}
 
 	/**

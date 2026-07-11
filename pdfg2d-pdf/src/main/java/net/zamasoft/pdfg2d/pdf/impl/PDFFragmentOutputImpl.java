@@ -3,7 +3,7 @@ package net.zamasoft.pdfg2d.pdf.impl;
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.zip.DeflaterOutputStream;
+import net.zamasoft.pdfg2d.pdf.util.io.FinishingDeflaterOutputStream;
 
 import net.zamasoft.zstream.io.util.FragmentOutputAdapter;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
@@ -245,8 +245,8 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 			case RAW -> flowOut;
 			case ASCII -> {
 				final var encodedOut = switch (compression) {
-					case ASCII -> new DeflaterOutputStream(new ASCII85OutputStream(flowOut));
-					case BINARY -> new DeflaterOutputStream(flowOut);
+					case ASCII -> new FinishingDeflaterOutputStream(new ASCII85OutputStream(flowOut));
+					case BINARY -> new FinishingDeflaterOutputStream(flowOut);
 					default -> flowOut;
 				};
 				yield new FastBufferedOutputStream(encodedOut, this.getBuffer());
@@ -254,8 +254,8 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 			case BINARY -> {
 				final var encodedOut = switch (compression) {
 					case NONE -> new ASCIIHexOutputStream(flowOut);
-					case ASCII -> new DeflaterOutputStream(new ASCII85OutputStream(flowOut));
-					case BINARY -> new DeflaterOutputStream(flowOut);
+					case ASCII -> new FinishingDeflaterOutputStream(new ASCII85OutputStream(flowOut));
+					case BINARY -> new FinishingDeflaterOutputStream(flowOut);
 				};
 				yield new FastBufferedOutputStream(encodedOut, this.getBuffer());
 			}
