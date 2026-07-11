@@ -28,6 +28,13 @@ import net.zamasoft.pdfg2d.pdf.font.ConfigurablePDFFontSourceManager;
  * @param linearized               Whether to produce a linearized (Fast Web View) file
  * @param outputIntent             Output intent (characterized printing condition), or {@code null} for defaults
  * @param tagged                   Tagged PDF configuration, or {@code null} for untagged output
+ * @param deflateLevel             Deflate compression level (-1 = zlib default, 0-9), trading
+ *                                 output size against generation speed
+ * @param objectStreams            Whether to pack small dictionary objects into object streams
+ *                                 and emit a cross-reference stream (PDF 1.5+)
+ * @param rgbProfile               ICC profile for RGB content; when set, RGB colors are emitted
+ *                                 in an ICCBased color space instead of DeviceRGB
+ * @param renderingIntent          Default color rendering intent, or {@code null} to omit
  */
 public record PDFParams(
 		FontSourceManager fontSourceManager,
@@ -49,7 +56,11 @@ public record PDFParams(
 		Action openAction,
 		boolean linearized,
 		OutputIntent outputIntent,
-		TaggedParams tagged) {
+		TaggedParams tagged,
+		int deflateLevel,
+		boolean objectStreams,
+		byte[] rgbProfile,
+		RenderingIntent renderingIntent) {
 
 	/**
 	 * Represents the PDF version or conformance profile to generate.
@@ -251,15 +262,23 @@ public record PDFParams(
 		// PDF/X-1a allows only CMYK, grayscale and spot colors. PRESERVE
 		// would let DeviceRGB operators through, so it is normalized to CMYK
 		// conversion; an explicit GRAY mode remains valid as-is.
-		// (Also X-4/X-6: those standards allow ICC-managed RGB, but this
-		// writer emits DeviceRGB, so conversion to CMYK is the conservative
-		// conforming choice until ICCBased color spaces are supported.)
-		if (version != null && version.isPdfX() && colorMode == ColorMode.PRESERVE) {
-			colorMode = ColorMode.CMYK;
-		}
 		// PDF/A conformance level A requires tagged logical structure.
 		if (version != null && "A".equals(version.pdfaConformance()) && tagged == null) {
 			tagged = TaggedParams.TAGGED;
+		}
+		if (deflateLevel < -1 || deflateLevel > 9) {
+			throw new IllegalArgumentException("deflateLevel must be -1 (default) or 0-9.");
+		}
+		if (objectStreams) {
+			if (version != null && version.v < Version.V_1_5.v) {
+				throw new IllegalArgumentException("Object streams require PDF 1.5 or later.");
+			}
+			if (encryption != null) {
+				throw new IllegalArgumentException("Object streams are not supported with encryption.");
+			}
+			if (linearized) {
+				throw new IllegalArgumentException("Object streams are not supported with linearized output.");
+			}
 		}
 		if (fontSourceManager == null) {
 			fontSourceManager = ConfigurablePDFFontSourceManager.getDefaultFontSourceManager();
@@ -313,6 +332,98 @@ public record PDFParams(
 		this(fontSourceManager, version, compression, jpegImage, imageCompression, imageCompressionLossless,
 				platformEncoding, bookmarks, encryption, colorMode, maxImageWidth, maxImageHeight, precision, fileId,
 				metaInfo, viewerPreferences, openAction, linearized, null, null);
+	}
+
+	/**
+	 * Compatibility constructor without color management extensions.
+	 */
+	public PDFParams(
+			FontSourceManager fontSourceManager,
+			Version version,
+			Compression compression,
+			JPEGImage jpegImage,
+			ImageCompression imageCompression,
+			int imageCompressionLossless,
+			String platformEncoding,
+			boolean bookmarks,
+			EncryptionParams encryption,
+			ColorMode colorMode,
+			int maxImageWidth,
+			int maxImageHeight,
+			int precision,
+			byte[] fileId,
+			PDFMetaInfo metaInfo,
+			ViewerPreferences viewerPreferences,
+			Action openAction,
+			boolean linearized,
+			OutputIntent outputIntent,
+			TaggedParams tagged,
+			int deflateLevel,
+			boolean objectStreams) {
+		this(fontSourceManager, version, compression, jpegImage, imageCompression, imageCompressionLossless,
+				platformEncoding, bookmarks, encryption, colorMode, maxImageWidth, maxImageHeight, precision, fileId,
+				metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel,
+				objectStreams, null, null);
+	}
+
+	/**
+	 * Compatibility constructor without object streams.
+	 */
+	public PDFParams(
+			FontSourceManager fontSourceManager,
+			Version version,
+			Compression compression,
+			JPEGImage jpegImage,
+			ImageCompression imageCompression,
+			int imageCompressionLossless,
+			String platformEncoding,
+			boolean bookmarks,
+			EncryptionParams encryption,
+			ColorMode colorMode,
+			int maxImageWidth,
+			int maxImageHeight,
+			int precision,
+			byte[] fileId,
+			PDFMetaInfo metaInfo,
+			ViewerPreferences viewerPreferences,
+			Action openAction,
+			boolean linearized,
+			OutputIntent outputIntent,
+			TaggedParams tagged,
+			int deflateLevel) {
+		this(fontSourceManager, version, compression, jpegImage, imageCompression, imageCompressionLossless,
+				platformEncoding, bookmarks, encryption, colorMode, maxImageWidth, maxImageHeight, precision, fileId,
+				metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, false);
+	}
+
+	/**
+	 * Compatibility constructor without a deflate level (uses the zlib
+	 * default).
+	 */
+	public PDFParams(
+			FontSourceManager fontSourceManager,
+			Version version,
+			Compression compression,
+			JPEGImage jpegImage,
+			ImageCompression imageCompression,
+			int imageCompressionLossless,
+			String platformEncoding,
+			boolean bookmarks,
+			EncryptionParams encryption,
+			ColorMode colorMode,
+			int maxImageWidth,
+			int maxImageHeight,
+			int precision,
+			byte[] fileId,
+			PDFMetaInfo metaInfo,
+			ViewerPreferences viewerPreferences,
+			Action openAction,
+			boolean linearized,
+			OutputIntent outputIntent,
+			TaggedParams tagged) {
+		this(fontSourceManager, version, compression, jpegImage, imageCompression, imageCompressionLossless,
+				platformEncoding, bookmarks, encryption, colorMode, maxImageWidth, maxImageHeight, precision, fileId,
+				metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, -1);
 	}
 
 	/**
@@ -380,7 +491,8 @@ public record PDFParams(
 	public PDFParams withFontSourceManager(FontSourceManager fontSourceManager) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -392,7 +504,8 @@ public record PDFParams(
 	public PDFParams withVersion(Version version) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -404,7 +517,8 @@ public record PDFParams(
 	public PDFParams withCompression(Compression compression) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -416,7 +530,8 @@ public record PDFParams(
 	public PDFParams withJPEGImage(JPEGImage jpegImage) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -428,7 +543,8 @@ public record PDFParams(
 	public PDFParams withImageCompression(ImageCompression imageCompression) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -441,7 +557,8 @@ public record PDFParams(
 	public PDFParams withImageCompressionLossless(int imageCompressionLossless) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -453,7 +570,8 @@ public record PDFParams(
 	public PDFParams withPlatformEncoding(String platformEncoding) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -465,7 +583,8 @@ public record PDFParams(
 	public PDFParams withBookmarks(boolean bookmarks) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -477,7 +596,8 @@ public record PDFParams(
 	public PDFParams withEncryption(EncryptionParams encryption) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -489,7 +609,8 @@ public record PDFParams(
 	public PDFParams withColorMode(ColorMode colorMode) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -501,7 +622,8 @@ public record PDFParams(
 	public PDFParams withMaxImageWidth(int maxImageWidth) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -513,7 +635,8 @@ public record PDFParams(
 	public PDFParams withMaxImageHeight(int maxImageHeight) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -525,7 +648,8 @@ public record PDFParams(
 	public PDFParams withPrecision(int precision) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -537,7 +661,8 @@ public record PDFParams(
 	public PDFParams withFileId(byte[] fileId) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -549,7 +674,8 @@ public record PDFParams(
 	public PDFParams withMetaInfo(PDFMetaInfo metaInfo) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -561,7 +687,8 @@ public record PDFParams(
 	public PDFParams withViewerPreferences(ViewerPreferences viewerPreferences) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -574,7 +701,8 @@ public record PDFParams(
 	public PDFParams withOpenAction(Action openAction) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -586,7 +714,8 @@ public record PDFParams(
 	public PDFParams withLinearized(boolean linearized) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -598,7 +727,8 @@ public record PDFParams(
 	public PDFParams withOutputIntent(OutputIntent outputIntent) {
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
-				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged);
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
+				renderingIntent);
 	}
 
 	/**
@@ -612,5 +742,103 @@ public record PDFParams(
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
 				tagged);
+	}
+
+	/**
+	 * Returns a new instance with the specified deflate compression level.
+	 * {@code -1} selects the zlib default (a size/speed balance); {@code 1}
+	 * ({@code BEST_SPEED}) suits high-volume server-side generation and
+	 * {@code 9} ({@code BEST_COMPRESSION}) distribution files.
+	 *
+	 * @param deflateLevel the level (-1, or 0-9)
+	 * @return new PDFParams instance
+	 */
+	public PDFParams withDeflateLevel(int deflateLevel) {
+		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
+				tagged, deflateLevel);
+	}
+
+	/**
+	 * Returns a new instance with object streams enabled or disabled.
+	 * Object streams pack small dictionary objects (notably the logical
+	 * structure tree of tagged PDFs) into compressed streams and switch the
+	 * cross-reference table to a cross-reference stream, reducing file size.
+	 * Requires PDF 1.5+ and is unavailable with encryption or linearized
+	 * output.
+	 *
+	 * @param objectStreams whether to enable object streams
+	 * @return new PDFParams instance
+	 */
+	public PDFParams withObjectStreams(boolean objectStreams) {
+		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
+				tagged, deflateLevel, objectStreams);
+	}
+
+	/**
+	 * Returns the color mode actually applied when writing content. PDF/X
+	 * restricts device-dependent color: X-1a is always converted to CMYK,
+	 * and X-4/X-6 are converted unless an RGB ICC profile is configured
+	 * (ICC-managed RGB is permitted there). Computed at use time so that
+	 * {@code with*} chaining order does not matter.
+	 *
+	 * @return the effective color mode
+	 */
+	public ColorMode effectiveColorMode() {
+		if (this.version != null && this.version.isPdfX() && this.colorMode == ColorMode.PRESERVE
+				&& (this.version == Version.V_PDFX1A || this.rgbProfile == null)) {
+			return ColorMode.CMYK;
+		}
+		return this.colorMode;
+	}
+
+	/**
+	 * Returns a new instance with the given ICC profile for RGB content.
+	 * When set, RGB colors are written in an ICCBased color space instead of
+	 * DeviceRGB — required to keep RGB content in PDF/X-4/X-6 workflows.
+	 *
+	 * @param rgbProfile the RGB ICC profile bytes, or {@code null} for DeviceRGB
+	 * @return new PDFParams instance
+	 */
+	public PDFParams withRGBProfile(byte[] rgbProfile) {
+		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
+	}
+
+	/**
+	 * Returns a new instance using the bundled sRGB profile for RGB content.
+	 *
+	 * @return new PDFParams instance
+	 */
+	public PDFParams withSRGBProfile() {
+		try (var in = PDFParams.class
+				.getResourceAsStream("/net/zamasoft/pdfg2d/pdf/impl/sRGB_IEC61966-2-1_no_black_scaling.icc")) {
+			if (in == null) {
+				throw new IllegalStateException("Bundled sRGB profile is missing.");
+			}
+			return this.withRGBProfile(in.readAllBytes());
+		} catch (java.io.IOException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/**
+	 * Returns a new instance with the given default rendering intent,
+	 * emitted as the {@code ri} operator at the start of each content
+	 * stream.
+	 *
+	 * @param renderingIntent the intent, or {@code null} to omit
+	 * @return new PDFParams instance
+	 */
+	public PDFParams withRenderingIntent(RenderingIntent renderingIntent) {
+		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
 	}
 }

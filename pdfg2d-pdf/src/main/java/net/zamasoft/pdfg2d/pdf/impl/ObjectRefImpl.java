@@ -89,4 +89,29 @@ public final class ObjectRefImpl extends ObjectRef {
 	public String toString() {
 		return this.objectNumber() + " " + this.generationNumber() + " R";
 	}
+
+	/** Object number of the containing object stream, or -1 when not packed. */
+	private int objStmNumber = -1;
+
+	/** Index within the containing object stream. */
+	private int objStmIndex = -1;
+
+	/** Marks this object as packed into an object stream (type-2 xref entry). */
+	void setCompressed(final int objStmNumber, final int objStmIndex) {
+		this.objStmNumber = objStmNumber;
+		this.objStmIndex = objStmIndex;
+	}
+
+	/** Returns whether this object lives inside an object stream. */
+	boolean isCompressed() {
+		return this.objStmNumber >= 0;
+	}
+
+	int getObjStmNumber() {
+		return this.objStmNumber;
+	}
+
+	int getObjStmIndex() {
+		return this.objStmIndex;
+	}
 }

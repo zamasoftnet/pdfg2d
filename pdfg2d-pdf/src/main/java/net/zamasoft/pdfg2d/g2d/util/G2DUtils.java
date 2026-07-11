@@ -25,10 +25,6 @@ import java.util.logging.Logger;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 
-import org.apache.batik.ext.awt.LinearGradientPaint;
-import org.apache.batik.ext.awt.MultipleGradientPaint;
-import org.apache.batik.ext.awt.RadialGradientPaint;
-
 import net.zamasoft.pdfg2d.g2d.gc.G2DGC;
 import net.zamasoft.pdfg2d.g2d.image.RasterImageImpl;
 import net.zamasoft.pdfg2d.g2d.image.png.PNGDecodeParam;
@@ -70,6 +66,9 @@ public final class G2DUtils {
 	public static Paint fromAwtPaint(java.awt.Paint paint) {
 		if (paint instanceof java.awt.Color) {
 			return fromAwtColor((java.awt.Color) paint);
+		}
+		if (paint instanceof SpotPaint spot) {
+			return spot.getSpotColor();
 		}
 		if (paint instanceof GradientPaint) {
 			GradientPaint gpaint = (GradientPaint) paint;
@@ -119,40 +118,6 @@ public final class G2DUtils {
 					gpaint.getRadius(), gpaint.getFocusPoint().getX(), gpaint.getFocusPoint().getY(), fractions,
 					colors, gpaint.getTransform());
 		}
-		if (paint instanceof RadialGradientPaint) {
-			RadialGradientPaint gpaint = (RadialGradientPaint) paint;
-			float[] fs = gpaint.getFractions();
-			double[] fractions = new double[fs.length];
-			for (int i = 0; i < fs.length; ++i) {
-				fractions[i] = fs[i];
-			}
-			java.awt.Color[] cs = gpaint.getColors();
-			Color[] colors = new Color[cs.length];
-			for (int i = 0; i < cs.length; ++i) {
-				colors[i] = fromAwtColor(cs[i]);
-			}
-			return new RadialGradient(gpaint.getCenterPoint().getX(), gpaint.getCenterPoint().getY(),
-					gpaint.getRadius(), gpaint.getFocusPoint().getX(), gpaint.getFocusPoint().getY(), fractions, colors,
-					gpaint.getTransform());
-		}
-		if (paint instanceof LinearGradientPaint) {
-			LinearGradientPaint gpaint = (LinearGradientPaint) paint;
-			if (gpaint.getCycleMethod() != LinearGradientPaint.NO_CYCLE) {
-				return null;
-			}
-			float[] fs = gpaint.getFractions();
-			double[] fractions = new double[fs.length];
-			for (int i = 0; i < fs.length; ++i) {
-				fractions[i] = fs[i];
-			}
-			java.awt.Color[] cs = gpaint.getColors();
-			Color[] colors = new Color[cs.length];
-			for (int i = 0; i < cs.length; ++i) {
-				colors[i] = fromAwtColor(cs[i]);
-			}
-			return new LinearGradient(gpaint.getStartPoint().getX(), gpaint.getStartPoint().getY(),
-					gpaint.getEndPoint().getX(), gpaint.getEndPoint().getY(), fractions, colors, gpaint.getTransform());
-		}
 		if (paint instanceof TexturePaint) {
 			TexturePaint tpaint = (TexturePaint) paint;
 			Rectangle2D r = tpaint.getAnchorRect();
@@ -181,9 +146,11 @@ public final class G2DUtils {
 		for (int i = 0; i < cs.length; ++i) {
 			colors[i] = toAwtColor(cs[i]);
 		}
-		return new LinearGradientPaint(new Point2D.Double(gradient.x1(), gradient.y1()),
+		return new java.awt.LinearGradientPaint(new Point2D.Double(gradient.x1(), gradient.y1()),
 				new Point2D.Double(gradient.x2(), gradient.y2()), fractions, colors,
-				MultipleGradientPaint.NO_CYCLE, MultipleGradientPaint.SRGB, gradient.transform());
+				java.awt.MultipleGradientPaint.CycleMethod.NO_CYCLE,
+				java.awt.MultipleGradientPaint.ColorSpaceType.SRGB,
+				gradient.transform() != null ? gradient.transform() : new AffineTransform());
 	}
 
 	/**
@@ -203,9 +170,13 @@ public final class G2DUtils {
 		for (int i = 0; i < cs.length; ++i) {
 			colors[i] = toAwtColor(cs[i]);
 		}
-		return new RadialGradientPaint(new Point2D.Double(gradient.cx(), gradient.cy()),
-				(float) gradient.radius(), new Point2D.Double(gradient.fy(), gradient.fx()), fractions, colors,
-				MultipleGradientPaint.NO_CYCLE, MultipleGradientPaint.SRGB, gradient.transform());
+		// Note: the focus point is (fx, fy); the previous Batik-based code
+		// passed the coordinates swapped.
+		return new java.awt.RadialGradientPaint(new Point2D.Double(gradient.cx(), gradient.cy()),
+				(float) gradient.radius(), new Point2D.Double(gradient.fx(), gradient.fy()), fractions, colors,
+				java.awt.MultipleGradientPaint.CycleMethod.NO_CYCLE,
+				java.awt.MultipleGradientPaint.ColorSpaceType.SRGB,
+				gradient.transform() != null ? gradient.transform() : new AffineTransform());
 	}
 
 	/**

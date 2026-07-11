@@ -11,20 +11,11 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import net.zamasoft.pdfg2d.font.DrawableFont;
-import net.zamasoft.pdfg2d.font.FontMetricsImpl;
-import net.zamasoft.pdfg2d.font.FontSource;
-import net.zamasoft.pdfg2d.font.ImageFont;
-import net.zamasoft.pdfg2d.font.ShapedFont;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.font.FontManager;
-import net.zamasoft.pdfg2d.gc.font.FontStyle;
-import net.zamasoft.pdfg2d.gc.font.FontStyle.Style;
-import net.zamasoft.pdfg2d.gc.font.util.FontUtils;
 import net.zamasoft.pdfg2d.gc.image.GroupImageGC;
 import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.paint.CMYKColor;
@@ -37,8 +28,6 @@ import net.zamasoft.pdfg2d.gc.text.Text;
 import net.zamasoft.pdfg2d.pdf.PDFGraphicsOutput;
 import net.zamasoft.pdfg2d.pdf.PDFOutput;
 import net.zamasoft.pdfg2d.pdf.PDFWriter;
-import net.zamasoft.pdfg2d.pdf.font.PDFFont;
-import net.zamasoft.pdfg2d.pdf.font.PDFFontSource;
 import net.zamasoft.pdfg2d.pdf.font.PDFFontSource.Type;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 
@@ -254,7 +243,8 @@ public class PDFGC implements GC, Closeable {
 			byte fillOverprint,
 			byte strokeOverprint,
 			double letterSpacing,
-			TextMode textMode) {
+			TextMode textMode,
+			String smask) {
 
 		XGraphicsState(final PDFGC gc) {
 			this(
@@ -269,7 +259,8 @@ public class PDFGC implements GC, Closeable {
 					gc.xfillOverprint,
 					gc.xstrokeOverprint,
 					gc.xletterSpacing,
-					gc.xtextMode);
+					gc.xtextMode,
+					gc.xsmask);
 		}
 
 		/**
@@ -290,12 +281,13 @@ public class PDFGC implements GC, Closeable {
 			gc.xstrokeAlpha = this.strokeAlpha;
 			gc.xfillOverprint = this.fillOverprint;
 			gc.xstrokeOverprint = this.strokeOverprint;
+			gc.xsmask = this.smask;
 		}
 	}
 
 	private final List<GraphicsState> stack = new ArrayList<>();
 
-	private AffineTransform transform = null;
+	AffineTransform transform = null;
 
 	private AffineTransform actualTransform = null;
 
@@ -326,24 +318,24 @@ public class PDFGC implements GC, Closeable {
 	private double[] xlinePattern = STROKE_SOLID;
 
 	/** Stroke paint. */
-	private Paint strokePaint = GrayColor.BLACK;
+	Paint strokePaint = GrayColor.BLACK;
 
 	/** Current PDF stroke paint. */
-	private Paint xstrokePaint = GrayColor.BLACK;
+	Paint xstrokePaint = GrayColor.BLACK;
 
 	/** Fill paint. */
-	private Paint fillPaint = GrayColor.BLACK;
+	Paint fillPaint = GrayColor.BLACK;
 
 	/** Current PDF fill paint. */
-	private Paint xfillPaint = GrayColor.BLACK;
+	Paint xfillPaint = GrayColor.BLACK;
 
-	private double xletterSpacing = 0;
+	double xletterSpacing = 0;
 
 	/** Text rendering mode. */
-	private TextMode textMode = TextMode.FILL;
+	TextMode textMode = TextMode.FILL;
 
 	/** Current PDF text rendering mode. */
-	private TextMode xtextMode = TextMode.FILL;
+	TextMode xtextMode = TextMode.FILL;
 
 	/** Stroke opacity. */
 	public float strokeAlpha = 1;
@@ -369,12 +361,22 @@ public class PDFGC implements GC, Closeable {
 	/** Current PDF fill overprint mode. */
 	public byte xfillOverprint = 0;
 
+	/**
+	 * ExtGState name of the soft mask currently active in the PDF, or
+	 * {@code null}. Set when painting gradients with per-stop alpha and reset
+	 * with an {@code /SMask /None} ExtGState for other paints.
+	 */
+	String xsmask = null;
+
 	/** Document-wide cache of pattern/shading resource names (see {@link PaintResources}). */
 	final Map<Object, String> resourceCache;
 
 	private final double[] cord = new double[6];
 
 	private int qDepth = 0;
+
+	/** Whether the default rendering intent has been written to this stream. */
+	private boolean riWritten = false;
 
 	/**
 	 * True while a marked-content sequence opened by this GC is active;
@@ -388,7 +390,7 @@ public class PDFGC implements GC, Closeable {
 	final PDFParams.Version pdfVersion;
 
 	/** True when the target profile forbids non-embedded fonts (PDF/A, PDF/X, PDF/UA). */
-	private final boolean requireEmbeddedFonts;
+	final boolean requireEmbeddedFonts;
 
 	@SuppressWarnings("unchecked")
 	PDFGC(final PDFGraphicsOutput out, final Map<Object, String> resourceCache) {
@@ -581,6 +583,13 @@ public class PDFGC implements GC, Closeable {
 					this.fillOverprint = cmyk.getOverprint();
 				} else {
 					this.strokeOverprint = cmyk.getOverprint();
+				}
+			}
+			case net.zamasoft.pdfg2d.gc.paint.SpotColor spot -> {
+				if (fill) {
+					this.fillOverprint = spot.overprint();
+				} else {
+					this.strokeOverprint = spot.overprint();
 				}
 			}
 			case Color color -> {
@@ -841,214 +850,7 @@ public class PDFGC implements GC, Closeable {
 	}
 
 	private void drawTextContent(final Text text, final double x, final double y) throws GraphicsException {
-		final var font = ((FontMetricsImpl) text.getFontMetrics()).getFont();
-		final var fpl = text.getFontStyle().getPolicy();
-		boolean outline = false;
-		LOOP: for (var i = 0; i < fpl.getLength(); ++i) {
-			switch (fpl.get(i)) {
-				case EMBEDDED:
-				case CID_IDENTITY:
-					break LOOP;
-				case OUTLINES:
-					outline = true;
-					break LOOP;
-				default:
-					break;
-			}
-		}
-		if (outline || font instanceof ImageFont) {
-			if (font instanceof DrawableFont df) {
-				if (font instanceof ShapedFont sf) {
-					final var glyphCount = text.getGlyphCount();
-					final var glyphIds = text.getGlyphIds();
-					boolean hasShape = false;
-					for (var i = 0; i < glyphCount; ++i) {
-						final var gid = glyphIds[i];
-						final var shape = sf.getShapeByGID(gid);
-						if (shape != null && !shape.getPathIterator(null).isDone()) {
-							hasShape = true;
-							break;
-						}
-					}
-					if (!hasShape) {
-						// No characters to draw
-						return;
-					}
-				}
-				this.begin();
-				this.transform(AffineTransform.getTranslateInstance(x, y));
-				FontUtils.drawText(this, df, text);
-				this.end();
-				return;
-			}
-		}
-
-		assert text.getCharCount() > 0;
-		try {
-			this.applyStates();
-			if (this.textMode != this.xtextMode) {
-				this.xtextMode = this.textMode;
-				this.out.writeInt(this.textMode.code);
-				this.out.writeOperator("Tr");
-			}
-
-			FontMetricsImpl fm = (FontMetricsImpl) text.getFontMetrics();
-			PDFFontSource source = (PDFFontSource) fm.getFontSource();
-			if (this.requireEmbeddedFonts) {
-				Type type = source.getType();
-				if (type != Type.EMBEDDED && type != Type.MISSING) {
-					throw new IllegalStateException("Only embedded fonts can be used in PDF/A, PDF/X or PDF/UA.");
-				}
-			}
-			FontStyle fontStyle = text.getFontStyle();
-
-			if (LOG.isLoggable(Level.FINE)) {
-				LOG.fine("drawText: fontSource=" + source + " text=" + text);
-			}
-
-			boolean localContext = false;
-			double size = fontStyle.getSize();
-			var drawX = x;
-			var drawY = y;
-
-			double enlargement;
-			final var weight = fontStyle.getWeight();
-			if (this.textMode == TextMode.FILL && weight.w >= 500 && source.getWeight().w < 500) {
-				// Simulate bold manually
-				enlargement = switch (weight) {
-					case W_500 -> size / 28.0;
-					case W_600 -> size / 24.0;
-					case W_700 -> size / 20.0;
-					case W_800 -> size / 16.0;
-					case W_900 -> size / 12.0;
-					default -> throw new IllegalStateException("Unexpected weight: " + weight);
-				};
-				if (enlargement > 0 && this.fillPaint.getPaintType() == Paint.Type.COLOR && this.fillAlpha == 1) {
-					this.q();
-					localContext = true;
-					this.out.writeReal(enlargement);
-					this.out.writeOperator("w");
-					this.out.writeInt(TextMode.FILL_STROKE.code);
-					this.out.writeOperator("Tr");
-					if (!this.fillPaint.equals(this.strokePaint)) {
-						if (this.xstrokePaint != null && this.xstrokePaint.getPaintType() != Paint.Type.COLOR) {
-							this.out.writeName("DeviceRGB");
-							this.out.writeOperator("CS");
-						}
-						this.out.writeStrokeColor((Color) this.fillPaint);
-					}
-				}
-			} else {
-				enlargement = 0;
-			}
-
-			final var direction = fontStyle.getDirection();
-			AffineTransform rotate = null;
-			double center = 0;
-			boolean verticalFont = false;
-			switch (direction) {
-				case LTR, RTL -> {
-					// Horizontal. Known limitation: RTL runs are emitted in
-					// logical order without bidi reordering or glyph mirroring;
-					// callers must pass text in visual order for RTL scripts.
-				}
-				case TB -> {
-					// Vertical
-					if (source.getDirection() == direction) {
-						// Vertical typesetting
-						verticalFont = true;
-					} else {
-						// 90-degree rotated horizontal
-						if (!localContext) {
-							this.q();
-							localContext = true;
-						}
-						rotate = AffineTransform.getRotateInstance(Math.PI / 2, drawX, drawY);
-						this.out.writeTransform(rotate);
-						this.out.writeOperator("cm");
-						final var bbox = source.getBBox();
-						center = ((bbox.lly() + bbox.ury()) * size / FontSource.DEFAULT_UNITS_PER_EM) / 2.0;
-						drawY += center;
-					}
-				}
-				default -> throw new IllegalStateException("Unexpected direction: " + direction);
-			}
-
-			// Begin text
-			this.out.writeOperator("BT");
-
-			// Italic
-			final var style = fontStyle.getStyle();
-			if (style != Style.NORMAL && !source.isItalic()) {
-				// Simulate italic manually
-				if (verticalFont) {
-					// Vertical italic
-					this.out.writeReal(1);
-					this.out.writeReal(-0.25);
-					this.out.writeReal(0);
-					this.out.writeReal(1);
-					this.out.writePosition(drawX, drawY);
-					this.out.writeOperator("Tm");
-				} else {
-					// Horizontal italic
-					this.out.writeReal(1);
-					this.out.writeReal(0);
-					this.out.writeReal(0.25);
-					this.out.writeReal(1);
-					this.out.writePosition(drawX, drawY);
-					this.out.writeOperator("Tm");
-				}
-			} else {
-				this.out.writePosition(drawX, drawY);
-				this.out.writeOperator("Td");
-			}
-
-			// Font name and size
-			String name = ((PDFFont) font).getName();
-			this.out.useResource("Font", name);
-			this.out.writeName(name);
-			this.out.writeReal(size);
-			this.out.writeOperator("Tf");
-
-			// Letter spacing
-			double letterSpacing = text.getLetterSpacing();
-			// Use negative value for vertical writing (PDF 1.3 spec 8.7.1.1)
-			if (verticalFont) {
-				letterSpacing = -letterSpacing;
-			}
-			if (!this.out.equals(letterSpacing, this.xletterSpacing)) {
-				this.out.writeReal(letterSpacing);
-				this.out.writeOperator("Tc");
-				if (!localContext) {
-					this.xletterSpacing = letterSpacing;
-				}
-			}
-
-			// Draw
-			font.drawTo(this, text);
-
-			// End text
-			this.out.writeOperator("ET");
-
-			if (enlargement > 0 && this.fillPaint.getPaintType() == Paint.Type.COLOR && this.fillAlpha == 1) {
-				// End bold simulation
-				this.out.writeInt(TextMode.FILL.code);
-				this.out.writeOperator("Tr");
-				if (!this.fillPaint.equals(this.strokePaint)) {
-					if (this.xfillPaint != null && this.xfillPaint.getPaintType() != Paint.Type.COLOR) {
-						this.out.writeName("DeviceRGB");
-						this.out.writeOperator("CS");
-					}
-					this.out.writeStrokeColor((Color) this.strokePaint);
-				}
-			}
-
-			if (localContext) {
-				this.Q();
-			}
-		} catch (IOException e) {
-			throw new GraphicsException(e);
-		}
+		PDFTextRenderer.drawText(this, text, x, y);
 	}
 
 	private static class PdfGroupImageGC extends PDFGC implements GroupImageGC {
@@ -1072,6 +874,39 @@ public class PDFGC implements GC, Closeable {
 		try {
 			final var image = this.getPdfWriter().createGroupImage(width, height);
 			return new PdfGroupImageGC(image);
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+	}
+
+	/**
+	 * Opens an optional-content (layer) marked-content sequence: content
+	 * drawn until {@link #endLayer()} belongs to the given layer and follows
+	 * its view/print visibility. May be nested with other marked content.
+	 *
+	 * @param layer the layer to attribute content to
+	 * @throws GraphicsException if an I/O error occurs
+	 */
+	public void beginLayer(final net.zamasoft.pdfg2d.pdf.PDFOptionalContentGroup layer) throws GraphicsException {
+		try {
+			this.applyStates();
+			this.out.useResource("Properties", layer.getResourceName());
+			this.out.writeName("OC");
+			this.out.writeName(layer.getResourceName());
+			this.out.writeOperator("BDC");
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+	}
+
+	/**
+	 * Closes the layer opened by {@link #beginLayer}.
+	 *
+	 * @throws GraphicsException if an I/O error occurs
+	 */
+	public void endLayer() throws GraphicsException {
+		try {
+			this.out.writeOperator("EMC");
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		}
@@ -1191,6 +1026,16 @@ public class PDFGC implements GC, Closeable {
 	 */
 	protected void applyStates() throws IOException {
 		final var out = this.out;
+
+		// Default rendering intent, once per content stream
+		if (!this.riWritten) {
+			this.riWritten = true;
+			final var ri = out.getPdfWriter().getParams().renderingIntent();
+			if (ri != null) {
+				out.writeName(ri.pdfName());
+				out.writeOperator("ri");
+			}
+		}
 		// Transform
 		this.applyTransform();
 		this.applyClip();
@@ -1270,6 +1115,22 @@ public class PDFGC implements GC, Closeable {
 				default -> throw new IllegalStateException("Unexpected paint type: " + this.fillPaint.getPaintType());
 			}
 			this.xfillPaint = this.fillPaint;
+		}
+
+		// Soft mask reproducing per-stop gradient alpha. Both paints share
+		// one mask state; the fill paint wins when both are alpha gradients.
+		if (this.pdfVersion.allowsTransparency()) {
+			var desired = PaintResources.softMaskName(this, this.fillPaint);
+			if (desired == null) {
+				desired = PaintResources.softMaskName(this, this.strokePaint);
+			}
+			if (!java.util.Objects.equals(desired, this.xsmask)) {
+				final var gsName = (desired != null) ? desired : PaintResources.smaskNoneName(this);
+				out.useResource("ExtGState", gsName);
+				out.writeName(gsName);
+				out.writeOperator("gs");
+				this.xsmask = desired;
+			}
 		}
 
 		// Opacity
@@ -1368,7 +1229,7 @@ public class PDFGC implements GC, Closeable {
 	 *
 	 * @throws IOException if an I/O error occurs
 	 */
-	private void q() throws IOException {
+	void q() throws IOException {
 		++this.qDepth;
 		if (this.pdfVersion.v == PDFParams.Version.V_PDFA1B.v) {
 			if (this.qDepth > 28) {
@@ -1383,7 +1244,7 @@ public class PDFGC implements GC, Closeable {
 	 *
 	 * @throws IOException if an I/O error occurs
 	 */
-	private void Q() throws IOException {
+	void Q() throws IOException {
 		--this.qDepth;
 		this.out.writeOperator("Q");
 	}

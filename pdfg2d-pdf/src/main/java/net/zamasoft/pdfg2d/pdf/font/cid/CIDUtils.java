@@ -488,16 +488,19 @@ public final class CIDUtils {
 	 */
 	public static void writeEmbeddedFont(PDFFragmentOutput out, XRef xref, CIDFontSource source, PDFEmbeddedFont font,
 			ObjectRef fontRef, short[] w, short[] w2, int[] unicodeArray) throws IOException {
-		// Embedded font subset tag
+		// Embedded font subset tag, derived from the subset content so that
+		// identical subsets get identical tags (deterministic output and a
+		// prerequisite for reusing cached subset programs across documents).
+		final FontSubsetCache.Key subsetKey = new FontSubsetCache.Key(w, w2, unicodeArray);
 		String subsetName;
 		{
-			int on = fontRef.objectNumber();
-			char a = (char) ('A' + (on & 0xF));
-			char b = (char) ('A' + ((on >> 4) & 0xF));
-			char c = (char) ('A' + ((on >> 8) & 0xF));
-			char d = (char) ('A' + ((on >> 12) & 0xF));
-			char e = (char) ('A' + ((on >> 16) & 0xF));
-			char f = (char) ('A' + ((on >> 20) & 0xF));
+			int h = subsetKey.contentHash();
+			char a = (char) ('A' + (h & 0xF));
+			char b = (char) ('A' + ((h >> 4) & 0xF));
+			char c = (char) ('A' + ((h >> 8) & 0xF));
+			char d = (char) ('A' + ((h >> 12) & 0xF));
+			char e = (char) ('A' + ((h >> 16) & 0xF));
+			char f = (char) ('A' + ((h >> 20) & 0xF));
 			subsetName = "" + a + b + c + d + e + f + '+' + font.getPSName();
 		}
 
@@ -650,13 +653,21 @@ public final class CIDUtils {
 		out.lineBreak();
 
 		try (OutputStream cout = out.startStreamFromHash(PDFFragmentOutput.Mode.BINARY)) {
-			// InputStream in = new InflaterInputStream(new
-			// FileInputStream("/home/miyabe/workspaces/copper/CopperPDF.dev/files/misc/fontfile.bin"));
-			// IOUtils.copy(in, cout);
-			CFFGenerator cff = new CFFGenerator();
-			cff.setSubsetName(subsetName);
-			cff.setEmbedableFont(font);
-			cff.writeTo(cout);
+			// Reuse the generated program when the same source produced the
+			// same subset before (batch generation with a shared
+			// FontSourceManager); charstring generation dominates embedding
+			// cost.
+			byte[] program = FontSubsetCache.get(source, subsetKey);
+			if (program == null) {
+				java.io.ByteArrayOutputStream buff = new java.io.ByteArrayOutputStream(1 << 14);
+				CFFGenerator cff = new CFFGenerator();
+				cff.setSubsetName(subsetName);
+				cff.setEmbedableFont(font);
+				cff.writeTo(buff);
+				program = buff.toByteArray();
+				FontSubsetCache.put(source, subsetKey, program);
+			}
+			cout.write(program);
 		}
 
 		out.endObject();

@@ -137,6 +137,87 @@ public interface PDFWriter extends Closeable {
 	PDFNamedOutput createShadingPattern(double pageHeight, AffineTransform at) throws IOException;
 
 	/**
+	 * Creates a luminosity soft mask from an existing (grayscale) shading
+	 * pattern: a Form XObject filling the page with the pattern, wrapped in
+	 * an ExtGState whose {@code /SMask} references it. Used to reproduce
+	 * gradients with per-stop alpha.
+	 *
+	 * @param shadingPatternName the resource name of the grayscale shading
+	 *                           pattern encoding the alpha ramp
+	 * @param width              the mask extent (page width)
+	 * @param height             the mask extent (page height)
+	 * @return the resource name of the created ExtGState
+	 * @throws IOException                   if an I/O error occurs
+	 * @throws UnsupportedOperationException if the implementation does not
+	 *                                       support soft masks
+	 */
+	default String createLuminositySoftMask(String shadingPatternName, double width, double height)
+			throws IOException {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * Registers a {@code /Separation} color space for the given spot
+	 * colorant, creating it on first use; the same colorant name always
+	 * resolves to the same resource within the document. The tint transform
+	 * maps tint 1 to the (color-mode adjusted) alternate color and tint 0 to
+	 * white.
+	 *
+	 * @param colorantName the colorant name (e.g. {@code "PANTONE 185 C"})
+	 * @param alternate    the alternate process color at full tint
+	 * @return the color space resource name
+	 * @throws IOException if an I/O error occurs
+	 */
+	default String useSeparation(String colorantName, net.zamasoft.pdfg2d.gc.paint.Color alternate)
+			throws IOException {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * Registers the ICCBased color space for RGB content when an RGB profile
+	 * is configured, creating it on first use.
+	 *
+	 * @return the color space resource name, or {@code null} when no RGB
+	 *         profile is configured
+	 * @throws IOException if an I/O error occurs
+	 */
+	default String useICCBasedRGB() throws IOException {
+		return null;
+	}
+
+	/**
+	 * Creates a named optional content group (layer). Requires PDF 1.5+.
+	 *
+	 * @param name        the layer name shown in viewers
+	 * @param viewable    whether the layer is shown on screen
+	 *                    ({@code /Usage /View})
+	 * @param printable   whether the layer is printed ({@code /Usage /Print})
+	 * @param initiallyOn whether the layer starts enabled in the default
+	 *                    configuration
+	 * @param locked      whether viewers must not let the user toggle it
+	 * @return the layer handle
+	 * @throws IOException if an I/O error occurs
+	 */
+	default PDFOptionalContentGroup createOptionalContentGroup(String name, boolean viewable, boolean printable,
+			boolean initiallyOn, boolean locked) throws IOException {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * Starts a new document part (PDF/VT): pages created afterwards belong
+	 * to a new {@code DPart} leaf, typically one per recipient record in
+	 * variable-data printing.
+	 *
+	 * @param metadata document part metadata written as the {@code /DPM}
+	 *                 dictionary (string values), or {@code null}
+	 * @throws IOException                   if an I/O error occurs
+	 * @throws UnsupportedOperationException when the document is not PDF/VT
+	 */
+	default void nextDocumentPart(java.util.Map<String, String> metadata) throws IOException {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
 	 * Creates a new page.
 	 * 
 	 * @param width  Page width

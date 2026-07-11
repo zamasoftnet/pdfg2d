@@ -5,7 +5,6 @@ dependencies {
     implementation 'net.zamasoft:zstream-resolver:1.0.0-SNAPSHOT'
     implementation 'net.zamasoft:zstream-io:1.0.0-SNAPSHOT'
     implementation project(':pdfg2d-font')
-    implementation 'org.apache.xmlgraphics:batik-gvt:1.19'
     implementation 'com.twelvemonkeys.imageio:imageio-jpeg:3.13.1'
     implementation 'com.drewnoakes:metadata-extractor:2.20.0'
 }

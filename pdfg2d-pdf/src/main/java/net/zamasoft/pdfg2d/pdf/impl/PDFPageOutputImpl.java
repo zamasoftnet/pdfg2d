@@ -52,6 +52,9 @@ class PDFPageOutputImpl extends PDFPageOutput {
 	/** The page's parent tree key ({@code /StructParents}), or {@code -1}. */
 	private int structParents = -1;
 
+	/** The PDF/VT document part this page belongs to, or {@code null}. */
+	private final ObjectRef dpartRef;
+
 	public PDFPageOutputImpl(final PDFWriterImpl pdfWriter, final ObjectRef rootPageRef,
 			final PDFFragmentOutputImpl pagesKidsFlow, final double width, final double height) throws IOException {
 		super(pdfWriter, null, width, height);
@@ -64,6 +67,7 @@ class PDFPageOutputImpl extends PDFPageOutput {
 
 		final var mainFlow = pdfWriter.mainFlow;
 		final var xref = pdfWriter.xref;
+		this.dpartRef = pdfWriter.dpartForNewPage();
 
 		this.pageRef = xref.nextObjectRef();
 		mainFlow.startObject(this.pageRef);
@@ -379,10 +383,9 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		}
 
 		// PDF/VT: every page belongs to a document part
-		final var dpartLeafRef = this.getPDFWriterImpl().dpartLeafRef;
-		if (dpartLeafRef != null) {
+		if (this.dpartRef != null) {
 			this.paramsFlow.writeName("DPart");
-			this.paramsFlow.writeObjectRef(dpartLeafRef);
+			this.paramsFlow.writeObjectRef(this.dpartRef);
 			this.paramsFlow.lineBreak();
 		}
 		this.paramsFlow.writeName("MediaBox");

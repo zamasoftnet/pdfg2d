@@ -178,6 +178,118 @@ class XRefImpl implements XRef {
 		return xrefPosition;
 	}
 
+	/**
+	 * Writes a cross-reference <em>stream</em> (PDF 1.5+) instead of the
+	 * classic table: entries are packed binary rows with widths [1 4 2],
+	 * deflated, and the trailer keys live in the stream dictionary. Type-2
+	 * entries locate objects packed into object streams.
+	 *
+	 * @param posInfo fragment position snapshot
+	 * @param infoRef reference to the Info dictionary, or {@code null}
+	 * @param fileid  two-element array of 16-byte document IDs, or {@code null}
+	 * @return absolute byte offset of the cross-reference stream
+	 * @throws IOException if an I/O error occurs
+	 */
+	long closeWithXrefStream(final PositionInfo posInfo, final ObjectRef infoRef, final byte[][] fileid)
+			throws IOException {
+		final long xrefPosition = posInfo.getPosition(this.mainFlow.getId()) + this.mainFlow.getLength();
+		// The stream is itself an indirect object with a type-1 entry
+		// pointing at xrefPosition.
+		final var xrefRef = this.nextObjectRef();
+
+		final var entries = new ByteArrayOutputStream((this.xref.size() + 1) * 7);
+		writeStreamEntry(entries, 0, 0, 65535); // object 0: free list head
+		for (final var ref : this.xref) {
+			final var impl = (ObjectRefImpl) ref;
+			if (ref == xrefRef) {
+				writeStreamEntry(entries, 1, xrefPosition, 0);
+			} else if (impl.isCompressed()) {
+				writeStreamEntry(entries, 2, impl.getObjStmNumber(), impl.getObjStmIndex());
+			} else {
+				writeStreamEntry(entries, 1, impl.getPosition(posInfo), impl.generationNumber());
+			}
+		}
+		final var deflated = deflate(entries.toByteArray());
+
+		this.mainFlow.breakBefore();
+		this.mainFlow.writeInt(xrefRef.objectNumber());
+		this.mainFlow.writeInt(xrefRef.generationNumber());
+		this.mainFlow.writeOperator("obj");
+		this.mainFlow.lineBreak();
+		this.mainFlow.startHash();
+		this.mainFlow.writeName("Type");
+		this.mainFlow.writeName("XRef");
+		this.mainFlow.writeName("Size");
+		this.mainFlow.writeInt(this.xref.size() + 1);
+		this.mainFlow.lineBreak();
+		this.mainFlow.writeName("W");
+		this.mainFlow.startArray();
+		this.mainFlow.writeInt(1);
+		this.mainFlow.writeInt(4);
+		this.mainFlow.writeInt(2);
+		this.mainFlow.endArray();
+		this.mainFlow.lineBreak();
+		this.mainFlow.writeName("Filter");
+		this.mainFlow.writeName("FlateDecode");
+		this.mainFlow.writeName("Length");
+		this.mainFlow.writeInt(deflated.length);
+		this.mainFlow.lineBreak();
+		this.mainFlow.writeName("Root");
+		this.mainFlow.writeObjectRef(this.rootRef);
+		this.mainFlow.lineBreak();
+		if (infoRef != null) {
+			this.mainFlow.writeName("Info");
+			this.mainFlow.writeObjectRef(infoRef);
+			this.mainFlow.lineBreak();
+		}
+		if (fileid != null) {
+			this.mainFlow.writeName("ID");
+			this.mainFlow.startArray();
+			this.mainFlow.writeBytes8(fileid[0], 0, fileid[0].length);
+			this.mainFlow.writeBytes8(fileid[1], 0, fileid[1].length);
+			this.mainFlow.endArray();
+			this.mainFlow.lineBreak();
+		}
+		this.mainFlow.endHash();
+		this.mainFlow.writeOperator("stream");
+		this.mainFlow.lineBreak();
+		this.mainFlow.write(deflated);
+		this.mainFlow.lineBreak();
+		this.mainFlow.writeOperator("endstream");
+		this.mainFlow.lineBreak();
+		this.mainFlow.writeOperator("endobj");
+		this.mainFlow.lineBreak();
+
+		this.mainFlow.writeOperator("startxref");
+		this.mainFlow.lineBreak();
+		this.mainFlow.write(String.valueOf(xrefPosition));
+		this.mainFlow.lineBreak();
+		this.mainFlow.write(EOF);
+		this.mainFlow.lineBreak();
+		return xrefPosition;
+	}
+
+	/** Writes one packed xref-stream row with widths [1 4 2]. */
+	private static void writeStreamEntry(final ByteArrayOutputStream out, final int type, final long field2,
+			final int field3) {
+		out.write(type);
+		out.write((int) (field2 >> 24) & 0xFF);
+		out.write((int) (field2 >> 16) & 0xFF);
+		out.write((int) (field2 >> 8) & 0xFF);
+		out.write((int) field2 & 0xFF);
+		out.write((field3 >> 8) & 0xFF);
+		out.write(field3 & 0xFF);
+	}
+
+	/** Deflates the given bytes in memory. */
+	private static byte[] deflate(final byte[] data) throws IOException {
+		final var buff = new ByteArrayOutputStream(data.length / 2 + 32);
+		try (final var out = new java.util.zip.DeflaterOutputStream(buff)) {
+			out.write(data);
+		}
+		return buff.toByteArray();
+	}
+
 	/** Scratch buffer for zero-padding numbers in xref entries (10 bytes max). */
 	private final byte[] numberBuffer = new byte[10];
 

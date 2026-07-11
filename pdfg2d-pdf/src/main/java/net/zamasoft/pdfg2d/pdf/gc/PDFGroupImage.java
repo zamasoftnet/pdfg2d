@@ -29,6 +29,9 @@ public abstract class PDFGroupImage extends PDFNamedGraphicsOutput implements Im
 
 	protected int ocgFlags = 0;
 
+	/** Optional content group applied to this Form XObject, or {@code null}. */
+	protected net.zamasoft.pdfg2d.pdf.PDFOptionalContentGroup ocgLayer = null;
+
 	/**
 	 * Constructs a PDFGroupImage.
 	 *
@@ -54,6 +57,17 @@ public abstract class PDFGroupImage extends PDFNamedGraphicsOutput implements Im
 	 */
 	public void setOCG(final int ocgFlags) {
 		this.ocgFlags = ocgFlags;
+	}
+
+	/**
+	 * Assigns a named optional content group (layer) to this Form XObject.
+	 * Takes precedence over the flag-based {@link #setOCG(int)}.
+	 *
+	 * @param layer the layer created by
+	 *              {@link net.zamasoft.pdfg2d.pdf.PDFWriter#createOptionalContentGroup}
+	 */
+	public void setOCG(final net.zamasoft.pdfg2d.pdf.PDFOptionalContentGroup layer) {
+		this.ocgLayer = layer;
 	}
 
 	/**

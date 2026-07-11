@@ -197,7 +197,9 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 	 */
 	public void writeFillColor(final Color color) throws IOException {
 		final var params = this.pdfWriter.getParams();
-		final var processedColor = switch (params.colorMode()) {
+		// Spot colors are never converted; their alternate follows the color
+		// mode inside the Separation color space instead.
+		final var processedColor = (color.getColorType() == Type.SPOT) ? color : switch (params.effectiveColorMode()) {
 			case GRAY -> (color.getColorType() != Type.GRAY) ? ColorUtils.toGray(color) : color;
 			case CMYK -> (color.getColorType() != Type.CMYK) ? ColorUtils.toCMYK(color) : color;
 			default -> color;
@@ -209,10 +211,21 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 				this.writeOperator("g");
 			}
 			case RGB, RGBA -> {
-				this.writeReal(processedColor.getComponent(RGBColor.R));
-				this.writeReal(processedColor.getComponent(RGBColor.G));
-				this.writeReal(processedColor.getComponent(RGBColor.B));
-				this.writeOperator("rg");
+				final var icc = this.pdfWriter.useICCBasedRGB();
+				if (icc != null) {
+					this.useResource("ColorSpace", icc);
+					this.writeName(icc);
+					this.writeOperator("cs");
+					this.writeReal(processedColor.getComponent(RGBColor.R));
+					this.writeReal(processedColor.getComponent(RGBColor.G));
+					this.writeReal(processedColor.getComponent(RGBColor.B));
+					this.writeOperator("scn");
+				} else {
+					this.writeReal(processedColor.getComponent(RGBColor.R));
+					this.writeReal(processedColor.getComponent(RGBColor.G));
+					this.writeReal(processedColor.getComponent(RGBColor.B));
+					this.writeOperator("rg");
+				}
 			}
 			case CMYK -> {
 				this.writeReal(processedColor.getComponent(CMYKColor.C));
@@ -220,6 +233,15 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 				this.writeReal(processedColor.getComponent(CMYKColor.Y));
 				this.writeReal(processedColor.getComponent(CMYKColor.K));
 				this.writeOperator("k");
+			}
+			case SPOT -> {
+				final var spot = (net.zamasoft.pdfg2d.gc.paint.SpotColor) processedColor;
+				final var csName = this.pdfWriter.useSeparation(spot.name(), spot.alternate());
+				this.useResource("ColorSpace", csName);
+				this.writeName(csName);
+				this.writeOperator("cs");
+				this.writeReal(spot.tint());
+				this.writeOperator("scn");
 			}
 			default -> throw new IllegalStateException("Unsupported color type: " + processedColor.getColorType());
 		}
@@ -233,7 +255,17 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 	 */
 	public void writeStrokeColor(final Color color) throws IOException {
 		final var params = this.pdfWriter.getParams();
-		final var processedColor = switch (params.colorMode()) {
+		if (color.getColorType() == Type.SPOT) {
+			final var spot = (net.zamasoft.pdfg2d.gc.paint.SpotColor) color;
+			final var csName = this.pdfWriter.useSeparation(spot.name(), spot.alternate());
+			this.useResource("ColorSpace", csName);
+			this.writeName(csName);
+			this.writeOperator("CS");
+			this.writeReal(spot.tint());
+			this.writeOperator("SCN");
+			return;
+		}
+		final var processedColor = switch (params.effectiveColorMode()) {
 			case GRAY -> (color.getColorType() != Type.GRAY) ? ColorUtils.toGray(color) : color;
 			case CMYK -> (color.getColorType() != Type.CMYK) ? ColorUtils.toCMYK(color) : color;
 			default -> color;
@@ -245,10 +277,21 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 				this.writeOperator("G");
 			}
 			case RGB, RGBA -> {
-				this.writeReal(processedColor.getComponent(RGBColor.R));
-				this.writeReal(processedColor.getComponent(RGBColor.G));
-				this.writeReal(processedColor.getComponent(RGBColor.B));
-				this.writeOperator("RG");
+				final var icc = this.pdfWriter.useICCBasedRGB();
+				if (icc != null) {
+					this.useResource("ColorSpace", icc);
+					this.writeName(icc);
+					this.writeOperator("CS");
+					this.writeReal(processedColor.getComponent(RGBColor.R));
+					this.writeReal(processedColor.getComponent(RGBColor.G));
+					this.writeReal(processedColor.getComponent(RGBColor.B));
+					this.writeOperator("SCN");
+				} else {
+					this.writeReal(processedColor.getComponent(RGBColor.R));
+					this.writeReal(processedColor.getComponent(RGBColor.G));
+					this.writeReal(processedColor.getComponent(RGBColor.B));
+					this.writeOperator("RG");
+				}
 			}
 			case CMYK -> {
 				this.writeReal(processedColor.getComponent(CMYKColor.C));

@@ -6,7 +6,6 @@ import java.io.OutputStream;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGroupImage;
-import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 
 /**
  * Implementation of an offscreen group image (Form XObject).
@@ -91,45 +90,19 @@ public class PDFGroupImageImpl extends PDFGroupImage {
 	 *                                       PDF version is older than 1.5
 	 */
 	public void close() throws IOException {
-		if (this.ocgFlags != 0) {
-			final var pdfWriter = this.getPDFWriterImpl();
-			if (pdfWriter.getParams().version().v < PDFParams.Version.V_1_5.v) {
-				throw new UnsupportedOperationException("OCG feature requires PDF >= 1.5.");
-			}
-
+		var layer = this.ocgLayer;
+		if (layer == null && this.ocgFlags != 0) {
+			// Legacy flag-based API: a layer named WATERMARK with the
+			// requested view/print usage states
+			layer = this.getPDFWriterImpl().createOptionalContentGroup("WATERMARK",
+					(this.ocgFlags & VIEW_OFF) == 0, (this.ocgFlags & PRINT_OFF) == 0, true, false);
+		}
+		if (layer != null) {
 			// Add Optional Content reference to the Form Dictionary
 			this.formFlow.writeName("OC");
-			final var ocgRef = pdfWriter.nextOCG();
-			this.formFlow.writeObjectRef(ocgRef);
+			this.formFlow.writeObjectRef(layer.getRef());
 			this.formFlow.lineBreak();
 			this.formFlow.close();
-
-			// Define the Optional Content Group object
-			final var objectsFlow = pdfWriter.objectsFlow;
-			objectsFlow.startObject(ocgRef);
-			objectsFlow.startHash();
-			objectsFlow.writeName("Type");
-			objectsFlow.writeName("OCG");
-			objectsFlow.writeName("Name");
-			objectsFlow.writeText("WATERMARK");
-			objectsFlow.writeName("Usage");
-			objectsFlow.startHash();
-
-			objectsFlow.writeName("View");
-			objectsFlow.startHash();
-			objectsFlow.writeName("ViewState");
-			objectsFlow.writeName((this.ocgFlags & VIEW_OFF) != 0 ? "OFF" : "ON");
-			objectsFlow.endHash();
-
-			objectsFlow.writeName("Print");
-			objectsFlow.startHash();
-			objectsFlow.writeName("PrintState");
-			objectsFlow.writeName((this.ocgFlags & PRINT_OFF) != 0 ? "OFF" : "ON");
-			objectsFlow.endHash();
-
-			objectsFlow.endHash(); // End Usage
-			objectsFlow.endHash(); // End OCG
-			objectsFlow.endObject();
 		}
 
 		super.close();

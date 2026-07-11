@@ -253,7 +253,7 @@ class ImageFlow {
 		PDFImage pdfImage = null;
 		try {
 
-			final PDFParams.ColorMode colorMode = this.params.colorMode();
+			final PDFParams.ColorMode colorMode = this.params.effectiveColorMode();
 			final PDFParams.Compression streamCompression = this.params.compression();
 			final PDFParams.ImageCompression imageCompression = this.params.imageCompression();
 			final PDFParams.Version pdfVersion = this.params.version();

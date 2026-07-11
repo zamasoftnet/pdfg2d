@@ -231,6 +231,52 @@ public class PDFAVeraPDFComplianceTest {
 		return file;
 	}
 
+	/**
+	 * Exercises the subsetter across font technologies (TrueType, CFF-OTF)
+	 * and scripts: veraPDF's width-consistency and CIDSet rules are the
+	 * strictest automated checks available for the embedding pipeline.
+	 */
+	@org.junit.jupiter.params.ParameterizedTest
+	@org.junit.jupiter.params.provider.CsvSource({
+			"ipaexm.ttf, IPAexTest, 日本語テキスト012ABC",
+			"KentenGeneric.otf, KentenTest, ﹅﹆•●○",
+			"UnDotum.ttf, UnDotumTest, 한국어 ABC 123",
+			"'FT Meuang BL-Regular.ttf', MeuangTest, ไทยกขค ABC 123",
+			"Daum_Regular.ttf, DaumTest, 다음 한국어 ABC",
+	})
+	public void testPdfA2bAcrossFonts(final String fontFile, final String family, final String text)
+			throws Exception {
+		final var file = TestOutputFiles.outputFile(PDFAVeraPDFComplianceTest.class,
+				"pdfa2b_font_" + family + ".pdf");
+		try (final var fsm = new PDFFontSourceManager()) {
+			final var face = new FontFace();
+			face.src = new FileSource(DemoUtils.getResourceFile(fontFile));
+			face.fontFamily = FontFamilyList.create(family);
+			fsm.addFontFace(face);
+			final var params = PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFA2B)
+					.withFontSourceManager(fsm);
+			try (final var out = new FileOutputStream(file)) {
+				final var builder = new StreamFragmentedOutput(out);
+				final var pdf = new PDFWriterImpl(builder, params);
+				try (final var gc = new PDFGC(pdf.nextPage(595, 842))) {
+					final var g2d = new BridgeGraphics2D(gc);
+					g2d.setColor(Color.BLACK);
+					g2d.setFont(new Font(family, Font.PLAIN, 18));
+					g2d.drawString(text, 60, 100);
+					g2d.dispose();
+				}
+				pdf.close();
+				builder.close();
+			}
+		}
+		// The intended font must actually have been embedded (a fallback to
+		// a non-embedded font would make the compliance check vacuous)
+		final var raw = new String(java.nio.file.Files.readAllBytes(file.toPath()),
+				java.nio.charset.StandardCharsets.ISO_8859_1);
+		assertTrue(raw.contains("/FontFile"), "Font must be embedded for " + fontFile);
+		assertCompliant(file, PDFAFlavour.PDFA_2_B);
+	}
+
 	@Test
 	public void testPdfA2uTextDocument() throws Exception {
 		// Level U requires every glyph to be mappable to Unicode (ToUnicode).

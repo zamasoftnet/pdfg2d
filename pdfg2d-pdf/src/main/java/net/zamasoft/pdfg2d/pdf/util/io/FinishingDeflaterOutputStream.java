@@ -26,6 +26,17 @@ public final class FinishingDeflaterOutputStream extends DeflaterOutputStream {
 		super(out, new Deflater(), BUFFER_SIZE);
 	}
 
+	/**
+	 * Creates a deflating stream with an explicit compression level.
+	 *
+	 * @param out   the underlying stream
+	 * @param level the deflate level ({@code -1} for the zlib default, or
+	 *              {@code 0}-{@code 9})
+	 */
+	public FinishingDeflaterOutputStream(final OutputStream out, final int level) {
+		super(out, new Deflater(level), BUFFER_SIZE);
+	}
+
 	@Override
 	public void close() throws IOException {
 		try {

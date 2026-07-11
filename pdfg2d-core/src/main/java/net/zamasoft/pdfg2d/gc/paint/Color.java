@@ -6,9 +6,11 @@ package net.zamasoft.pdfg2d.gc.paint;
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
-public sealed interface Color extends Paint permits RGBColor, CMYKColor, GrayColor, RGBAColor {
+public sealed interface Color extends Paint permits RGBColor, CMYKColor, GrayColor, RGBAColor, SpotColor {
 	public enum Type {
-		RGB, CMYK, GRAY, RGBA
+		RGB, CMYK, GRAY, RGBA,
+		/** A named spot colorant with an alternate process color. */
+		SPOT
 	}
 
 	/**

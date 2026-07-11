@@ -245,8 +245,8 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 			case RAW -> flowOut;
 			case ASCII -> {
 				final var encodedOut = switch (compression) {
-					case ASCII -> new FinishingDeflaterOutputStream(new ASCII85OutputStream(flowOut));
-					case BINARY -> new FinishingDeflaterOutputStream(flowOut);
+					case ASCII -> new FinishingDeflaterOutputStream(new ASCII85OutputStream(flowOut), this.pdfWriter.getParams().deflateLevel());
+					case BINARY -> new FinishingDeflaterOutputStream(flowOut, this.pdfWriter.getParams().deflateLevel());
 					default -> flowOut;
 				};
 				yield new FastBufferedOutputStream(encodedOut, this.getBuffer());
@@ -254,8 +254,8 @@ class PDFFragmentOutputImpl extends PDFFragmentOutput {
 			case BINARY -> {
 				final var encodedOut = switch (compression) {
 					case NONE -> new ASCIIHexOutputStream(flowOut);
-					case ASCII -> new FinishingDeflaterOutputStream(new ASCII85OutputStream(flowOut));
-					case BINARY -> new FinishingDeflaterOutputStream(flowOut);
+					case ASCII -> new FinishingDeflaterOutputStream(new ASCII85OutputStream(flowOut), this.pdfWriter.getParams().deflateLevel());
+					case BINARY -> new FinishingDeflaterOutputStream(flowOut, this.pdfWriter.getParams().deflateLevel());
 				};
 				yield new FastBufferedOutputStream(encodedOut, this.getBuffer());
 			}

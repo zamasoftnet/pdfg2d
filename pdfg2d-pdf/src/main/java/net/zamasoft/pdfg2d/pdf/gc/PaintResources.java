@@ -263,9 +263,9 @@ final class PaintResources {
 	 * stop when the fractions do not span the full [0,1] domain.
 	 * </p>
 	 * <p>
-	 * Known limitation: per-stop alpha is dropped (RGBA stops are treated as
-	 * RGB). Honoring it would require a parallel luminosity shading used as an
-	 * SMask on an ExtGState, which is not implemented yet.
+	 * Per-stop alpha is not encoded here: for transparency-capable targets it
+	 * is reproduced by a parallel luminosity soft mask (see
+	 * {@link #softMaskName}); for PDF/A-1 and PDF/X-1a the alpha is dropped.
 	 * </p>
 	 *
 	 * @param sout      the shading dictionary output
@@ -276,16 +276,15 @@ final class PaintResources {
 	 */
 	static void writeShadingFunction(final PDFOutput sout, final PDFParams params, final Color[] colors,
 			final double[] fractions) throws IOException {
-		sout.writeName("ColorSpace");
 		final Color.Type colorType;
-		if (params.colorMode() == PDFParams.ColorMode.GRAY) {
+		if (params.effectiveColorMode() == PDFParams.ColorMode.GRAY) {
 			colorType = Color.Type.GRAY;
-		} else if (params.colorMode() == PDFParams.ColorMode.CMYK) {
+		} else if (params.effectiveColorMode() == PDFParams.ColorMode.CMYK) {
 			colorType = Color.Type.CMYK;
 		} else {
-			var type = colors[0].getColorType();
+			var type = stopType(colors[0]);
 			for (var i = 1; i < colors.length; ++i) {
-				if (type != colors[i].getColorType()) {
+				if (type != stopType(colors[i])) {
 					type = Color.Type.RGB;
 				}
 			}
@@ -294,7 +293,17 @@ final class PaintResources {
 			}
 			colorType = type;
 		}
+		writeShadingFunction(sout, colorType, colors, fractions);
+	}
 
+	/**
+	 * Writes the shading function entries with an explicit target color
+	 * space. Used directly for luminosity soft masks, whose alpha ramp is
+	 * always encoded in DeviceGray.
+	 */
+	static void writeShadingFunction(final PDFOutput sout, final Color.Type colorType, final Color[] colors,
+			final double[] fractions) throws IOException {
+		sout.writeName("ColorSpace");
 		final var colorSpaceName = switch (colorType) {
 			case GRAY -> "DeviceGray";
 			case RGB -> "DeviceRGB";
@@ -448,6 +457,153 @@ final class PaintResources {
 		sout.lineBreak();
 	}
 
+	/** Returns whether any gradient stop carries an alpha below 1. */
+	static boolean hasAlpha(final Color[] colors) {
+		for (final var c : colors) {
+			if (c.getAlpha() < 1f) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Cache key marking the soft-mask ExtGState of an alpha gradient. */
+	private record MaskKey(Object shadingKey) {
+	}
+
+	/**
+	 * Returns the ExtGState resource name applying a luminosity soft mask
+	 * that reproduces the per-stop alpha of the given gradient, creating the
+	 * grayscale shading, mask form and ExtGState on first use. Returns
+	 * {@code null} when the paint is not an alpha gradient or the target
+	 * profile does not permit transparency.
+	 *
+	 * @param gc    the graphics context requesting the paint
+	 * @param paint the paint about to be used
+	 * @return the ExtGState name, or {@code null}
+	 * @throws GraphicsException if an error occurs while creating the mask
+	 */
+	static String softMaskName(final PDFGC gc, final Paint paint) throws GraphicsException {
+		if (paint == null || !gc.pdfVersion.allowsTransparency()) {
+			return null;
+		}
+		final Color[] colors;
+		final double[] fractions;
+		final AffineTransform paintTransform;
+		if (paint instanceof LinearGradient lg) {
+			colors = lg.colors();
+			fractions = lg.fractions();
+			paintTransform = lg.transform();
+		} else if (paint instanceof RadialGradient rg) {
+			colors = rg.colors();
+			fractions = rg.fractions();
+			paintTransform = rg.transform();
+		} else {
+			return null;
+		}
+		if (!hasAlpha(colors)) {
+			return null;
+		}
+
+		var at = gc.getTransform();
+		if (at == null) {
+			at = paintTransform;
+		} else if (paintTransform != null) {
+			at.concatenate(paintTransform);
+		}
+
+		final var pout = gc.out;
+		final var key = new MaskKey(new ShadingKey(pout.getHeight(), at, paint));
+		var name = gc.resourceCache.get(key);
+		if (name != null) {
+			return name;
+		}
+
+		// The alpha ramp becomes a DeviceGray shading with the same geometry
+		// as the color gradient: gray = alpha, so luminosity = opacity.
+		final var grays = new Color[colors.length];
+		for (var i = 0; i < colors.length; ++i) {
+			grays[i] = GrayColor.create(colors[i].getAlpha());
+		}
+
+		final String shadingName;
+		try (final var sout = pout.getPdfWriter().createShadingPattern(pout.getHeight(), at)) {
+			if (paint instanceof LinearGradient lg) {
+				sout.writeName("ShadingType");
+				sout.writeInt(2);
+				sout.lineBreak();
+				sout.writeName("Coords");
+				sout.startArray();
+				sout.writeReal(lg.x1());
+				sout.writeReal(lg.y1());
+				sout.writeReal(lg.x2());
+				sout.writeReal(lg.y2());
+				sout.endArray();
+				sout.lineBreak();
+			} else {
+				final var rg = (RadialGradient) paint;
+				var dx = rg.fx() - rg.cx();
+				var dy = rg.fy() - rg.cy();
+				final var d = Math.sqrt(dx * dx + dy * dy);
+				if (d > rg.radius()) {
+					final var scale = (rg.radius() * .9999) / d;
+					dx *= scale;
+					dy *= scale;
+				}
+				sout.writeName("ShadingType");
+				sout.writeInt(3);
+				sout.lineBreak();
+				sout.writeName("Coords");
+				sout.startArray();
+				sout.writeReal(rg.cx() + dx);
+				sout.writeReal(rg.cy() + dy);
+				sout.writeReal(0);
+				sout.writeReal(rg.cx());
+				sout.writeReal(rg.cy());
+				sout.writeReal(rg.radius());
+				sout.endArray();
+				sout.lineBreak();
+			}
+			writeShadingFunction(sout, Color.Type.GRAY, grays, fractions);
+			shadingName = sout.getName();
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+
+		try {
+			name = pout.getPdfWriter().createLuminositySoftMask(shadingName, pout.getWidth(), pout.getHeight());
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+		gc.resourceCache.put(key, name);
+		return name;
+	}
+
+	/**
+	 * Returns the (cached) ExtGState that removes any active soft mask
+	 * ({@code /SMask /None}), creating it on first use.
+	 *
+	 * @param gc the graphics context
+	 * @return the ExtGState name
+	 * @throws GraphicsException if an error occurs while creating it
+	 */
+	static String smaskNoneName(final PDFGC gc) throws GraphicsException {
+		final var key = "SMask/None";
+		var name = gc.resourceCache.get(key);
+		if (name == null) {
+			try (final var gsOut = gc.out.getPdfWriter().createSpecialGraphicsState()) {
+				gsOut.writeName("SMask");
+				gsOut.writeName("None");
+				gsOut.lineBreak();
+				name = gsOut.getName();
+			} catch (IOException e) {
+				throw new GraphicsException(e);
+			}
+			gc.resourceCache.put(key, name);
+		}
+		return name;
+	}
+
 	/**
 	 * Writes color components converted to the target color space.
 	 *
@@ -456,8 +612,21 @@ final class PaintResources {
 	 * @param color     the color object
 	 * @throws IOException if an I/O error occurs
 	 */
+	/** Gradient stops: spot stops contribute their alternate's color type. */
+	private static Color.Type stopType(final Color color) {
+		return (color.getColorType() == Color.Type.SPOT)
+				? ((net.zamasoft.pdfg2d.gc.paint.SpotColor) color).effectiveColor().getColorType()
+				: color.getColorType();
+	}
+
 	private static void writeColor(final PDFOutput sout, final Color.Type colorType, final Color color)
 			throws IOException {
+		// Gradient interpolation happens in a process color space; spot
+		// stops are flattened to their tinted alternates.
+		if (color.getColorType() == Color.Type.SPOT) {
+			writeColor(sout, colorType, ((net.zamasoft.pdfg2d.gc.paint.SpotColor) color).effectiveColor());
+			return;
+		}
 		switch (colorType) {
 			case GRAY -> {
 				if (color instanceof GrayColor gray) {

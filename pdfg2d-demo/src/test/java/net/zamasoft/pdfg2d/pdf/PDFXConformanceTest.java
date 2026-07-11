@@ -50,7 +50,7 @@ public class PDFXConformanceTest {
 		final var params = PDFParams.createDefault()
 				.withVersion(PDFParams.Version.V_PDFX1A)
 				.withCompression(PDFParams.Compression.NONE);
-		assertEquals(PDFParams.ColorMode.CMYK, params.colorMode(),
+		assertEquals(PDFParams.ColorMode.CMYK, params.effectiveColorMode(),
 				"PDF/X-1a must normalize PRESERVE color mode to CMYK");
 
 		final var file = generate("pdfx_cmyk_forced.pdf", params);
@@ -162,7 +162,7 @@ public class PDFXConformanceTest {
 		final var params = PDFParams.createDefault()
 				.withVersion(PDFParams.Version.V_PDFX4)
 				.withCompression(PDFParams.Compression.NONE);
-		assertEquals(PDFParams.ColorMode.CMYK, params.colorMode());
+		assertEquals(PDFParams.ColorMode.CMYK, params.effectiveColorMode());
 		final var file = generate("pdfx4_cmyk.pdf", params);
 		try (final var doc = Loader.loadPDF(file)) {
 			final String stream;

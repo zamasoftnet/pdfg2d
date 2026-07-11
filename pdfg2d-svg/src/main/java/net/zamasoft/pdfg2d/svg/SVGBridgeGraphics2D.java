@@ -58,11 +58,15 @@ public class SVGBridgeGraphics2D extends BridgeGraphics2D {
 			this.foreground = (java.awt.Color) paint;
 		}
 
-		final Paint spaint;
+		Paint spaint;
 		if (paint instanceof final PatternPaint patternPaint) {
 			spaint = convertPatternPaint(patternPaint);
 		} else {
-			spaint = G2DUtils.fromAwtPaint(paint);
+			// Batik's own gradient classes first, then the standard AWT paints
+			spaint = BatikPaintUtils.fromBatikPaint(paint);
+			if (spaint == null) {
+				spaint = G2DUtils.fromAwtPaint(paint);
+			}
 		}
 
 		if (spaint != null) {

@@ -128,16 +128,16 @@ final class StructureTreeBuilder {
 	 * @return the {@code StructTreeRoot} reference
 	 * @throws IOException if an I/O error occurs
 	 */
-	ObjectRef writeTo(final PDFFragmentOutputImpl out, final XRefImpl xref) throws IOException {
+	ObjectRef writeTo(final PDFObjectSink sink, final XRefImpl xref) throws IOException {
 		final var rootRef = xref.nextObjectRef();
 		this.allocate(this.document, xref);
 
-		this.writeElem(out, this.document, rootRef);
+		this.writeElem(sink, this.document, rootRef);
 
 		// Parent tree: a number tree mapping each page's /StructParents key
 		// to the MCID-indexed array of owning structure elements.
 		final var parentTreeRef = xref.nextObjectRef();
-		out.startObject(parentTreeRef);
+		var out = sink.startObject(parentTreeRef);
 		out.startHash();
 		out.writeName("Nums");
 		out.startArray();
@@ -151,9 +151,9 @@ final class StructureTreeBuilder {
 		}
 		out.endArray();
 		out.endHash();
-		out.endObject();
+		sink.endObject();
 
-		out.startObject(rootRef);
+		out = sink.startObject(rootRef);
 		out.startHash();
 		out.writeName("Type");
 		out.writeName("StructTreeRoot");
@@ -164,7 +164,7 @@ final class StructureTreeBuilder {
 		out.writeName("ParentTreeNextKey");
 		out.writeInt(this.pageKeys.size());
 		out.endHash();
-		out.endObject();
+		sink.endObject();
 		return rootRef;
 	}
 
@@ -177,9 +177,9 @@ final class StructureTreeBuilder {
 		}
 	}
 
-	private void writeElem(final PDFFragmentOutputImpl out, final Elem elem, final ObjectRef parentRef)
+	private void writeElem(final PDFObjectSink sink, final Elem elem, final ObjectRef parentRef)
 			throws IOException {
-		out.startObject(elem.ref);
+		final var out = sink.startObject(elem.ref);
 		out.startHash();
 		out.writeName("Type");
 		out.writeName("StructElem");
@@ -222,11 +222,11 @@ final class StructureTreeBuilder {
 		}
 		out.endArray();
 		out.endHash();
-		out.endObject();
+		sink.endObject();
 
 		for (final var kid : elem.kids) {
 			if (kid instanceof Elem child) {
-				this.writeElem(out, child, elem.ref);
+				this.writeElem(sink, child, elem.ref);
 			}
 		}
 	}

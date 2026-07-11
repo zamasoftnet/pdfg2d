@@ -5,6 +5,7 @@ import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.pdfg2d.gc.paint.GrayColor;
 import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
 import net.zamasoft.pdfg2d.gc.paint.RGBColor;
+import net.zamasoft.pdfg2d.gc.paint.SpotColor;
 
 /**
  * Utility methods for color conversion.
@@ -37,6 +38,10 @@ public final class ColorUtils {
 				gray = ColorUtils.toGray(color.getComponent(RGBColor.R), color.getComponent(RGBColor.G),
 						color.getComponent(RGBColor.B));
 				return RGBAColor.create(gray, gray, gray, color.getComponent(RGBAColor.A));
+			}
+			case SPOT -> {
+				// Non-separating targets see the tinted alternate color
+				return toGray(((SpotColor) color).effectiveColor());
 			}
 			default -> throw new IllegalStateException();
 		}
@@ -95,6 +100,9 @@ public final class ColorUtils {
 			case GRAY -> {
 				c = m = y = 0;
 				k = 1.0f - color.getComponent(0);
+			}
+			case SPOT -> {
+				return toCMYK(((SpotColor) color).effectiveColor());
 			}
 			default -> throw new IllegalStateException();
 		}
