@@ -67,6 +67,7 @@ public final class ParagraphLayout {
 	 * @return the positioned lines, top to bottom
 	 */
 	public List<PositionedLine> layout(final Paragraph paragraph, final double width) {
+		this.rubyBoxes.clear();
 		final var items = Itemizer.itemize(paragraph);
 		final var nodes = new ArrayList<LeveledNode>();
 		final var plain = new ArrayList<BreakNode>();
@@ -79,6 +80,21 @@ public final class ParagraphLayout {
 				final var wordGlyphs = new java.util.ArrayList<Integer>();
 				for (var g = 0; g <= run.length; ++g) {
 					final var ch = (g < run.length) ? paragraph.text()[run.clusters[g]] : ' ';
+
+					// Ruby: consume a whole base span as one unbreakable box.
+					if (g < run.length) {
+						final var ruby = Paragraph.RubySpan.covering(paragraph.rubySpans(), run.clusters[g]);
+						if (ruby != null) {
+							if (!word.isEmpty()) {
+								this.emitWord(run, word.toString(), wordGlyphs, item, nodes, plain);
+								word.setLength(0);
+								wordGlyphs.clear();
+							}
+							g = this.emitRuby(run, ruby, g, item, nodes, plain) - 1;
+							continue;
+						}
+					}
+
 					final var isLetter = g < run.length && Character.isLetter(ch) && !isIdeograph(ch);
 					if (isLetter) {
 						word.append(ch);
@@ -150,6 +166,48 @@ public final class ParagraphLayout {
 
 	private static final int[] NO_BREAKS = new int[0];
 
+	/** Ruby attached to a base box: the annotation run and the base width. */
+	private record RubyInfo(GlyphRun ruby, double baseWidth) {
+	}
+
+	/** Base box -> its ruby annotation, filled during node building. */
+	private final java.util.Map<BreakNode.Box, RubyInfo> rubyBoxes = new java.util.IdentityHashMap<>();
+
+	/**
+	 * Emits a ruby base span as a single unbreakable box whose width is the
+	 * larger of the base and annotation widths, and records the annotation.
+	 *
+	 * @return the glyph index just past the consumed base span
+	 */
+	private int emitRuby(final GlyphRun run, final Paragraph.RubySpan ruby, final int start, final Item item,
+			final List<LeveledNode> nodes, final List<BreakNode> plain) {
+		var g = start;
+		var baseWidth = 0.0;
+		while (g < run.length && run.clusters[g] >= ruby.baseBegin() && run.clusters[g] < ruby.baseEnd()) {
+			baseWidth += run.xAdvances[g];
+			++g;
+		}
+		final var rubyRuns = this.shaper.shape(ruby.ruby(), new Item(0, ruby.ruby().length, item.bidiLevel(),
+				ruby.rubyStyle()));
+		final var rubyRun = rubyRuns.isEmpty() ? null : rubyRuns.get(0);
+		final var rubyWidth = (rubyRun != null) ? rubyRun.advance() : 0;
+		final var boxWidth = Math.max(baseWidth, rubyWidth);
+
+		final var box = new BreakNode.Box(boxWidth, run, start, g);
+		if (rubyRun != null) {
+			this.rubyBoxes.put(box, new RubyInfo(rubyRun, baseWidth));
+		}
+		// A break before the ruby base is allowed (it behaves like an ideograph).
+		if (!plain.isEmpty() && plain.get(plain.size() - 1) instanceof BreakNode.Box) {
+			final var brk = new BreakNode.Penalty(0, 0, false, null);
+			nodes.add(new LeveledNode(brk, item.bidiLevel()));
+			plain.add(brk);
+		}
+		nodes.add(new LeveledNode(box, item.bidiLevel()));
+		plain.add(box);
+		return g;
+	}
+
 	/** A flagged penalty whose insertion is a hyphen shaped in the run's font. */
 	private BreakNode.Penalty hyphenPenalty(final GlyphRun run, final Item item) {
 		final var hyphen = this.hyphenGlyph(run, item);
@@ -218,6 +276,7 @@ public final class ParagraphLayout {
 		}
 
 		final var runs = new ArrayList<PositionedRun>();
+		final var rubies = new ArrayList<PositionedLine.RubyOverlay>();
 		var x = 0.0;
 		var ascent = 0.0;
 		var descent = 0.0;
@@ -230,9 +289,24 @@ public final class ParagraphLayout {
 				x += glue.width() + extraPerGlue;
 				continue;
 			}
-			runs.add(new PositionedRun(box.run(), box.glyphBegin(), box.glyphEnd(), x, 0));
+			final var ruby = this.rubyBoxes.get(box);
+			// Center the base within the box when the ruby is wider.
+			final var baseWidth = (ruby != null) ? ruby.baseWidth() : box.width();
+			final var baseX = x + (box.width() - baseWidth) / 2;
+			runs.add(new PositionedRun(box.run(), box.glyphBegin(), box.glyphEnd(), baseX, 0));
 			ascent = Math.max(ascent, box.run().fontMetrics.getAscent());
 			descent = Math.max(descent, box.run().fontMetrics.getDescent());
+			if (ruby != null) {
+				// Distribute the annotation evenly across the box (mono ruby),
+				// raised to sit just above the base ascent.
+				final var rr = ruby.ruby();
+				final var step = (rr.length > 0) ? box.width() / rr.length : 0;
+				final var startX = x + (step - rr.advance() / Math.max(1, rr.length)) / 2;
+				final var baseline = -(box.run().fontMetrics.getAscent() + rr.fontMetrics.getDescent());
+				rubies.add(new PositionedLine.RubyOverlay(rr, startX, baseline, step));
+				ascent = Math.max(ascent, box.run().fontMetrics.getAscent()
+						+ rr.fontMetrics.getAscent() + rr.fontMetrics.getDescent());
+			}
 			x += box.width();
 		}
 		// Draw the hyphen at the line end (visual right for LTR text).
@@ -242,7 +316,7 @@ public final class ParagraphLayout {
 			descent = Math.max(descent, hyphen.fontMetrics.getDescent());
 			x += hyphen.advance();
 		}
-		return new PositionedLine(runs, x, ascent, descent);
+		return new PositionedLine(runs, rubies, x, ascent, descent);
 	}
 
 	private static boolean isIdeograph(final char c) {

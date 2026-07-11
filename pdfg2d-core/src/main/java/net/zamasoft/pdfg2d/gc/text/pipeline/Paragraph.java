@@ -15,7 +15,17 @@ import net.zamasoft.pdfg2d.gc.font.FontStyle;
  * @author MIYABE Tatsuhiko
  * @since 1.3
  */
-public record Paragraph(char[] text, List<StyleSpan> spans) {
+public record Paragraph(char[] text, List<StyleSpan> spans, List<RubySpan> rubySpans) {
+
+	/**
+	 * Creates a paragraph with no ruby annotations.
+	 *
+	 * @param text  the paragraph characters
+	 * @param spans the style spans
+	 */
+	public Paragraph(final char[] text, final List<StyleSpan> spans) {
+		this(text, spans, List.of());
+	}
 
 	/**
 	 * A run of characters with a single font style.
@@ -25,6 +35,30 @@ public record Paragraph(char[] text, List<StyleSpan> spans) {
 	 * @param style the font style over {@code [begin, end)}
 	 */
 	public record StyleSpan(int begin, int end, FontStyle style) {
+	}
+
+	/**
+	 * A ruby annotation: small text set over (or under) a base character range.
+	 * The base is identified by its character range in {@link #text()}; the
+	 * annotation text is independent and set in its own style.
+	 *
+	 * @param baseBegin  the first base character index (inclusive)
+	 * @param baseEnd    the end base character index (exclusive)
+	 * @param ruby       the annotation characters
+	 * @param rubyStyle  the annotation font style
+	 * @param over       whether the annotation sits above ({@code true}) the base
+	 */
+	public record RubySpan(int baseBegin, int baseEnd, char[] ruby, FontStyle rubyStyle, boolean over) {
+
+		/** Returns the ruby span covering the given base index, or null. */
+		static RubySpan covering(final List<RubySpan> spans, final int baseIndex) {
+			for (final var span : spans) {
+				if (baseIndex >= span.baseBegin() && baseIndex < span.baseEnd()) {
+					return span;
+				}
+			}
+			return null;
+		}
 	}
 
 	/**

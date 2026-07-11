@@ -39,6 +39,17 @@ public final class PipelineTextDrawer {
 			}
 			gc.drawText(text, x + pr.x(), y);
 		}
+		// Ruby annotations: one glyph at a time at the mono-distributed step.
+		for (final var ruby : line.rubies()) {
+			final var run = ruby.run();
+			var rx = x + ruby.x();
+			for (var g = 0; g < run.length; ++g) {
+				final var single = new TextImpl(run.clusters[g], run.getFontStyle(), run.fontMetrics);
+				single.appendGlyph(run.text, run.clusters[g], clusterLength(run, g), run.gids[g]);
+				gc.drawText(single, rx, y + ruby.y());
+				rx += ruby.step();
+			}
+		}
 	}
 
 	/** Number of source chars a glyph consumes (1, or 2 for a surrogate pair). */

@@ -14,7 +14,21 @@ import java.util.List;
  * @author MIYABE Tatsuhiko
  * @since 1.3
  */
-public record PositionedLine(List<PositionedRun> runs, double width, double ascent, double descent) {
+public record PositionedLine(List<PositionedRun> runs, List<RubyOverlay> rubies, double width, double ascent,
+		double descent) {
+
+	/**
+	 * Creates a line with no ruby overlays.
+	 *
+	 * @param runs    the placed glyph slices
+	 * @param width   the used width
+	 * @param ascent  the maximum ascent
+	 * @param descent the maximum descent
+	 */
+	public PositionedLine(final List<PositionedRun> runs, final double width, final double ascent,
+			final double descent) {
+		this(runs, List.of(), width, ascent, descent);
+	}
 
 	/**
 	 * A glyph slice placed on a line.
@@ -27,5 +41,17 @@ public record PositionedLine(List<PositionedRun> runs, double width, double asce
 	 *                   justification (added after each glyph of the slice)
 	 */
 	public record PositionedRun(GlyphRun run, int glyphBegin, int glyphEnd, double x, double extraSpace) {
+	}
+
+	/**
+	 * A ruby annotation placed above (or below) its base on the line.
+	 *
+	 * @param run  the ruby glyph run
+	 * @param x    the x position of the first ruby glyph
+	 * @param y    the baseline offset relative to the main baseline (negative =
+	 *             above)
+	 * @param step the x advance between ruby glyphs (mono distribution)
+	 */
+	public record RubyOverlay(GlyphRun run, double x, double y, double step) {
 	}
 }

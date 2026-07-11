@@ -162,6 +162,39 @@ public class TextPipelineTest {
 	}
 
 	@Test
+	public void testRubyLayoutAndRender() throws Exception {
+		final var file = TestOutputFiles.outputFile(getClass(), "pipeline_ruby.pdf");
+		final var fsm = latinFont();
+		// Base "漢字" with ruby "かんじ" over it.
+		final var text = "漢字".toCharArray();
+		final var base = style(24, Direction.LTR);
+		final var rubyStyle = style(12, Direction.LTR);
+		final var ruby = new Paragraph.RubySpan(0, 2, "かんじ".toCharArray(), rubyStyle, true);
+		final var para = new Paragraph(text, List.of(new StyleSpan(0, 2, base)), List.of(ruby));
+
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder, PDFParams.createDefault().withFontSourceManager(fsm));
+			final var page = pdf.nextPage(200, 200);
+			final var lines = new ParagraphLayout(pdf.getFontManager()).layout(para, 200);
+			assertEquals(1, lines.size());
+			final var line = lines.get(0);
+			// The ruby annotation must be present and raise the line ascent
+			// above the base font's ascent.
+			assertEquals(1, line.rubies().size(), "One ruby overlay expected");
+			assertTrue(line.ascent() > base.size() * 0.8,
+					"Ruby must extend the line ascent above the base");
+			assertEquals(3, line.rubies().get(0).run().length, "Ruby has three kana");
+			try (final var gc = new PDFGC(page)) {
+				PipelineTextDrawer.draw(gc, line, 50, 100);
+			}
+			pdf.close();
+			builder.close();
+		}
+		assertTrue(file.length() > 0);
+	}
+
+	@Test
 	public void testBidiLayoutReordersVisually() throws Exception {
 		final var fsm = latinFont();
 		// "abc" + Hebrew aleph-bet-gimel: logical a b c א ב ג
