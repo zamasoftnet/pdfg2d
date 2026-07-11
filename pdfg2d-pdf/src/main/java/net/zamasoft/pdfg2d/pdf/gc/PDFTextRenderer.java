@@ -88,10 +88,10 @@ final class PDFTextRenderer {
 						return;
 					}
 				}
-				gc.begin();
-				gc.transform(AffineTransform.getTranslateInstance(x, y));
-				FontUtils.drawText(gc, df, text);
-				gc.end();
+				try (final var gcState = gc.begin()) {
+					gc.transform(AffineTransform.getTranslateInstance(x, y));
+					FontUtils.drawText(gc, df, text);
+				}
 				return;
 			}
 		}

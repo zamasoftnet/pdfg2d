@@ -83,13 +83,13 @@ class CoreApiTest {
     @Test
     void testRecorderGcCapturesAndReplaysCommands() {
         final var recorder = new RecorderGC(null);
-        recorder.begin();
-        recorder.setLineWidth(2.5);
-        recorder.setLinePattern(new double[] { 3.0, 4.0 });
-        recorder.setFillPaint(RGBColor.create(1.0f, 0.0f, 0.0f));
-        recorder.transform(AffineTransform.getTranslateInstance(10, 20));
-        recorder.fill(new Rectangle2D.Double(1, 2, 30, 40));
-        recorder.end();
+        try (final var gcState = recorder.begin()) {
+	        recorder.setLineWidth(2.5);
+	        recorder.setLinePattern(new double[] { 3.0, 4.0 });
+	        recorder.setFillPaint(RGBColor.create(1.0f, 0.0f, 0.0f));
+	        recorder.transform(AffineTransform.getTranslateInstance(10, 20));
+	        recorder.fill(new Rectangle2D.Double(1, 2, 30, 40));
+        }
 
         final var page = recorder.getPage();
         assertEquals(7, page.commands().size());
@@ -119,13 +119,13 @@ class CoreApiTest {
         final var gc = new NoOpGC(null);
         gc.setLineWidth(5);
         gc.setLinePattern(new double[] { 1, 2, 3 });
-        gc.begin();
-        gc.setLineWidth(7);
-        gc.resetState();
-        assertEquals(5.0, gc.getLineWidth(), "resetState should restore the state from the stack top");
+        try (final var gcState = gc.begin()) {
+	        gc.setLineWidth(7);
+	        gc.resetState();
+	        assertEquals(5.0, gc.getLineWidth(), "resetState should restore the state from the stack top");
 
-        gc.setFillAlpha(0.25f);
-        gc.end();
+	        gc.setFillAlpha(0.25f);
+        }
         assertEquals(5.0, gc.getLineWidth());
         assertArrayEquals(new double[] { 1, 2, 3 }, gc.getLinePattern());
 

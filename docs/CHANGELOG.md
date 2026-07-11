@@ -3,6 +3,21 @@
 pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.md`](./PROPOSALS.md)、
 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md) を参照。
 
+## 2026-07-11 — GC API の再設計（破壊的変更）
+
+- **`GC.begin()` が AutoCloseable な `GC.State` を返すようになり、`GC.end()` は削除**。
+  状態の保存/復元(q/Q)の対応が型で強制され、try-with-resources で書ける:
+  `try (var state = gc.begin()) { ... }`。保存と復元がレキシカルスコープを
+  共有できない場合(ページの開始と終了が別メソッド等)は `State` を保持して
+  明示的に `close()` する。`close()` は冪等(2 回目以降は無視)。
+- 全実装(`PDFGC`・`G2DGC`・`NoOpGC`・`RecorderGC`)と全呼び出し箇所
+  (pdfg2d 約 40、foliojet 約 150)を移行。`RecorderGC` の再生も State
+  スタックで対応。
+- `GC.LineJoin` の定数フィールドを `j` から `code` に改名(`LineCap`/`TextMode` と統一)。
+- `setStrokeAlpha`/`setFillAlpha` に `throws GraphicsException` を宣言し、
+  状態アルファと `RGBAColor`(ペイント側アルファ)の関係を Javadoc に明文化
+  (両者は同一チャンネルで後勝ち)。
+
 ## 2026-07-11 — 商業印刷機能（スポットカラー・ICC・レイヤー・VT/面付け発展）
 
 - **スポットカラー（Separation 色空間）**: `SpotColor`（名前 + 代替色 + tint +

@@ -22,10 +22,10 @@ public interface GC {
 	public enum LineJoin {
 		MITER((short) 0), ROUND((short) 1), BEVEL((short) 2);
 
-		public final short j;
+		public final short code;
 
-		LineJoin(final short j) {
-			this.j = j;
+		LineJoin(final short code) {
+			this.code = code;
 		}
 	}
 
@@ -58,32 +58,53 @@ public interface GC {
 	}
 
 	/**
+	 * A graphics state saved by {@link #begin()}. Closing it restores the
+	 * saved state; closing it more than once has no effect.
+	 */
+	public interface State extends AutoCloseable {
+		/**
+		 * Restores the saved graphics state.
+		 *
+		 * @throws GraphicsException if a graphics error occurs
+		 */
+		@Override
+		public void close() throws GraphicsException;
+	}
+
+	/**
 	 * Returns the font manager.
-	 * 
+	 *
 	 * @return the font manager
 	 */
 	public FontManager getFontManager();
 
 	/**
-	 * Begins a new graphics state.
-	 * 
+	 * Begins a new graphics state and returns a handle that restores the
+	 * previous state when closed, so that saved states cannot be left
+	 * unbalanced:
+	 *
+	 * <pre>{@code
+	 * try (var state = gc.begin()) {
+	 *     gc.transform(...);
+	 *     gc.fill(...);
+	 * } // the previous state is restored here
+	 * }</pre>
+	 *
+	 * When the save and restore cannot share a lexical scope (for example a
+	 * page begun in one method and finished in another), keep the returned
+	 * {@code State} and call {@link State#close()} explicitly.
+	 *
+	 * @return a handle that restores the previous state when closed
 	 * @throws GraphicsException if a graphics error occurs
 	 */
-	public void begin() throws GraphicsException;
+	public State begin() throws GraphicsException;
 
 	/**
 	 * Resets the current graphics state to the initial state.
-	 * 
+	 *
 	 * @throws GraphicsException if a graphics error occurs
 	 */
 	public void resetState() throws GraphicsException;
-
-	/**
-	 * Ends the current graphics state.
-	 * 
-	 * @throws GraphicsException if a graphics error occurs
-	 */
-	public void end() throws GraphicsException;
 
 	/**
 	 * Sets the stroke paint.
@@ -117,31 +138,47 @@ public interface GC {
 
 	/**
 	 * Returns the stroke alpha.
-	 * 
+	 *
 	 * @return the stroke alpha
 	 */
 	public float getStrokeAlpha();
 
 	/**
 	 * Sets the stroke alpha.
-	 * 
+	 *
+	 * <p>
+	 * Alpha is graphics state, applied to whatever is drawn while it is in
+	 * effect (in PDF terms, {@code CA} in the ExtGState). Setting a paint
+	 * that carries its own alpha, such as
+	 * {@link net.zamasoft.pdfg2d.gc.paint.RGBAColor}, replaces this state
+	 * alpha with the color's alpha component — the two are one channel, and
+	 * the last one set wins. Use this method to scope translucency to a
+	 * state block, and {@code RGBAColor} when the alpha naturally travels
+	 * with the color value (for example gradient stops).
+	 *
 	 * @param strokeAlpha the stroke alpha
+	 * @throws GraphicsException if a graphics error occurs
 	 */
-	public void setStrokeAlpha(final float strokeAlpha);
+	public void setStrokeAlpha(final float strokeAlpha) throws GraphicsException;
 
 	/**
 	 * Returns the fill alpha.
-	 * 
+	 *
 	 * @return the fill alpha
 	 */
 	public float getFillAlpha();
 
 	/**
 	 * Sets the fill alpha.
-	 * 
+	 *
+	 * <p>
+	 * See {@link #setStrokeAlpha(float)} for how state alpha relates to
+	 * paint-level alpha ({@code RGBAColor}).
+	 *
 	 * @param fillAlpha the fill alpha
+	 * @throws GraphicsException if a graphics error occurs
 	 */
-	public void setFillAlpha(final float fillAlpha);
+	public void setFillAlpha(final float fillAlpha) throws GraphicsException;
 
 	/**
 	 * Sets the line width.

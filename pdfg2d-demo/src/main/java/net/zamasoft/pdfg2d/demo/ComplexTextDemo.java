@@ -122,43 +122,43 @@ public class ComplexTextDemo {
 
 	static void draw(final GC gc) {
 		{
-			gc.begin();
-			gc.transform(AffineTransform.getTranslateInstance(200, 0));
-			final var lgh = new SimpleLayoutGlyphHandler();
-			lgh.setGC(gc);
-			try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
-				// Set text direction to top-to-bottom (vertical)
-				tlf.setDirection(FontStyle.Direction.TB);
-				tlf.setFontFamilies(FontFamilyList.create("IPAex明朝"));
-				tlf.setFontSize(16);
-				tlf.characters("盗人を捕らえてみれば我が子なり\n斬りたくもあり斬りたくもなし\n");
+			try (final var gcState = gc.begin()) {
+				gc.transform(AffineTransform.getTranslateInstance(200, 0));
+				final var lgh = new SimpleLayoutGlyphHandler();
+				lgh.setGC(gc);
+				try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
+					// Set text direction to top-to-bottom (vertical)
+					tlf.setDirection(FontStyle.Direction.TB);
+					tlf.setFontFamilies(FontFamilyList.create("IPAex明朝"));
+					tlf.setFontSize(16);
+					tlf.characters("盗人を捕らえてみれば我が子なり\n斬りたくもあり斬りたくもなし\n");
 
-				// Change font style to oblique
-				tlf.setFontStyle(FontStyle.Style.OBLIQUE);
-				tlf.characters("盗人を捕らえてみれば我が子なり\n斬りたくもあり斬りたくもなし\n");
-				// Reset font style to normal
-				tlf.setFontStyle(FontStyle.Style.NORMAL);
-				tlf.characters("The thief caught turn out to be one's own son.\n");
-				tlf.setFontStyle(FontStyle.Style.OBLIQUE);
-				tlf.characters("The thief caught turn out to be one's own son.\n");
-				tlf.flush();
+					// Change font style to oblique
+					tlf.setFontStyle(FontStyle.Style.OBLIQUE);
+					tlf.characters("盗人を捕らえてみれば我が子なり\n斬りたくもあり斬りたくもなし\n");
+					// Reset font style to normal
+					tlf.setFontStyle(FontStyle.Style.NORMAL);
+					tlf.characters("The thief caught turn out to be one's own son.\n");
+					tlf.setFontStyle(FontStyle.Style.OBLIQUE);
+					tlf.characters("The thief caught turn out to be one's own son.\n");
+					tlf.flush();
+				}
 			}
-			gc.end();
 		}
 
 		{
-			gc.begin();
-			gc.transform(AffineTransform.getTranslateInstance(100, 0));
-			final var lgh = new SimpleLayoutGlyphHandler();
-			lgh.setGC(gc);
-			try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
-				tlf.setDirection(FontStyle.Direction.TB);
-				tlf.setFontFamilies(FontFamilyList.create("Kenten Generic"));
-				tlf.setFontSize(16);
-				tlf.characters("﹅﹆");
-				tlf.flush();
+			try (final var gcState = gc.begin()) {
+				gc.transform(AffineTransform.getTranslateInstance(100, 0));
+				final var lgh = new SimpleLayoutGlyphHandler();
+				lgh.setGC(gc);
+				try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
+					tlf.setDirection(FontStyle.Direction.TB);
+					tlf.setFontFamilies(FontFamilyList.create("Kenten Generic"));
+					tlf.setFontSize(16);
+					tlf.characters("﹅﹆");
+					tlf.flush();
+				}
 			}
-			gc.end();
 		}
 	}
 }

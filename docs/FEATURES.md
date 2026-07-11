@@ -60,6 +60,8 @@ pdfg2d は、Java の `Graphics2D`/独自 `GC` API を PDF 出力へ変換する
 - `PDFGraphics2D` により `java.awt.Graphics2D` 互換の描画ができます。
 - 図形塗りつぶし、線描画、クリッピング、破線、変形、複数ページ出力に対応します。
 - `PDFGC` により低レベル描画 API を直接利用できます。
+  - グラフィックス状態の保存/復元は `GC.begin()` が返す AutoCloseable な `GC.State` で
+    型的に強制されます: `try (var state = gc.begin()) { ... }`(q/Q の不釣り合いを防止)。
 - 透明色、塗り/線の alpha、透明グループ、グループ画像を扱えます。
 - タイリングパターン、軸型・放射型シェーディング（マルチストップ、Type 2/3 関数、
   文書内キャッシュ）。

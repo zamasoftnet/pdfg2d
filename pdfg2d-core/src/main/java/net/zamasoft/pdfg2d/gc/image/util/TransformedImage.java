@@ -42,10 +42,10 @@ public class TransformedImage extends WrappedImage {
 
 	@Override
 	public void drawTo(final GC gc) {
-		gc.begin();
-		gc.transform(this.at);
-		this.image.drawTo(gc);
-		gc.end();
+		try (final var gcState = gc.begin()) {
+			gc.transform(this.at);
+			this.image.drawTo(gc);
+		}
 	}
 
 	@Override

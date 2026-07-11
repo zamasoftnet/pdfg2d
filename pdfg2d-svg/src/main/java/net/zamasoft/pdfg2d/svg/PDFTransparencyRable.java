@@ -116,18 +116,18 @@ class PDFTransparencyRable extends GraphicsNodeRable8Bit {
 				.createGroupImage(pdfOutput.getWidth(), pdfOutput.getHeight())) {
 
 			final var gc2 = new PDFGC(groupImage);
-			gc2.begin();
+			try (final var gcState = gc2.begin()) {
 
-			final Graphics2D g2d2 = new BridgeGraphics2D(gc2, g2d.getDeviceConfiguration());
-			final var gn = getGraphicsNode();
+				final Graphics2D g2d2 = new BridgeGraphics2D(gc2, g2d.getDeviceConfiguration());
+				final var gn = getGraphicsNode();
 
-			if (getUsePrimitivePaint()) {
-				gn.primitivePaint(g2d2);
-			} else {
-				gn.paint(g2d2);
+				if (getUsePrimitivePaint()) {
+					gn.primitivePaint(g2d2);
+				} else {
+					gn.paint(g2d2);
+				}
+
 			}
-
-			gc2.end();
 			gc.drawImage(groupImage);
 		}
 	}

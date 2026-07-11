@@ -226,21 +226,21 @@ public final class PrinterMarks {
 	 */
 	public static void drawText(final GC gc, final FontPolicyList fontPolicy, final double fontSize, final String text,
 			final double x, final double y, final double width) throws GraphicsException {
-		gc.begin();
-		gc.transform(AffineTransform.getTranslateInstance(x, y));
+		try (final var gcState = gc.begin()) {
+			gc.transform(AffineTransform.getTranslateInstance(x, y));
 
-		final var lineHandler = new PageLayoutGlyphHandler(gc);
-		lineHandler.setLineAdvance(width);
+			final var lineHandler = new PageLayoutGlyphHandler(gc);
+			lineHandler.setLineAdvance(width);
 
-		final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules(null), lineHandler);
-		tlf.setFontFamilies(FontFamilyList.SERIF);
-		tlf.setFontPolicy(fontPolicy);
-		tlf.setFontSize(fontSize);
-		tlf.characters(text);
-		tlf.flush();
+			final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules(null), lineHandler);
+			tlf.setFontFamilies(FontFamilyList.SERIF);
+			tlf.setFontPolicy(fontPolicy);
+			tlf.setFontSize(fontSize);
+			tlf.characters(text);
+			tlf.flush();
 
-		lineHandler.close();
-		gc.end();
+			lineHandler.close();
+		}
 	}
 
 	/**

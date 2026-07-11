@@ -195,26 +195,27 @@ class EmojiFont implements ImageFont {
 				: this.gidToNode.computeIfAbsent(gid, k -> loadEmojiGraphicsNode(gc, gid));
 
 		// Render the emoji to the graphics context
-		gc.begin();
-		if (at != null) {
-			gc.transform(at);
-		}
-		gc.transform(AffineTransform.getTranslateInstance(0, -this.source.getAscent()));
+		try (final var gcState = gc.begin()) {
+			if (at != null) {
+				gc.transform(at);
+			}
+			gc.transform(AffineTransform.getTranslateInstance(0, -this.source.getAscent()));
 
-		if (cachedImage != null) {
-			gc.begin();
-			gc.drawImage(cachedImage);
-		} else {
-			gc.transform(AffineTransform.getScaleInstance(
-					1000.0 / VIEWPORT.getWidth(),
-					1000.0 / VIEWPORT.getHeight()));
-			gc.begin();
-			final Graphics2D g2d = new SVGBridgeGraphics2D(gc);
-			gvtRoot.paint(g2d);
-			g2d.dispose();
+			if (cachedImage != null) {
+				try (final var gcState2 = gc.begin()) {
+					gc.drawImage(cachedImage);
+				}
+			} else {
+				gc.transform(AffineTransform.getScaleInstance(
+						1000.0 / VIEWPORT.getWidth(),
+						1000.0 / VIEWPORT.getHeight()));
+				try (final var gcState2 = gc.begin()) {
+					final Graphics2D g2d = new SVGBridgeGraphics2D(gc);
+					gvtRoot.paint(g2d);
+					g2d.dispose();
+				}
+			}
 		}
-		gc.end();
-		gc.end();
 	}
 
 	/**
@@ -281,11 +282,11 @@ class EmojiFont implements ImageFont {
 		gc2.transform(AffineTransform.getScaleInstance(
 				1000.0 / VIEWPORT.getWidth(),
 				1000.0 / VIEWPORT.getHeight()));
-		gc2.begin();
-		final Graphics2D g2d = new SVGBridgeGraphics2D(gc2);
-		gvtRoot.paint(g2d);
-		g2d.dispose();
-		gc2.end();
+		try (final var gcState = gc2.begin()) {
+			final Graphics2D g2d = new SVGBridgeGraphics2D(gc2);
+			gvtRoot.paint(g2d);
+			g2d.dispose();
+		}
 		image.close();
 		this.gidToImage.put(gid, image);
 	}

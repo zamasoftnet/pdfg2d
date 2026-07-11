@@ -29,6 +29,9 @@ public class SinglePagePDFImposition extends PDFImposition {
 
 	protected PDFGC gc;
 
+	/** State begun in {@link #nextPage()} and closed in {@link #closePage()}. */
+	protected GC.State gcState;
+
 	protected double actualPageWidth, actualPageHeight;
 
 	public SinglePagePDFImposition(final PDFWriter pdfWriter) {
@@ -55,7 +58,7 @@ public class SinglePagePDFImposition extends PDFImposition {
 			throw new GraphicsException(e);
 		}
 		this.gc = new PDFGC(this.pageOut);
-		this.gc.begin();
+		this.gcState = this.gc.begin();
 
 		if (placement.rotateContent()) {
 			final var at = AffineTransform.getRotateInstance(-Math.PI / 2.0);
@@ -132,13 +135,14 @@ public class SinglePagePDFImposition extends PDFImposition {
 
 	@Override
 	public void closePage() throws GraphicsException {
-		this.gc.end();
+		this.gcState.close();
 		try {
 			this.gc.close();
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		} finally {
 			this.gc = null;
+			this.gcState = null;
 			this.pageOut = null;
 		}
 	}

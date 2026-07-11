@@ -93,39 +93,39 @@ public class TextOutlineDemo {
 
 	static void draw(final GC gc) {
 		{
-			gc.begin();
-			gc.transform(AffineTransform.getTranslateInstance(250, 0));
-			{
-				gc.setStrokePaint(RGBColor.BLACK);
-				gc.setFillPaint(RGBColor.WHITE);
-				gc.setTextMode(GC.TextMode.FILL_STROKE);
-				final var lgh = new SimpleLayoutGlyphHandler();
-				lgh.setGC(gc);
-				try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
-					tlf.setDirection(FontStyle.Direction.TB);
-					tlf.setFontFamilies(FontFamilyList.create("IPAex明朝"));
-					tlf.setFontSize(32);
-					tlf.characters("白抜き");
-					tlf.flush();
+			try (final var gcState = gc.begin()) {
+				gc.transform(AffineTransform.getTranslateInstance(250, 0));
+				{
+					gc.setStrokePaint(RGBColor.BLACK);
+					gc.setFillPaint(RGBColor.WHITE);
+					gc.setTextMode(GC.TextMode.FILL_STROKE);
+					final var lgh = new SimpleLayoutGlyphHandler();
+					lgh.setGC(gc);
+					try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
+						tlf.setDirection(FontStyle.Direction.TB);
+						tlf.setFontFamilies(FontFamilyList.create("IPAex明朝"));
+						tlf.setFontSize(32);
+						tlf.characters("白抜き");
+						tlf.flush();
+					}
+				}
+				gc.transform(AffineTransform.getTranslateInstance(-50, 0));
+				{
+					gc.setStrokePaint(RGBColor.BLACK);
+					gc.setFillPaint(RGBColor.create(255, 0, 0));
+					gc.setTextMode(GC.TextMode.FILL);
+					final var lgh = new SimpleLayoutGlyphHandler();
+					lgh.setGC(gc);
+					try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
+						tlf.setDirection(FontStyle.Direction.TB);
+						tlf.setFontFamilies(FontFamilyList.create("IPAex明朝"));
+						tlf.setFontWeight(FontStyle.Weight.W_800);
+						tlf.setFontSize(32);
+						tlf.characters("太字");
+						tlf.flush();
+					}
 				}
 			}
-			gc.transform(AffineTransform.getTranslateInstance(-50, 0));
-			{
-				gc.setStrokePaint(RGBColor.BLACK);
-				gc.setFillPaint(RGBColor.create(255, 0, 0));
-				gc.setTextMode(GC.TextMode.FILL);
-				final var lgh = new SimpleLayoutGlyphHandler();
-				lgh.setGC(gc);
-				try (final var tlf = new TextLayoutHandler(gc, TextBreakingRulesBundle.getRules("ja"), lgh)) {
-					tlf.setDirection(FontStyle.Direction.TB);
-					tlf.setFontFamilies(FontFamilyList.create("IPAex明朝"));
-					tlf.setFontWeight(FontStyle.Weight.W_800);
-					tlf.setFontSize(32);
-					tlf.characters("太字");
-					tlf.flush();
-				}
-			}
-			gc.end();
 		}
 	}
 }

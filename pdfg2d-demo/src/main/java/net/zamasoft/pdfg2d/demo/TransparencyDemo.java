@@ -86,12 +86,12 @@ public class TransparencyDemo {
 		}
 		gc.transform(AffineTransform.getRotateInstance(.2f));
 		{
-			gc.begin();
-			gc.setFillPaint(RGBAColor.create(0, 1.0f, 0, .5f));
-			gc.setStrokePaint(RGBAColor.create(0, 0, 1.0f, .5f));
-			final Shape shape = new Rectangle2D.Double(50, 50, 100, 100);
-			gc.fillDraw(shape);
-			gc.end();
+			try (final var gcState = gc.begin()) {
+				gc.setFillPaint(RGBAColor.create(0, 1.0f, 0, .5f));
+				gc.setStrokePaint(RGBAColor.create(0, 0, 1.0f, .5f));
+				final Shape shape = new Rectangle2D.Double(50, 50, 100, 100);
+				gc.fillDraw(shape);
+			}
 		}
 		gc.transform(AffineTransform.getRotateInstance(.2f));
 		{

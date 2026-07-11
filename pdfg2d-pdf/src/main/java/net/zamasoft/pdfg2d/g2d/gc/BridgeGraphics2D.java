@@ -373,14 +373,14 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 
 	@Override
 	public void drawString(final AttributedCharacterIterator aci, final float x, final float y) {
-		this.gc.begin();
-		this.gc.transform(AffineTransform.getTranslateInstance(x, y));
+		try (final var gcState = this.gc.begin()) {
+			this.gc.transform(AffineTransform.getTranslateInstance(x, y));
 
-		final var lgh = new SimpleLayoutGlyphHandler();
-		lgh.setGC(this.gc);
-		this.drawString(lgh, aci);
+			final var lgh = new SimpleLayoutGlyphHandler();
+			lgh.setGC(this.gc);
+			this.drawString(lgh, aci);
 
-		this.gc.end();
+		}
 	}
 
 	@Override
@@ -389,10 +389,10 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	}
 
 	protected void drawBufferedImage(final BufferedImage image, final AffineTransform at) {
-		this.gc.begin();
-		this.gc.transform(at);
-		this.gc.drawImage(new RasterImageImpl(image));
-		this.gc.end();
+		try (final var gcState = this.gc.begin()) {
+			this.gc.transform(at);
+			this.gc.drawImage(new RasterImageImpl(image));
+		}
 	}
 
 	@Override

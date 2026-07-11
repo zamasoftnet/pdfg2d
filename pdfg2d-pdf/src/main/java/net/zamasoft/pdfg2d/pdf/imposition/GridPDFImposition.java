@@ -92,6 +92,9 @@ public class GridPDFImposition extends PDFImposition {
 
 	private PDFGC currentGC;
 
+	/** State begun in {@link #nextPage()} and closed in {@link #closePage()}. */
+	private GC.State currentGCState;
+
 	private PDFGroupImage currentGroup;
 
 	/**
@@ -194,7 +197,7 @@ public class GridPDFImposition extends PDFImposition {
 			throw new GraphicsException(e);
 		}
 		this.currentGC = new PDFGC(this.currentGroup);
-		this.currentGC.begin();
+		this.currentGCState = this.currentGC.begin();
 		final var m = this.trims.cuttingMargin();
 		if (m != 0) {
 			this.currentGC.transform(AffineTransform.getTranslateInstance(m, m));
@@ -204,7 +207,7 @@ public class GridPDFImposition extends PDFImposition {
 
 	@Override
 	public void closePage() throws GraphicsException {
-		this.currentGC.end();
+		this.currentGCState.close();
 		try {
 			this.currentGC.close();
 		} catch (IOException e) {
@@ -212,6 +215,7 @@ public class GridPDFImposition extends PDFImposition {
 		}
 		final var group = this.currentGroup;
 		this.currentGC = null;
+		this.currentGCState = null;
 		this.currentGroup = null;
 
 		switch (this.order) {
@@ -350,10 +354,10 @@ public class GridPDFImposition extends PDFImposition {
 					} else {
 						dx = 0;
 					}
-					gc.begin();
-					gc.transform(AffineTransform.getTranslateInstance(x + dx, y));
-					cell.drawTo(gc);
-					gc.end();
+					try (final var gcState = gc.begin()) {
+						gc.transform(AffineTransform.getTranslateInstance(x + dx, y));
+						cell.drawTo(gc);
+					}
 				}
 
 				// Marks: compact cut marks around each trimmed cell

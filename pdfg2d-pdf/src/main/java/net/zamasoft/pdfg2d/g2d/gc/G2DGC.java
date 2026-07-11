@@ -38,8 +38,8 @@ import net.zamasoft.pdfg2d.gc.text.Text;
  * calls.
  *
  * <p>Graphics state (clip, transform, stroke, paints, alpha, text mode) is
- * managed via an explicit push/pop stack driven by {@link #begin()} and
- * {@link #end()}.
+ * managed via an explicit push/pop stack: {@link #begin()} pushes a state and
+ * closing the returned {@link State} pops it.
  *
  * @author MIYABE Tatsuhiko
  * @since 1.0
@@ -48,7 +48,7 @@ public class G2DGC implements GC {
 	/**
 	 * Snapshot of all mutable graphics-state fields belonging to a {@link G2DGC}.
 	 * Instances are pushed onto the state stack by {@link G2DGC#begin()} and
-	 * popped (restored) by {@link G2DGC#end()}.
+	 * popped (restored) when the returned {@link State} is closed.
 	 */
 	protected static class GraphicsState {
 		public final Shape clip;
@@ -182,17 +182,31 @@ public class G2DGC implements GC {
 	 * Saves the current graphics state onto the internal stack and resets the
 	 * {@code drewAnything} flag when the stack was empty before this call.
 	 */
-	public void begin() {
+	public State begin() {
 		if (this.stack.isEmpty()) {
 			this.drewAnything = false;
 		}
 		this.stack.add(new GraphicsState(this));
+		return new State() {
+			private boolean closed;
+
+			@Override
+			public void close() {
+				if (this.closed) {
+					return;
+				}
+				this.closed = true;
+				G2DGC.this.restoreState();
+			}
+		};
 	}
 
 	/**
-	 * Pops the most recently saved graphics state from the stack and restores it.
+	 * Pops the most recently saved graphics state from the stack and restores it;
+	 * invoked exactly once when a {@link State} returned by {@link #begin()} is
+	 * closed.
 	 */
-	public void end() {
+	private void restoreState() {
 		GraphicsState state = (GraphicsState) this.stack.remove(this.stack.size() - 1);
 		state.restore(this);
 	}
@@ -239,7 +253,7 @@ public class G2DGC implements GC {
 
 	public void setLineJoin(LineJoin lineJoin) {
 		BasicStroke stroke = (BasicStroke) this.g.getStroke();
-		this.g.setStroke(new BasicStroke(stroke.getLineWidth(), stroke.getEndCap(), lineJoin.j, stroke.getMiterLimit(),
+		this.g.setStroke(new BasicStroke(stroke.getLineWidth(), stroke.getEndCap(), lineJoin.code, stroke.getMiterLimit(),
 				stroke.getDashArray(), stroke.getDashPhase()));
 	}
 
@@ -422,15 +436,15 @@ public class G2DGC implements GC {
 	public void drawText(Text text, double x, double y) throws GraphicsException {
 		this.drewAnything = true;
 
-		this.begin();
-		this.transform(AffineTransform.getTranslateInstance(x, y));
-		Font font = ((FontMetricsImpl) text.getFontMetrics()).getFont();
-		try {
-			font.drawTo(this, text);
-		} catch (IOException e) {
-			throw new GraphicsException(e);
+		try (final var gcState = this.begin()) {
+			this.transform(AffineTransform.getTranslateInstance(x, y));
+			Font font = ((FontMetricsImpl) text.getFontMetrics()).getFont();
+			try {
+				font.drawTo(this, text);
+			} catch (IOException e) {
+				throw new GraphicsException(e);
+			}
 		}
-		this.end();
 	}
 
 	private static class G2dGroupImageGC extends G2DGC implements GroupImageGC {

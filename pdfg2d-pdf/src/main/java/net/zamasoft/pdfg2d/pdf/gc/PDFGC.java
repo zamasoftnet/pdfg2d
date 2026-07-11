@@ -430,7 +430,7 @@ public class PDFGC implements GC, Closeable {
 	}
 
 	@Override
-	public void begin() throws GraphicsException {
+	public State begin() throws GraphicsException {
 		if (DEBUG) {
 			LOG.fine("begin");
 		}
@@ -441,10 +441,25 @@ public class PDFGC implements GC, Closeable {
 			throw new GraphicsException(e);
 		}
 		this.stack.add(new GraphicsState(this));
+		return new State() {
+			private boolean closed;
+
+			@Override
+			public void close() throws GraphicsException {
+				if (this.closed) {
+					return;
+				}
+				this.closed = true;
+				PDFGC.this.restoreState();
+			}
+		};
 	}
 
-	@Override
-	public void end() throws GraphicsException {
+	/**
+	 * Restores the most recently saved graphics state; invoked exactly once
+	 * when a {@link State} returned by {@link #begin()} is closed.
+	 */
+	private void restoreState() throws GraphicsException {
 		if (DEBUG) {
 			LOG.fine("end");
 		}
@@ -797,27 +812,27 @@ public class PDFGC implements GC, Closeable {
 	public void drawPDFImage(final String name, final double width, final double height) throws GraphicsException {
 		try {
 			this.applyStates();
-			this.begin();
+			try (final var state = this.begin()) {
+				// Images are real content: tag as Figure with an alternate
+				// description when available.
+				final var alt = (this.pendingAlt != null) ? this.pendingAlt : "Image";
+				final var mcid = this.beginTagged("Figure", alt);
 
-			// Images are real content: tag as Figure with an alternate
-			// description when available.
-			final var alt = (this.pendingAlt != null) ? this.pendingAlt : "Image";
-			final var mcid = this.beginTagged("Figure", alt);
+				this.gsave();
+				this.out.writeReal(width);
+				this.out.writeReal(0);
+				this.out.writeReal(0);
+				this.out.writeReal(height);
+				this.out.writePosition(0, height);
+				this.out.writeOperator("cm");
 
-			this.gsave();
-			this.out.writeReal(width);
-			this.out.writeReal(0);
-			this.out.writeReal(0);
-			this.out.writeReal(height);
-			this.out.writePosition(0, height);
-			this.out.writeOperator("cm");
+				this.out.useResource("XObject", name);
+				this.out.writeName(name);
+				this.out.writeOperator("Do");
 
-			this.out.useResource("XObject", name);
-			this.out.writeName(name);
-			this.out.writeOperator("Do");
-
-			this.end();
-			this.endTagged(mcid >= 0);
+				state.close();
+				this.endTagged(mcid >= 0);
+			}
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		}
@@ -1053,7 +1068,7 @@ public class PDFGC implements GC, Closeable {
 		}
 		if (this.lineJoin != this.xlineJoin) {
 			this.xlineJoin = this.lineJoin;
-			out.writeInt(this.lineJoin.j);
+			out.writeInt(this.lineJoin.code);
 			out.writeOperator("j");
 		}
 		if (!Arrays.equals(this.linePattern, this.xlinePattern)) {

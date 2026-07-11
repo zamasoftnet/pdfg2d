@@ -65,11 +65,11 @@ public record SVGImage(GraphicsNode node, double width, double height) implement
 	 */
 	@Override
 	public void drawTo(final GC gc) throws GraphicsException {
-		gc.begin();
-		final Graphics2D g2d = new SVGBridgeGraphics2D(gc);
-		this.node.paint(g2d);
-		g2d.dispose();
-		gc.end();
+		try (final var gcState = gc.begin()) {
+			final Graphics2D g2d = new SVGBridgeGraphics2D(gc);
+			this.node.paint(g2d);
+			g2d.dispose();
+		}
 	}
 
 	/**

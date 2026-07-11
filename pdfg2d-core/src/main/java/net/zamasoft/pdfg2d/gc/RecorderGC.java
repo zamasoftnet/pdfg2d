@@ -2,6 +2,7 @@ package net.zamasoft.pdfg2d.gc;
 
 import java.awt.Shape;
 import java.awt.geom.AffineTransform;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -93,14 +94,15 @@ public class RecorderGC extends NoOpGC {
 	}
 
 	@Override
-	public void begin() {
-		super.begin();
+	public State begin() {
+		final var state = super.begin();
 		this.contents.add(new Begin());
+		return state;
 	}
 
 	@Override
-	public void end() {
-		super.end();
+	protected void restoreState() {
+		super.restoreState();
 		this.contents.add(new End());
 	}
 
@@ -281,10 +283,13 @@ public class RecorderGC extends NoOpGC {
 		 * @param gc the graphics context
 		 */
 		public void drawTo(final GC gc) {
+			// Balanced Begin/End records are guaranteed by construction: an
+			// End is only recorded when a State handle is closed.
+			final var states = new ArrayDeque<GC.State>();
 			for (final var cmd : this.commands) {
 				switch (cmd) {
-					case Begin() -> gc.begin();
-					case End() -> gc.end();
+					case Begin() -> states.push(gc.begin());
+					case End() -> states.pop().close();
 					case SetLineWidth(double width) -> gc.setLineWidth(width);
 					case SetLinePattern(double[] pattern) -> gc.setLinePattern(pattern);
 					case SetLineCap(LineCap lineCap) -> gc.setLineCap(lineCap);

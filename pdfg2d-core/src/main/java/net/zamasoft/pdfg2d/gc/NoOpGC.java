@@ -18,8 +18,8 @@ import net.zamasoft.pdfg2d.gc.text.Text;
  */
 public class NoOpGC implements GC {
 	/**
-	 * Represents a saved graphics state that can be pushed onto and popped off the
-	 * state stack via {@link NoOpGC#begin()} and {@link NoOpGC#end()}.
+	 * Represents a saved graphics state that is pushed onto the state stack by
+	 * {@link NoOpGC#begin()} and popped off when the returned handle is closed.
 	 */
 	protected record GraphicsState(
 			AffineTransform transform,
@@ -89,14 +89,39 @@ public class NoOpGC implements GC {
 	}
 
 	@Override
-	public void begin() {
+	public State begin() {
 		this.stack.add(new GraphicsState(this));
+		return this.newState();
 	}
 
-	@Override
-	public void end() {
+	/**
+	 * Restores the most recently saved graphics state; invoked exactly once
+	 * when a {@link State} returned by {@link #begin()} is closed.
+	 */
+	protected void restoreState() {
 		final var state = this.stack.removeLast();
 		state.restore(this);
+	}
+
+	/**
+	 * Creates a state handle that calls {@link #restoreState()} on the first
+	 * close and ignores subsequent closes.
+	 *
+	 * @return the state handle
+	 */
+	protected final State newState() {
+		return new State() {
+			private boolean closed;
+
+			@Override
+			public void close() throws GraphicsException {
+				if (this.closed) {
+					return;
+				}
+				this.closed = true;
+				NoOpGC.this.restoreState();
+			}
+		};
 	}
 
 	@Override
