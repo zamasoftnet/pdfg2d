@@ -128,6 +128,40 @@ public class TextPipelineTest {
 	}
 
 	@Test
+	public void testHyphenatorFindsBreakPoints() {
+		final var h = net.zamasoft.pdfg2d.gc.text.pipeline.Hyphenator.english();
+		// A word with known soft breaks; at least one must be found, and all
+		// must honor the left/right minimums.
+		final var breaks = h.hyphenate("hyphenation");
+		assertTrue(breaks.length >= 1, "hyphenation must have a soft break");
+		for (final var b : breaks) {
+			assertTrue(b >= 2 && b <= "hyphenation".length() - 3, "break within min bounds: " + b);
+		}
+	}
+
+	@Test
+	public void testHyphenationBreaksLongWord() throws Exception {
+		final var fsm = latinFont();
+		final var text = "hyphenation".toCharArray();
+		final var para = new Paragraph(text, List.of(new StyleSpan(0, text.length, style(20, Direction.LTR))));
+		final var mgr = new PDFWriterImpl(
+				new StreamFragmentedOutput(new java.io.ByteArrayOutputStream()),
+				PDFParams.createDefault().withFontSourceManager(fsm)).getFontManager();
+
+		// Without a hyphenator the single word cannot wrap: one line.
+		final var noHyph = new ParagraphLayout(mgr).layout(para, 80);
+		assertEquals(1, noHyph.size(), "Without hyphenation the word stays on one line");
+
+		// With a hyphenator and a narrow measure it must split, and the first
+		// line must end with a hyphen glyph (an extra run beyond the letters).
+		final var withHyph = new ParagraphLayout(mgr)
+				.setHyphenator(net.zamasoft.pdfg2d.gc.text.pipeline.Hyphenator.english())
+				.layout(para, 80);
+		assertTrue(withHyph.size() >= 2, "Hyphenation must wrap the long word, got " + withHyph.size());
+		assertTrue(withHyph.get(0).width() <= 80 + 1e-6, "Hyphenated line must fit");
+	}
+
+	@Test
 	public void testBidiLayoutReordersVisually() throws Exception {
 		final var fsm = latinFont();
 		// "abc" + Hebrew aleph-bet-gimel: logical a b c א ב ג

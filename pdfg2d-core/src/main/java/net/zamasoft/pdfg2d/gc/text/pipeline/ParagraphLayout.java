@@ -21,6 +21,9 @@ public final class ParagraphLayout {
 	/** Justify (spread glue to fill the measure) all but the last line. */
 	private boolean justify = false;
 
+	/** Optional hyphenator; when set, words get soft (flagged) breakpoints. */
+	private Hyphenator hyphenator = null;
+
 	/**
 	 * Creates a layout engine backed by the given font manager.
 	 *
@@ -38,6 +41,17 @@ public final class ParagraphLayout {
 	 */
 	public ParagraphLayout setJustify(final boolean justify) {
 		this.justify = justify;
+		return this;
+	}
+
+	/**
+	 * Sets a hyphenator to insert soft breakpoints within words.
+	 *
+	 * @param hyphenator the hyphenator, or {@code null} to disable
+	 * @return this layout, for chaining
+	 */
+	public ParagraphLayout setHyphenator(final Hyphenator hyphenator) {
+		this.hyphenator = hyphenator;
 		return this;
 	}
 
@@ -59,24 +73,40 @@ public final class ParagraphLayout {
 
 		for (final var item : items) {
 			for (final var run : this.shaper.shape(paragraph.text(), item)) {
-				for (var g = 0; g < run.length; ++g) {
-					final var cluster = run.clusters[g];
-					final var ch = paragraph.text()[cluster];
+				// Buffer letters of the current word so it can be hyphenated as
+				// a unit once its extent is known.
+				final var word = new StringBuilder();
+				final var wordGlyphs = new java.util.ArrayList<Integer>();
+				for (var g = 0; g <= run.length; ++g) {
+					final var ch = (g < run.length) ? paragraph.text()[run.clusters[g]] : ' ';
+					final var isLetter = g < run.length && Character.isLetter(ch) && !isIdeograph(ch);
+					if (isLetter) {
+						word.append(ch);
+						wordGlyphs.add(g);
+						continue;
+					}
+					// Word boundary: emit the buffered word (with hyphenation).
+					if (!word.isEmpty()) {
+						this.emitWord(run, word.toString(), wordGlyphs, item, nodes, plain);
+						word.setLength(0);
+						wordGlyphs.clear();
+					}
+					if (g == run.length) {
+						break;
+					}
 					final var w = run.xAdvances[g];
 					if (ch == ' ' || ch == '\t') {
-						// Breakable, stretchable space.
 						final var glue = new BreakNode.Glue(w, w * 0.5, w * 0.3);
 						nodes.add(new LeveledNode(glue, item.bidiLevel()));
 						plain.add(glue);
 					} else {
-						final var box = new BreakNode.Box(w, run, g, g + 1);
-						// Allow a break before an ideograph (simple CJK rule).
 						if (isIdeograph(ch) && !plain.isEmpty()
 								&& plain.get(plain.size() - 1) instanceof BreakNode.Box) {
 							final var brk = new BreakNode.Penalty(0, 0, false, null);
 							nodes.add(new LeveledNode(brk, item.bidiLevel()));
 							plain.add(brk);
 						}
+						final var box = new BreakNode.Box(w, run, g, g + 1);
 						nodes.add(new LeveledNode(box, item.bidiLevel()));
 						plain.add(box);
 					}
@@ -93,9 +123,58 @@ public final class ParagraphLayout {
 		return result;
 	}
 
+	/**
+	 * Emits a word's boxes, inserting flagged hyphenation penalties at the
+	 * soft break offsets when a hyphenator is configured.
+	 */
+	private void emitWord(final GlyphRun run, final String word, final List<Integer> wordGlyphs, final Item item,
+			final List<LeveledNode> nodes, final List<BreakNode> plain) {
+		int[] breaks = (this.hyphenator != null && word.length() >= 5)
+				? this.hyphenator.hyphenate(word)
+				: NO_BREAKS;
+		var bi = 0;
+		for (var wg = 0; wg < wordGlyphs.size(); ++wg) {
+			// A hyphen may be inserted before the letter at offset wg.
+			if (bi < breaks.length && breaks[bi] == wg && wg > 0) {
+				final BreakNode penalty = this.hyphenPenalty(run, item);
+				nodes.add(new LeveledNode(penalty, item.bidiLevel()));
+				plain.add(penalty);
+				++bi;
+			}
+			final var g = wordGlyphs.get(wg);
+			final var box = new BreakNode.Box(run.xAdvances[g], run, g, g + 1);
+			nodes.add(new LeveledNode(box, item.bidiLevel()));
+			plain.add(box);
+		}
+	}
+
+	private static final int[] NO_BREAKS = new int[0];
+
+	/** A flagged penalty whose insertion is a hyphen shaped in the run's font. */
+	private BreakNode.Penalty hyphenPenalty(final GlyphRun run, final Item item) {
+		final var hyphen = this.hyphenGlyph(run, item);
+		final var width = (hyphen != null) ? hyphen.advance() : 0;
+		// A moderate cost: prefer whole-word wrapping, allow hyphenation.
+		return new BreakNode.Penalty(width, 50, true, hyphen);
+	}
+
+	/** Shapes a hyphen in the given run's font, cached per font metrics. */
+	private GlyphRun hyphenGlyph(final GlyphRun run, final Item item) {
+		final var runs = this.shaper.shape(new char[] { '-' }, new Item(0, 1, item.bidiLevel(), item.style()));
+		return runs.isEmpty() ? null : runs.get(0);
+	}
+
 	/** Positions one line: reorder by bidi, place left to right, justify. */
 	private PositionedLine finishLine(final List<LeveledNode> nodes, final LineBreaker.Line line,
 			final double width, final boolean lastLine) {
+		// If this line ends at a flagged (hyphenation) penalty, its insertion
+		// glyph must be drawn at the line end.
+		GlyphRun hyphen = null;
+		if (line.end() - 1 >= line.begin() && nodes.get(line.end() - 1).node() instanceof BreakNode.Penalty p
+				&& p.flagged()) {
+			hyphen = p.insertion();
+		}
+
 		// Collect boxes, trimming glue at both ends.
 		var begin = line.begin();
 		var end = line.end();
@@ -155,6 +234,13 @@ public final class ParagraphLayout {
 			ascent = Math.max(ascent, box.run().fontMetrics.getAscent());
 			descent = Math.max(descent, box.run().fontMetrics.getDescent());
 			x += box.width();
+		}
+		// Draw the hyphen at the line end (visual right for LTR text).
+		if (hyphen != null && hyphen.length > 0) {
+			runs.add(new PositionedRun(hyphen, 0, hyphen.length, x, 0));
+			ascent = Math.max(ascent, hyphen.fontMetrics.getAscent());
+			descent = Math.max(descent, hyphen.fontMetrics.getDescent());
+			x += hyphen.advance();
 		}
 		return new PositionedLine(runs, x, ascent, descent);
 	}
