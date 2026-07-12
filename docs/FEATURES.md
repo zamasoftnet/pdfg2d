@@ -51,7 +51,9 @@ pdfg2d は、Java の `Graphics2D`/独自 `GC` API を PDF 出力へ変換する
   例: 非フルスクリーン時のページモード、用紙サイズに応じた給紙、表示/印刷領域、印刷倍率、コピー数、印刷対象ページ範囲。
 - Open Action として JavaScript を埋め込めます（PDF/A・PDF/X では拒否）。
 - しおり、名前付き宛先、URI/文書内リンク注釈を追加できます。
-- ファイル添付を埋め込めます（PDF/A-1・PDF/X では拒否）。
+- ファイル添付を埋め込めます（PDF/A-1・PDF/X では拒否）。AFRelationship（PDF/A-3）に対応。
+- 対話フォーム（AcroForm）フィールドを配置できます（テキスト・チェックボックス・選択・ボタン、`pdf.form`）。PDF/X では拒否。
+- 電子インボイス（Factur-X / ZUGFeRD）を PDF/A-3 に埋め込めます（`FacturX` ディスクリプタ + `fx:` XMP 拡張スキーマ。請求書 XML 本体は呼び出し側が用意）。
 - 権限制御付き暗号化を設定できます。
   例: RC4/AES-128、ユーザーパスワード、オーナーパスワード、印刷/コピー/編集権限。
 - PDF 本文と画像の圧縮方式を切り替えられます。
@@ -128,6 +130,8 @@ PDF/A 全プロファイルと PDF/UA-1 を毎ビルド検証しています。
 - しおり: テスト有。`PDFBookmarkTest`
 - URI リンク注釈: テスト有。`PDFLinkTest`
 - 添付ファイル: テスト有。`PDFAttachmentTest`
+- 対話フォーム（AcroForm）: テスト有。`AcroFormTest`
+- 電子インボイス（Factur-X, PDF/A-3）: テスト有。`PDFAVeraPDFComplianceTest#testFacturXInvoice`
 - 権限制御付き暗号化: テスト有。`PDFEncryptionTest`
 - RGB / Gray / CMYK カラーモード: テスト有。`PDFColorModeTest`
 - PDF 本文圧縮: テスト有。`PDFCompressionTest`

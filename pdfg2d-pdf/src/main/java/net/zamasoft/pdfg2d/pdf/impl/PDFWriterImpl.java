@@ -565,9 +565,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 					if (pdfVersion.isPdfA()) {
 						// ISO 19005-3 requires every embedded file to declare its
-						// relationship to the document content.
+						// relationship to the document content. E-invoices
+						// (Factur-X/ZUGFeRD) attach the XML as "Alternative".
 						flow.writeName("AFRelationship");
-						flow.writeName("Unspecified");
+						flow.writeName(att.afRelationshipOrDefault());
 						flow.lineBreak();
 					}
 
@@ -1662,7 +1663,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			if (this.xmpmetaFlow != null) {
 				XMPMetadataWriter.write(this.xmpmetaFlow, this.params.version(),
 						taggedParams != null && taggedParams.pdfua(), author, creator, producer, title,
-						keywords, create, modify);
+						keywords, create, modify, info.getFacturX());
 			}
 			// Catalog - Page Info
 			this.pages.close();

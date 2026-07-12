@@ -339,4 +339,47 @@ public class PDFAVeraPDFComplianceTest {
 		}
 		assertCompliant(file, PDFAFlavour.PDFA_3_B);
 	}
+
+	@Test
+	public void testFacturXInvoice() throws Exception {
+		// A hybrid Factur-X e-invoice: a PDF/A-3 document carrying the
+		// structured invoice XML as an "Alternative" associated file, plus the
+		// fx: XMP extension schema an e-invoice reader looks for.
+		final var file = TestOutputFiles.outputFile(PDFAVeraPDFComplianceTest.class, "facturx_invoice.pdf");
+		final var invoiceXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+				+ "<rsm:CrossIndustryInvoice/>";
+		try (final var out = new FileOutputStream(file)) {
+			final var params = PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFA3B);
+			params.metaInfo().setTitle("Invoice 2026-0042");
+			params.metaInfo().setFacturX(net.zamasoft.pdfg2d.pdf.FacturX.invoice("EN 16931"));
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder, params);
+			try (final var gc = new PDFGC(pdf.nextPage(595, 842))) {
+				gc.setFillPaint(net.zamasoft.pdfg2d.gc.paint.RGBColor.create(0, 0, 0));
+				gc.fill(new Rectangle2D.Double(50, 50, 200, 20));
+			}
+			// The invoice XML must be attached as "Alternative" and named
+			// exactly as declared in fx:DocumentFileName.
+			try (final var att = pdf.addAttachment(
+					net.zamasoft.pdfg2d.pdf.FacturX.FACTUR_X_FILENAME,
+					new Attachment("Factur-X invoice", "text/xml", "Alternative"))) {
+				att.write(invoiceXml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			}
+			pdf.close();
+			builder.close();
+		}
+
+		assertCompliant(file, PDFAFlavour.PDFA_3_B);
+
+		final var raw = new String(java.nio.file.Files.readAllBytes(file.toPath()),
+				java.nio.charset.StandardCharsets.ISO_8859_1);
+		assertTrue(raw.contains("/AFRelationship /Alternative"),
+				"The invoice must be an Alternative associated file");
+		assertTrue(raw.contains("urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"),
+				"The XMP must carry the fx: namespace");
+		assertTrue(raw.contains("<fx:ConformanceLevel>EN 16931</fx:ConformanceLevel>"),
+				"The XMP must declare the Factur-X conformance level");
+		assertTrue(raw.contains("Factur-X PDFA Extension Schema"),
+				"The XMP must declare the fx: PDF/A extension schema");
+	}
 }

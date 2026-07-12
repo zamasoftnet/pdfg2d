@@ -19,40 +19,42 @@ HTML から「紙の帳票の代替となる PDF」を生成する文脈で価�
 いずれも**レンダリング(見た目)を変えずに追加できる**か、既存基盤の拡張で
 実現でき、Copper PDF 3.2 レイアウト維持の制約と両立しやすい。
 
-- **PDF フォーム（AcroForm）**
+- **PDF フォーム（AcroForm）** — ✅ pdfg2d 実装済み（2026-07-12） / 製品統合が残
   HTML の `<input>`/`<textarea>`/`<select>`/チェック/ラジオを、入力可能な
-  PDF フォームフィールドに反映する。現状 foliojet はフォーム部品を静的画像
-  （`CheckBoxImage` 等）として描画しており「見えるが埋められない」。
-  Widget 注釈 + Catalog `/AcroForm`（`/FT` Tx/Btn/Ch、`/T`名前、`/V`値、
-  `/AP`外観、`/DA`/`/DR`）で対応。**外観ストリームを現在の静的描画と一致
-  させれば見た目は不変**(imageTest 安全)のまま、入力層だけを足せる。
-  **タグ付き PDF と一体の作業**: フィールドは PDF/UA で `Form` 構造要素 +
-  `/TU`(ツールチップ) + OBJR 関連付けが必須で、B3 で実装した
-  `associateAnnotation()`(OBJR + /StructParent)をそのまま再利用できる。
-  HTML 構造をボックスツリー経由で流し込む 1 パスで、タグ付き構造とフォーム
-  Widget を同時発行するのが効率的。
+  PDF フォームフィールドに反映する。
+  **pdfg2d 側**は `pdf.form`（`FormField` sealed interface + `TextField`/
+  `CheckBoxField`/`ChoiceField`/`PushButtonField`）と
+  `PDFPageOutput.addFormField()` を実装済み。Widget 注釈 + Catalog
+  `/AcroForm`（`/FT` Tx/Btn/Ch、`/T`名前、`/V`値、`/AP`外観、`/DA`/`/DR`、
+  チェックボックス外観ストリーム、`/Ff` フラグ）を発行し、PDF/X では拒否、
+  タグ付き文書では B3 の `associateAnnotation()`(OBJR + /StructParent) で
+  構造木に関連付ける（`AcroFormTest` で PDFBox により検証）。
+  **残る作業（製品）**: foliojet がフォーム部品を静的画像（`CheckBoxImage` 等）
+  として描画している箇所を `addFormField()` 呼び出しに置き換える。
+  **外観ストリームを現在の静的描画と一致させれば見た目は不変**(imageTest 安全)
+  のまま入力層だけを足せる。→ セクション A に統合作業として記載。
   なお **署名フィールドの配置**（空の `/Sig` Widget を置き、後から署名させる）
-  は生成時の関心事なので、このフォーム対応の一部として含める。一方
-  **署名する行為そのもの**（最終バイト列の `/ByteRange` ハッシュ + CMS 埋め込み、
-  証明書・鍵・HSM 管理、PAdES-LTV）は生成後の後処理であり、専用の署名サービス/
-  ツールの領域なので **本プロジェクトのスコープ外**とする（「意図的に対象外」参照）。
-- **電子インボイス（Factur-X / ZUGFeRD / Peppol）の埋め込みプロファイル**
-  PDF/A-3 に機械可読な請求書 XML（Factur-X/ZUGFeRD の CII、または Peppol
-  BIS / JP PINT の UBL）を埋め込む。日本の適格請求書・電子インボイス対応にも
-  直結。埋め込みは**生成時の操作**なので pdfg2d のスコープ内。
-  **pdfg2d は PDF/A-3 + 添付ファイル（AFRelationship + catalog /AF）を実装済み**
-  なので、残るは所定の AFRelationship（`/Alternative`）・ファイル名
-  （`factur-x.xml` 等）・XMP の Factur-X 準拠メタデータ拡張スキーマを出す
-  プロファイル追加のみ。比較的小さな追加で高い実用価値。
+  は生成時の関心事だが未実装。一方 **署名する行為そのもの**（`/ByteRange`
+  ハッシュ + CMS 埋め込み、証明書・鍵・HSM 管理、PAdES-LTV）は生成後の後処理で
+  あり **本プロジェクトのスコープ外**（「意図的に対象外」参照）。
+- **電子インボイス（Factur-X / ZUGFeRD）の埋め込みプロファイル** — ✅ pdfg2d 実装済み（2026-07-12）
+  PDF/A-3 に機械可読な請求書 XML（Factur-X/ZUGFeRD の CII 等）を埋め込む。
+  日本の適格請求書・電子インボイス対応にも直結。
+  **pdfg2d 側**は `Attachment` に `afRelationship`（`/Alternative` 等）を追加し、
+  `FacturX` ディスクリプタ（`PDFMetaInfo.setFacturX()`）で XMP の Factur-X 拡張
+  スキーマ（`fx:DocumentType`/`DocumentFileName`/`Version`/`ConformanceLevel`
+  + PDF/A 拡張スキーマ宣言）を出力する。veraPDF で PDF/A-3B 準拠を検証済み
+  （`PDFAVeraPDFComplianceTest#testFacturXInvoice`）。
   ただし **請求書 XML の中身（CII/UBL の構造化データ）を生成するのはスコープ外**：
   それは構造化データを持つ呼び出し側アプリの責務で、pdfg2d は「呼び出し側が
-  用意した XML を Factur-X 準拠で埋め込む」ところまでを担う（署名で「欄は置くが
-  署名はしない」のと同じ切り分け）。
+  用意した XML を Factur-X 準拠で埋め込む」ところまでを担う。Peppol BIS /
+  JP PINT の UBL 埋め込みも同じ仕組み（呼び出し側が UBL を用意）で対応可能。
 - **ページラベル（/PageLabels）**
   「表紙・i・ii・1・2…」のような論理ページ番号。報告書・帳票の目次や参照に有用。
   Catalog `/PageLabels` 数ツリーの出力のみで、レンダリング非破壊の小規模追加。
-- **フォームのデフォルト値**（AcroForm の一部）
-  各フィールドの初期値（`/V`）を生成時に設定する。フォーム対応に含める。
+- **フォームのデフォルト値**（AcroForm の一部）— ✅ pdfg2d 実装済み
+  各フィールドの初期値（`/V`）は各 `FormField` レコード（`TextField.value`、
+  `CheckBoxField.checked`、`ChoiceField.selected`）で生成時に設定できる。
 
 > バーコード / QR は foliojet に既存（`BarcodeImage`）。JavaScript による
 > フィールド計算（自動合計等）は PDF/A で禁止のため既定オフの任意対応とする。
@@ -79,6 +81,13 @@ pdfg2d 側の実装は完了しているが、製品の CSS 組版エンジン�
    foliojet の `RubyBox`（inline-block + nowrap）は基本描画のみ。ルビ掛け
    （JIS X 4051）・熟語ルビの行またぎ・Ruby/RB/RT タグ付き構造が未対応。
    いずれも既存ジオメトリを変える（ルビテストは幅を許容 0 で断言）。
+10. **AcroForm の製品統合（foliojet）** — 未着手（レンダリング非破壊で可能）
+   pdfg2d 側（`pdf.form` + `addFormField()`）は実装済み。foliojet が
+   フォーム部品を静的画像（`CheckBoxImage`/`RadioButtonImage`/`SelectImage`
+   等）として描画している箇所で、静的外観の描画に加えて `addFormField()` を
+   呼び入力層を発行する。外観ストリームを現在の静的描画と一致させれば
+   **見た目は不変**(imageTest 安全)。タグ付き文書では `Form` 構造要素 + `/TU`
+   も同時発行（4 と一体で進めるのが効率的）。
 
 ## B. アクセシビリティ
 

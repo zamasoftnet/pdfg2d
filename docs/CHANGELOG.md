@@ -3,6 +3,26 @@
 pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.md`](./PROPOSALS.md)、
 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md) を参照。
 
+## 2026-07-12 — AcroForm（対話フォーム）と電子インボイス（Factur-X）
+
+- **AcroForm 対話フォームフィールド**（`pdf.form`、新設）: `FormField` sealed
+  interface + レコード `TextField`/`CheckBoxField`/`ChoiceField`/
+  `PushButtonField`。`PDFPageOutput.addFormField()` が Widget 注釈 + Catalog
+  `/AcroForm`（`/FT` Tx/Btn/Ch、`/T`/`/V`/`/TU`/`/Ff`/`/DA`/`/DR`、標準
+  Helvetica/ZapfDingbats フォント、チェックボックス on/off 外観ストリーム、
+  NeedAppearances）を発行。PDF/X では拒否（`UnsupportedOperationException`）。
+  タグ付き文書では B3 の `associateAnnotation()`（OBJR + `/StructParent`）で
+  構造木に関連付け。PDFBox でテキスト値・チェック状態・選択肢・必須/ツール
+  チップを検証（`AcroFormTest`）。
+- **電子インボイス（Factur-X / ZUGFeRD）埋め込みプロファイル**: `Attachment`
+  に `afRelationship`（`/Alternative` 等、PDF/A-3 の関連付けファイル）を追加。
+  `FacturX` ディスクリプタ（`PDFMetaInfo.setFacturX()`）を設定すると、
+  `XMPMetadataWriter` が Factur-X の `fx:` スキーマ（`DocumentType`/
+  `DocumentFileName`/`Version`/`ConformanceLevel`）と、それを PDF/A 検証器に
+  受理させる PDF/A 拡張スキーマ宣言を出力する。veraPDF で PDF/A-3B 準拠を
+  検証（`PDFAVeraPDFComplianceTest#testFacturXInvoice`）。請求書 XML の中身
+  （CII/UBL）の生成は呼び出し側の責務でスコープ外。
+
 ## 2026-07-12 — bidi の製品統合
 
 - `TextImpl.reverse()` を追加（RTL ランを視覚順に配置するためのグリフ反転コピー、

@@ -53,6 +53,50 @@ final class XMPMetadataWriter {
 	}
 
 	/**
+	 * Appends the PDF/A extension-schema description for the Factur-X
+	 * {@code fx:} namespace so that PDF/A validators accept its custom
+	 * properties (ISO 19005 6.6.2.3).
+	 */
+	private static void appendFacturXExtensionSchema(final StringBuilder sb) {
+		sb.append("  <rdf:Description rdf:about=\"\"")
+				.append(" xmlns:pdfaExtension=\"http://www.aiim.org/pdfa/ns/extension/\"")
+				.append(" xmlns:pdfaSchema=\"http://www.aiim.org/pdfa/ns/schema#\"")
+				.append(" xmlns:pdfaProperty=\"http://www.aiim.org/pdfa/ns/property#\">\n");
+		sb.append("   <pdfaExtension:schemas>\n");
+		sb.append("    <rdf:Bag>\n");
+		sb.append("     <rdf:li rdf:parseType=\"Resource\">\n");
+		sb.append("      <pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>\n");
+		sb.append("      <pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#")
+				.append("</pdfaSchema:namespaceURI>\n");
+		sb.append("      <pdfaSchema:prefix>fx</pdfaSchema:prefix>\n");
+		sb.append("      <pdfaSchema:property>\n");
+		sb.append("       <rdf:Seq>\n");
+		appendExtensionProperty(sb, "DocumentFileName", "Text",
+				"The name of the embedded XML invoice file");
+		appendExtensionProperty(sb, "DocumentType", "Text", "INVOICE or ORDER");
+		appendExtensionProperty(sb, "Version", "Text", "The actual version of the Factur-X data");
+		appendExtensionProperty(sb, "ConformanceLevel", "Text", "The conformance level of the embedded data");
+		sb.append("       </rdf:Seq>\n");
+		sb.append("      </pdfaSchema:property>\n");
+		sb.append("     </rdf:li>\n");
+		sb.append("    </rdf:Bag>\n");
+		sb.append("   </pdfaExtension:schemas>\n");
+		sb.append("  </rdf:Description>\n");
+	}
+
+	/** Appends one pdfaProperty entry to a Factur-X extension schema. */
+	private static void appendExtensionProperty(final StringBuilder sb, final String name, final String valueType,
+			final String description) {
+		sb.append("        <rdf:li rdf:parseType=\"Resource\">\n");
+		sb.append("         <pdfaProperty:name>").append(name).append("</pdfaProperty:name>\n");
+		sb.append("         <pdfaProperty:valueType>").append(valueType).append("</pdfaProperty:valueType>\n");
+		sb.append("         <pdfaProperty:category>external</pdfaProperty:category>\n");
+		sb.append("         <pdfaProperty:description>").append(xml(description))
+				.append("</pdfaProperty:description>\n");
+		sb.append("        </rdf:li>\n");
+	}
+
+	/**
 	 * Writes the complete metadata object (dictionary and XMP packet stream) to
 	 * the given flow. The flow must be positioned at the start of the object
 	 * body; this method closes the object.
@@ -71,7 +115,8 @@ final class XMPMetadataWriter {
 	 */
 	static void write(final PDFFragmentOutputImpl xmpmetaFlow, final PDFParams.Version version, final boolean pdfua,
 			final String author, final String creator, final String producer, final String title,
-			final String keywords, final long create, final long modify) throws IOException {
+			final String keywords, final long create, final long modify,
+			final net.zamasoft.pdfg2d.pdf.FacturX facturX) throws IOException {
 		xmpmetaFlow.startHash();
 
 		xmpmetaFlow.writeName("Type");
@@ -169,6 +214,27 @@ final class XMPMetadataWriter {
 						.append("</xmp:ModifyDate>\n");
 			}
 			sb.append("  </rdf:Description>\n");
+
+			// Factur-X / ZUGFeRD electronic-invoice schema. The fx: properties
+			// tell an e-invoice reader which embedded file holds the structured
+			// invoice XML and which profile it conforms to.
+			if (facturX != null) {
+				sb.append("  <rdf:Description rdf:about=\"\"")
+						.append(" xmlns:fx=\"urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#\">\n");
+				sb.append("   <fx:DocumentType>").append(xml(facturX.documentType()))
+						.append("</fx:DocumentType>\n");
+				sb.append("   <fx:DocumentFileName>").append(xml(facturX.documentFileName()))
+						.append("</fx:DocumentFileName>\n");
+				sb.append("   <fx:Version>").append(xml(facturX.version())).append("</fx:Version>\n");
+				sb.append("   <fx:ConformanceLevel>").append(xml(facturX.conformanceLevel()))
+						.append("</fx:ConformanceLevel>\n");
+				sb.append("  </rdf:Description>\n");
+
+				// PDF/A extension schema: PDF/A validators reject XMP properties
+				// from namespaces they do not know unless the document declares
+				// the schema here (ISO 19005 6.6.2.3).
+				appendFacturXExtensionSchema(sb);
+			}
 
 			sb.append(" </rdf:RDF>\n");
 			sb.append("</x:xmpmeta>\n");

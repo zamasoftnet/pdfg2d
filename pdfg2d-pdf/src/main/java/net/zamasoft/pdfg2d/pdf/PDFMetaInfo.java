@@ -18,6 +18,7 @@ public final class PDFMetaInfo {
 	private String keywords;
 	private long creationDate = -1L;
 	private long modDate = -1L;
+	private FacturX facturX;
 
 	/**
 	 * Returns the document author, or {@code null} if not set.
@@ -167,5 +168,27 @@ public final class PDFMetaInfo {
 	 */
 	public void setModDate(final long modDate) {
 		this.modDate = modDate;
+	}
+
+	/**
+	 * Returns the electronic-invoice (Factur-X/ZUGFeRD) descriptor, or
+	 * {@code null} if the document is not a hybrid e-invoice.
+	 *
+	 * @return the Factur-X descriptor, or {@code null}
+	 */
+	public FacturX getFacturX() {
+		return this.facturX;
+	}
+
+	/**
+	 * Marks this document as a hybrid e-invoice, causing the writer to emit the
+	 * {@code fx:} XMP extension schema. Requires a PDF/A-3 version and the
+	 * invoice XML to be attached separately with
+	 * {@code afRelationship = "Alternative"}.
+	 *
+	 * @param facturX the Factur-X descriptor, or {@code null} to clear
+	 */
+	public void setFacturX(final FacturX facturX) {
+		this.facturX = facturX;
 	}
 }
