@@ -23,6 +23,13 @@ public interface Coverage extends Serializable {
 	 */
 	int findGlyph(int glyphId);
 
+	/**
+	 * Returns the covered glyph ids in coverage-index order.
+	 *
+	 * @return the covered glyph ids
+	 */
+	int[] getGlyphIds();
+
 	static Coverage read(final RandomAccessFile raf) throws IOException {
 		final int format = raf.readUnsignedShort();
 		if (format == 1) {

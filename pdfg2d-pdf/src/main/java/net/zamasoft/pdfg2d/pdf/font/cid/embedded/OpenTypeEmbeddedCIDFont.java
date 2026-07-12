@@ -96,15 +96,49 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 			return -1;
 		}
 		UvsCmapFormat ucf = this.source.getUvsCmapFormat();
-		if (ucf == null || !ucf.isVarSelector(cid)) {
+		if (ucf != null && ucf.isVarSelector(cid)) {
+			int c = this.gidToCid.get(gid);
+			int fgid = ucf.mapCharCode(c, cid);
+			if (fgid == 0) {
+				return -1;
+			}
+			return this.addGID(c, fgid);
+		}
+
+		// GSUB standard ligatures: translate the subset glyph and the incoming
+		// character into font glyph ids, look up the ligature, and register its
+		// glyph in the subset. The ligature is keyed to the joining character
+		// for a best-effort ToUnicode mapping.
+		int firstFgid = this.gidToFgid.get(gid);
+		if (firstFgid < 0) {
 			return -1;
 		}
-		int c = this.gidToCid.get(gid);
-		int fgid = ucf.mapCharCode(c, cid);
-		if (fgid == 0) {
+		int secondFgid = this.source.getCmapFormat().mapCharCode(cid);
+		if (secondFgid == 0) {
 			return -1;
 		}
-		return this.addGID(c, fgid);
+		if (this.vSubst != null) {
+			secondFgid = this.vSubst.substitute(secondFgid);
+		}
+		int ligFgid = this.gsubLigature(firstFgid, secondFgid);
+		if (ligFgid <= 0) {
+			return -1;
+		}
+		return this.addGID(cid, ligFgid);
+	}
+
+	@Override
+	public short getKerning(int sgid, int gid) {
+		// Translate the subset glyph ids back to font glyph ids for GPOS.
+		int f1 = this.gidToFgid.get(sgid);
+		int f2 = this.gidToFgid.get(gid);
+		if (f1 >= 0 && f2 >= 0) {
+			short kern = this.gposKerning(f1, f2);
+			if (kern != 0) {
+				return kern;
+			}
+		}
+		return super.getKerning(sgid, gid);
 	}
 
 	protected int toChar(int gid) {

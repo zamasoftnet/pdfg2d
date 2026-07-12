@@ -86,6 +86,36 @@ public record GsubTable(ScriptList scriptList, FeatureList featureList, LookupLi
 		};
 	}
 
+	/** The OpenType feature tag for standard ligatures. */
+	private static final int TAG_LIGA = 0x6c696761;
+
+	/**
+	 * Collects the {@link LigatureSubstFormat1} subtables of every
+	 * {@code liga} feature, across scripts and languages.
+	 *
+	 * @return the ligature substitution subtables (possibly empty)
+	 */
+	public java.util.List<LigatureSubstFormat1> collectLigatures() {
+		final var result = new java.util.ArrayList<LigatureSubstFormat1>();
+		final var records = this.featureList.featureRecords();
+		final var features = this.featureList.features();
+		for (int i = 0; i < records.length; i++) {
+			if (records[i].tag() != TAG_LIGA) {
+				continue;
+			}
+			final var feature = features[i];
+			for (int li = 0; li < feature.getLookupCount(); li++) {
+				final var lookup = this.lookupList.lookups()[feature.getLookupListIndex(li)];
+				for (int si = 0; si < lookup.getSubtableCount(); si++) {
+					if (lookup.getSubtable(si) instanceof LigatureSubstFormat1 ls) {
+						result.add(ls);
+					}
+				}
+			}
+		}
+		return result;
+	}
+
 	@Override
 	public int getType() {
 		return GSUB;

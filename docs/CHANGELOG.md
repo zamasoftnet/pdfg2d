@@ -3,6 +3,23 @@
 pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.md`](./PROPOSALS.md)、
 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md) を参照。
 
+## 2026-07-12 — テキスト再設計（§C）と OpenType シェーピング
+
+- **段落パイプライン**（`gc.text.pipeline`、新設）: GlyphRun（HarfBuzz 型・
+  x/y 両軸の advance/offset）、Paragraph/Item、Itemizer、Shaper（既存グリフ選択を
+  再利用）、BreakNode（Box/Glue/Penalty）、LineBreaker（貪欲）、ParagraphLayout、
+  PipelineTextDrawer。既存出力を壊さず coexist する新基盤。
+- **C6 bidi**（UAX #9）: `java.text.Bidi` でレベル解決 + L2 視覚並べ替え。
+- **C5 ハイフネーション**: Liang アルゴリズム（TeX パターン）+ flagged Penalty による
+  ハイフン字形挿入。
+- **C8 ルビ**: 第一級ノード。max(base, ruby) 幅の結合ボックス、mono 配分、行高拡張。
+- **C7 GSUB リガチャ + GPOS ペアカーニング**: pdfg2d-font のパーサを改修
+  （`LigatureSubstFormat1` に Coverage を保持、GPOS `PairPos`〔format 1/2〕と
+  `ClassDef` パーサを新規実装、`Coverage.getGlyphIds()` を追加）。core の
+  `OpenTypeFont` が `liga`/`kern` フィーチャを読み、埋め込みサブセットフォントは
+  グリフ ID を翻訳して適用。fi リガチャ・// カーニングを実フォント（フリーフォント
+  のサブセット）で検証。
+
 ## 2026-07-11 — GC API の再設計（破壊的変更）
 
 - **`GC.begin()` が AutoCloseable な `GC.State` を返すようになり、`GC.end()` は削除**。

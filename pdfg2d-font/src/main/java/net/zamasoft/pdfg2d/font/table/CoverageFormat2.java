@@ -44,4 +44,20 @@ public record CoverageFormat2(RangeRecord[] rangeRecords) implements Coverage {
 		}
 		return -1;
 	}
+
+	@Override
+	public int[] getGlyphIds() {
+		int count = 0;
+		for (final RangeRecord r : this.rangeRecords) {
+			count += r.end() - r.start() + 1;
+		}
+		final int[] ids = new int[count];
+		int k = 0;
+		for (final RangeRecord r : this.rangeRecords) {
+			for (int g = r.start(); g <= r.end(); g++) {
+				ids[k++] = g;
+			}
+		}
+		return ids;
+	}
 }

@@ -43,4 +43,9 @@ public record CoverageFormat1(int[] glyphIds) implements Coverage {
 		}
 		return -1;
 	}
+
+	@Override
+	public int[] getGlyphIds() {
+		return this.glyphIds.clone();
+	}
 }

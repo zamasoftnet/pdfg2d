@@ -5,8 +5,14 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
 import java.io.IOException;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import net.zamasoft.pdfg2d.font.table.FeatureTags;
+import net.zamasoft.pdfg2d.font.table.GposTable;
 import net.zamasoft.pdfg2d.font.table.GsubTable;
+import net.zamasoft.pdfg2d.font.table.PairPos;
 import net.zamasoft.pdfg2d.font.table.ScriptTags;
 import net.zamasoft.pdfg2d.font.table.SingleSubst;
 import net.zamasoft.pdfg2d.font.table.Table;
@@ -45,6 +51,12 @@ public abstract class OpenTypeFont implements ShapedFont {
 
 	protected final XmtxTable vmtx, hmtx;
 
+	/** GSUB {@code liga} pairs: key {@code (firstGid << 32) | secondGid} to ligature glyph. */
+	private final Map<Long, Integer> ligatures;
+
+	/** GPOS {@code kern} pair-adjustment subtables, or {@code null}. */
+	private final List<PairPos> kernPairs;
+
 	/**
 	 * Creates a new OpenTypeFont.
 	 * 
@@ -54,6 +66,13 @@ public abstract class OpenTypeFont implements ShapedFont {
 		this.source = source;
 		final var ttfFont = source.getOpenTypeFont();
 		this.hmtx = (XmtxTable) ttfFont.getTable(Table.HMTX);
+
+		// GSUB standard ligatures (liga) and GPOS pair kerning (kern) are read
+		// once here so that shaping can apply them per pair.
+		this.ligatures = buildLigatures((GsubTable) ttfFont.getTable(Table.GSUB));
+		final var gpos = (GposTable) ttfFont.getTable(Table.GPOS);
+		final var kern = (gpos != null) ? gpos.collectKernPairPos() : List.<PairPos>of();
+		this.kernPairs = kern.isEmpty() ? null : kern;
 
 		if (this.source.getDirection() == Direction.TB) {
 			// Vertical writing mode
@@ -220,6 +239,14 @@ public abstract class OpenTypeFont implements ShapedFont {
 
 	@Override
 	public short getKerning(final int sgid, final int gid) {
+		// GPOS pair kerning first (glyph ids are font glyph ids for the
+		// non-embedding font; subclasses that remap glyphs translate before
+		// calling gposKerning).
+		final short gpos = this.gposKerning(sgid, gid);
+		if (gpos != 0) {
+			return gpos;
+		}
+
 		final int scid = this.toChar(sgid);
 		// Kerning for brackets and punctuation
 		final short THRESHOLD = 750, KERNING = 500;
@@ -245,7 +272,78 @@ public abstract class OpenTypeFont implements ShapedFont {
 
 	@Override
 	public int getLigature(final int gid, final int cid) {
-		return -1;
+		if (gid < 0) {
+			return -1;
+		}
+		return this.gsubLigature(gid, this.toGID(cid));
+	}
+
+	/**
+	 * Returns the ligature glyph for a two-glyph GSUB {@code liga} pair, in
+	 * font glyph-id space, or -1 if none.
+	 *
+	 * @param firstFontGid  the first component's font glyph id
+	 * @param secondFontGid the second component's font glyph id
+	 * @return the ligature's font glyph id, or -1
+	 */
+	protected final int gsubLigature(final int firstFontGid, final int secondFontGid) {
+		if (this.ligatures == null) {
+			return -1;
+		}
+		final Integer lig = this.ligatures
+				.get(((long) firstFontGid << 32) | (secondFontGid & 0xFFFFFFFFL));
+		return (lig != null) ? lig : -1;
+	}
+
+	/**
+	 * Returns the GPOS {@code kern} adjustment for a pair, in font glyph-id
+	 * space, normalized to {@link FontSource#DEFAULT_UNITS_PER_EM} and negated
+	 * to the "amount subtracted from the advance" convention of
+	 * {@link #getKerning}.
+	 *
+	 * @param firstFontGid  the first glyph's font glyph id
+	 * @param secondFontGid the second glyph's font glyph id
+	 * @return the kerning to subtract, or 0
+	 */
+	protected final short gposKerning(final int firstFontGid, final int secondFontGid) {
+		if (this.kernPairs == null) {
+			return 0;
+		}
+		int xAdvance = 0;
+		for (final var pp : this.kernPairs) {
+			xAdvance += pp.getKerning(firstFontGid, secondFontGid);
+		}
+		if (xAdvance == 0) {
+			return 0;
+		}
+		final var source = (OpenTypeFontSource) this.getFontSource();
+		return (short) (-xAdvance * FontSource.DEFAULT_UNITS_PER_EM / source.getUnitsPerEm());
+	}
+
+	/**
+	 * Builds the two-component ligature map from the {@code liga} feature.
+	 * Longer ligatures are formed incrementally by the shaper through the
+	 * intermediate ligatures that fonts conventionally also define.
+	 */
+	private static Map<Long, Integer> buildLigatures(final GsubTable gsub) {
+		if (gsub == null) {
+			return null;
+		}
+		final var map = new HashMap<Long, Integer>();
+		for (final var subst : gsub.collectLigatures()) {
+			final var firstGlyphs = subst.coverage().getGlyphIds();
+			for (int i = 0; i < firstGlyphs.length && i < subst.getLigatureSetCount(); i++) {
+				final int firstGid = firstGlyphs[i];
+				for (final var lig : subst.getLigatureSet(i).ligatures()) {
+					// Only two-component ligatures (one trailing component).
+					if (lig.components().length == 1) {
+						final int secondGid = lig.components()[0];
+						map.put(((long) firstGid << 32) | (secondGid & 0xFFFFFFFFL), lig.ligGlyph());
+					}
+				}
+			}
+		}
+		return map.isEmpty() ? null : map;
 	}
 }
 
