@@ -99,13 +99,20 @@ public record GsubTable(ScriptList scriptList, FeatureList featureList, LookupLi
 		final var result = new java.util.ArrayList<LigatureSubstFormat1>();
 		final var records = this.featureList.featureRecords();
 		final var features = this.featureList.features();
+		// The liga lookup is commonly shared by several script/language feature
+		// records; collect each lookup once.
+		final var seenLookups = new java.util.HashSet<Integer>();
 		for (int i = 0; i < records.length; i++) {
 			if (records[i].tag() != TAG_LIGA) {
 				continue;
 			}
 			final var feature = features[i];
 			for (int li = 0; li < feature.getLookupCount(); li++) {
-				final var lookup = this.lookupList.lookups()[feature.getLookupListIndex(li)];
+				final int lookupIndex = feature.getLookupListIndex(li);
+				if (!seenLookups.add(lookupIndex)) {
+					continue;
+				}
+				final var lookup = this.lookupList.lookups()[lookupIndex];
 				for (int si = 0; si < lookup.getSubtableCount(); si++) {
 					if (lookup.getSubtable(si) instanceof LigatureSubstFormat1 ls) {
 						result.add(ls);
