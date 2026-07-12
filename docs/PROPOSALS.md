@@ -81,13 +81,18 @@ pdfg2d 側の実装は完了しているが、製品の CSS 組版エンジン�
    foliojet の `RubyBox`（inline-block + nowrap）は基本描画のみ。ルビ掛け
    （JIS X 4051）・熟語ルビの行またぎ・Ruby/RB/RT タグ付き構造が未対応。
    いずれも既存ジオメトリを変える（ルビテストは幅を許容 0 で断言）。
-10. **AcroForm の製品統合（foliojet）** — 未着手（レンダリング非破壊で可能）
-   pdfg2d 側（`pdf.form` + `addFormField()`）は実装済み。foliojet が
-   フォーム部品を静的画像（`CheckBoxImage`/`RadioButtonImage`/`SelectImage`
-   等）として描画している箇所で、静的外観の描画に加えて `addFormField()` を
-   呼び入力層を発行する。外観ストリームを現在の静的描画と一致させれば
-   **見た目は不変**(imageTest 安全)。タグ付き文書では `Form` 構造要素 + `/TU`
-   も同時発行（4 と一体で進めるのが効率的）。
+10. **AcroForm の製品統合（foliojet）** — ✅ 実装済み（2026-07-12、input/textarea）
+   `output.pdf.forms`（既定 OFF、`<input>`/`<textarea>` を対話フィールド化する
+   オプトイン）を追加。`AbstractVisitor.visitBox` がフォーム部品を検出し、
+   `PDFVisitor.addFormField()` が pdfg2d の `pdf.form` フィールド
+   （text/password→`TextField`、checkbox/radio→`CheckBoxField`、
+   submit/reset/button→`PushButtonField`、textarea→複数行 `TextField`）を発行。
+   PDF/X ではフォーム禁止のため自動スキップ。**既定 OFF なのでフォームを含まない
+   文書の出力は 3.2 と 1 バイトも変わらず**、有効時のみフォーム部品の見た目が
+   対話ウィジェットへ変わる。`_9510_FORM/FormFieldTest` でバイト検証、foliojet
+   全テスト緑。残: **`<select>`（`<option>` 子要素の取得が必要）**、ラジオ
+   グループの単一フィールド化、外観ストリームの精緻化、タグ付き文書での
+   `Form` 構造要素 + `/TU` 同時発行（B4 と一体）。
 
 ## B. アクセシビリティ
 
