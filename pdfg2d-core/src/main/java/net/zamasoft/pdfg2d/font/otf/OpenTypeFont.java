@@ -9,6 +9,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.zamasoft.pdfg2d.font.table.ColrTable;
+import net.zamasoft.pdfg2d.font.table.CpalTable;
 import net.zamasoft.pdfg2d.font.table.FeatureTags;
 import net.zamasoft.pdfg2d.font.table.GposTable;
 import net.zamasoft.pdfg2d.font.table.GsubTable;
@@ -17,8 +19,10 @@ import net.zamasoft.pdfg2d.font.table.ScriptTags;
 import net.zamasoft.pdfg2d.font.table.SingleSubst;
 import net.zamasoft.pdfg2d.font.table.Table;
 import net.zamasoft.pdfg2d.font.table.XmtxTable;
+import net.zamasoft.pdfg2d.font.ColorGlyphFont;
 import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.ShapedFont;
+import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Direction;
@@ -38,7 +42,7 @@ import net.zamasoft.pdfg2d.gc.text.breaking.impl.CharacterSet;
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
-public abstract class OpenTypeFont implements ShapedFont {
+public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	private static final long serialVersionUID = 2L;
 
 	protected static final int DEFAULT_VERTICAL_ORIGIN = 880;
@@ -57,6 +61,12 @@ public abstract class OpenTypeFont implements ShapedFont {
 	/** GPOS {@code kern} pair-adjustment subtables, or {@code null}. */
 	private final List<PairPos> kernPairs;
 
+	/** COLR color-layer table, or {@code null} for a monochrome font. */
+	private final ColrTable colr;
+
+	/** CPAL palette table, or {@code null}. */
+	private final CpalTable cpal;
+
 	/**
 	 * Creates a new OpenTypeFont.
 	 * 
@@ -73,6 +83,10 @@ public abstract class OpenTypeFont implements ShapedFont {
 		final var gpos = (GposTable) ttfFont.getTable(Table.GPOS);
 		final var kern = (gpos != null) ? gpos.collectKernPairPos() : List.<PairPos>of();
 		this.kernPairs = kern.isEmpty() ? null : kern;
+
+		// Color glyphs (COLR/CPAL) — present only in color fonts.
+		this.colr = (ColrTable) ttfFont.getTable(Table.COLR);
+		this.cpal = (this.colr != null) ? (CpalTable) ttfFont.getTable(Table.CPAL) : null;
 
 		if (this.source.getDirection() == Direction.TB) {
 			// Vertical writing mode
@@ -318,6 +332,64 @@ public abstract class OpenTypeFont implements ShapedFont {
 		}
 		final var source = (OpenTypeFontSource) this.getFontSource();
 		return (short) (-xAdvance * FontSource.DEFAULT_UNITS_PER_EM / source.getUnitsPerEm());
+	}
+
+	@Override
+	public boolean isColorGlyph(final int gid) {
+		return this.hasColorLayers(gid);
+	}
+
+	@Override
+	public void drawColorGlyph(final GC gc, final int gid, final AffineTransform at) {
+		this.drawColorLayers(gc, gid, at);
+	}
+
+	/**
+	 * Returns whether the given font glyph id has COLR layers.
+	 *
+	 * @param fontGid the font glyph id
+	 * @return {@code true} if it is a color glyph
+	 */
+	protected final boolean hasColorLayers(final int fontGid) {
+		return this.colr != null && this.cpal != null && this.colr.getLayers(fontGid) != null;
+	}
+
+	/**
+	 * Draws the COLR layers of the given font glyph id: each layer's outline
+	 * filled with its CPAL color (palette entry {@code 0xFFFF} uses the current
+	 * fill paint). Glyph outlines are taken directly from the underlying font,
+	 * so this works regardless of glyph subsetting.
+	 *
+	 * @param gc      the graphics context
+	 * @param fontGid the base color glyph's font glyph id
+	 * @param at      the design-units-to-user transform
+	 */
+	protected final void drawColorLayers(final GC gc, final int fontGid, final AffineTransform at) {
+		final var layers = this.colr.getLayers(fontGid);
+		if (layers == null) {
+			return;
+		}
+		final var ttf = ((OpenTypeFontSource) this.getFontSource()).getOpenTypeFont();
+		final var savedFill = gc.getFillPaint();
+		try (final var state = gc.begin()) {
+			for (final var layer : layers) {
+				final var glyph = ttf.getGlyph(layer.glyphId());
+				if (glyph == null || glyph.path() == null) {
+					continue;
+				}
+				if (layer.paletteEntry() != 0xFFFF) {
+					final var argb = this.cpal.getColor(0, layer.paletteEntry());
+					gc.setFillPaint(RGBAColor.create(((argb >> 16) & 0xFF) / 255f, ((argb >> 8) & 0xFF) / 255f,
+							(argb & 0xFF) / 255f, ((argb >>> 24) & 0xFF) / 255f));
+				} else {
+					gc.setFillPaint(savedFill);
+				}
+				// The glyph outline is already normalized to the standard em, so
+				// the caller's design-units-to-user transform applies directly.
+				gc.fill(at.createTransformedShape(glyph.path()));
+			}
+		}
+		gc.setFillPaint(savedFill);
 	}
 
 	/**

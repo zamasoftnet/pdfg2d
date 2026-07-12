@@ -69,7 +69,19 @@ final class PDFTextRenderer {
 					break;
 			}
 		}
-		if (outline || font instanceof ImageFont) {
+		// Color fonts (COLR/CPAL) are drawn as stacked filled outlines, so
+		// route a run that contains any color glyph through the outline path.
+		boolean colorGlyphs = false;
+		if (font instanceof net.zamasoft.pdfg2d.font.ColorGlyphFont cgf) {
+			final var glyphIds = text.getGlyphIds();
+			for (var i = 0; i < text.getGlyphCount(); ++i) {
+				if (cgf.isColorGlyph(glyphIds[i])) {
+					colorGlyphs = true;
+					break;
+				}
+			}
+		}
+		if (outline || colorGlyphs || font instanceof ImageFont) {
 			if (font instanceof DrawableFont df) {
 				if (font instanceof ShapedFont sf) {
 					final var glyphCount = text.getGlyphCount();

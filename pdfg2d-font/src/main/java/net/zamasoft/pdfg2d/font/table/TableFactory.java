@@ -40,6 +40,8 @@ public final class TableFactory {
 			case Table.GDEF -> null;
 			case Table.GPOS -> new GposTable(de, raf);
 			case Table.GSUB -> new GsubTable(de, raf);
+			case Table.COLR -> new ColrTable(de, raf);
+			case Table.CPAL -> new CpalTable(de, raf);
 			case Table.JSTF -> null;
 			case Table.LTSH -> null; // new LtshTable(de, raf);
 			case Table.MMFX -> null;

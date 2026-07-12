@@ -19,6 +19,18 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
   `OpenTypeFont` が `liga`/`kern` フィーチャを読み、埋め込みサブセットフォントは
   グリフ ID を翻訳して適用。fi リガチャ・// カーニングを実フォント（フリーフォント
   のサブセット）で検証。
+- **C9 カラーフォント（COLR/CPAL）**: `ColrTable`（v0）・`CpalTable` パーサを新規実装。
+  `ColorGlyphFont` インターフェースを追加し、`OpenTypeFont` がカラーグリフの各レイヤーを
+  CPAL パレット色で塗り重ねて描画（テキスト色レイヤーは現在の塗り色を使用）。
+  `PDFTextRenderer` はカラーグリフを含むランをアウトライン塗り経路へ回送。
+  2 レイヤー（赤/青）のカラーグリフを実描画し PDFBox で色を検証。
+
+### フォントパーサの改善（付随）
+
+- `LigatureSubstFormat1` が Coverage を破棄していた不具合を修正（GSUB リガチャが
+  引けるようになった）。
+- GPOS のルックアップサブテーブルが未解析だった（type 2 PairPos を実装）。
+- `Coverage` にグリフ列挙 API（`getGlyphIds()`）を追加。
 
 ## 2026-07-11 — GC API の再設計（破壊的変更）
 

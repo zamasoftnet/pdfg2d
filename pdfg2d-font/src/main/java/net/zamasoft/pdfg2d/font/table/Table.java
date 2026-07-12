@@ -33,6 +33,10 @@ public interface Table {
 	int GPOS = 0x47504f53;
 	/** Tag for the OpenType GSUB (Glyph Substitution data) table. */
 	int GSUB = 0x47535542;
+	/** Tag for the OpenType COLR (Color layer) table. */
+	int COLR = 0x434f4c52;
+	/** Tag for the OpenType CPAL (Color palette) table. */
+	int CPAL = 0x4350414c;
 	/** Tag for the OpenType JSTF (Justification data) table. */
 	int JSTF = 0x4a535446;
 	/** Tag for the LTSH (Linear Threshold) table. */

@@ -128,6 +128,20 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	}
 
 	@Override
+	public boolean isColorGlyph(int gid) {
+		int fgid = this.gidToFgid.get(gid);
+		return fgid >= 0 && this.hasColorLayers(fgid);
+	}
+
+	@Override
+	public void drawColorGlyph(GC gc, int gid, java.awt.geom.AffineTransform at) {
+		int fgid = this.gidToFgid.get(gid);
+		if (fgid >= 0) {
+			this.drawColorLayers(gc, fgid, at);
+		}
+	}
+
+	@Override
 	public short getKerning(int sgid, int gid) {
 		// Translate the subset glyph ids back to font glyph ids for GPOS.
 		int f1 = this.gidToFgid.get(sgid);

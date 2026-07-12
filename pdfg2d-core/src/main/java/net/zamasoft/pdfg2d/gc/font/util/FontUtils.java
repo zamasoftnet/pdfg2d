@@ -293,7 +293,15 @@ public final class FontUtils {
 						}
 						at.preConcatenate(AffineTransform.getTranslateInstance(dx, 0));
 					}
-					if (font instanceof ShapedFont) {
+					if (font instanceof net.zamasoft.pdfg2d.font.ColorGlyphFont cgf && cgf.isColorGlyph(gid)) {
+						// Flush the pending monochrome outline before the color
+						// glyph so drawing order (and thus overlap) is preserved.
+						if (path != null) {
+							drawPath(gc, path, textMode);
+							path = null;
+						}
+						cgf.drawColorGlyph(gc, gid, at);
+					} else if (font instanceof ShapedFont) {
 						var shape = ((ShapedFont) font).getShapeByGID(gid);
 						if (shape != null) {
 							if (oblique != null) {
