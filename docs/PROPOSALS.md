@@ -1,69 +1,65 @@
 # pdfg2d 拡張提案
 
-作成日: 2026-07-10 / 最終更新: 2026-07-11。HTML+CSS 組版エンジン
+作成日: 2026-07-10 / 最終更新: 2026-07-12。HTML+CSS 組版エンジン
 （foliojet / copperpdf）の基盤としての**未実装の**拡張提案をまとめる。
 
 - 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md)
 - 実施済みの記録（変更履歴）は [`CHANGELOG.md`](./CHANGELOG.md)
 - PDF/A・PDF/X の準拠計画と実施記録は [`PDFA_PDFX_PLAN.md`](./PDFA_PDFX_PLAN.md)
+- テキストパイプライン再設計の設計は [`TEXT_PIPELINE_REDESIGN.md`](./TEXT_PIPELINE_REDESIGN.md)
 
-優先度は「HTML+CSS → 印刷物」というプロダクト文脈（画面表示と紙出力の両立、
-商業印刷・オフィス印刷の両対応）で付けている。
+> **2026-07-12 時点**: 旧 §A〜§D（DeviceN、PDF/X 注釈位置検証、タグ付き PDF の
+> 意味構造、AES-256、ハイフネーション、bidi、GPOS/GSUB、ルビ、COLR/CPAL、
+> ObjStm パック拡大）は **pdfg2d 側ではすべて実装済み**。詳細は CHANGELOG 参照。
+> 本ファイルは残る「未実装」だけを列挙する。
 
-> 旧 §A（印刷品質・商業印刷: ICCBased 色空間 + レンダリングインテント、
-> OCG レイヤー API の一般化、スポットカラー、グラデーション SMask、
-> VT レコード DPart + カット&スタック面付け）と旧 §D・§E（オブジェクトストリーム、
-> Deflate レベル、ページ並列生成、サブセットキャッシュ、Batik 分離、PDFGC 分割、
-> veraPDF 網羅拡大）は **すべて実装済み**。詳細は CHANGELOG を参照。
+## A. 製品（foliojet / copperpdf）へのテキスト機能統合
 
-## A. 印刷品質・商業印刷（優先度: 中）
+pdfg2d 側の実装は完了しているが、製品の CSS 組版エンジンへ通す作業が残る項目。
+**制約: 現時点では Copper PDF 3.2 のレイアウトを維持する必要があるため、既存の
+レンダリング（ゴールデン画像）を変える改修は保留**。
 
-1. **DeviceN 色空間（多チャンネル特色）**
-   Separation（単一カラーラント）は実装済み。特色 2 色の掛け合わせや
-   ダブルトーン（特色 + K）を表現するには DeviceN が必要。tint 変換関数が
-   多入力になる点を除けば Separation 実装の自然な拡張。
-2. **PDF/X-4 の注釈許可（位置ベース検証）**
-   現状 PDF/X は注釈を全拒否（安全側）。規格上は Bleed/Trim の外側なら許されるため、
-   位置検証付きで許可すればトンボ領域への校正注釈などが可能になる。
+1. **bidi の製品統合** — ✅ 実装済み（2026-07-12）
+   `AbstractLineBox.align()` に UAX #9 視覚順並べ替え + RTL ラン反転を追加。
+   純 LTR 行では厳密 no-op のため 3.2 レイアウトを保持。foliojet 367 /
+   copperpdf 591 画像で検証済み。残: 方向境界をまたぐネストしたインライン
+   ボックスの分割（ブラウザ級 bidi の残り）。
+2. **ハイフネーション（foliojet）** — 保留（3.2 レイアウト維持のため）
+   pdfg2d の `Hyphenator`（Liang）は実装済み。foliojet 側は CSS `hyphens`
+   プロパティのパース、単語コンテキスト付き分割点挿入、行末ハイフン描画を
+   二パス行形成リプレイに追加する必要がある。`hyphens: auto` ゲートで既存
+   ゴールデンは保護できるが、既存レンダリングを変える性質のため現時点は保留。
+3. **ルビの発展（foliojet）** — 保留（3.2 レイアウト維持のため）
+   foliojet の `RubyBox`（inline-block + nowrap）は基本描画のみ。ルビ掛け
+   （JIS X 4051）・熟語ルビの行またぎ・Ruby/RB/RT タグ付き構造が未対応。
+   いずれも既存ジオメトリを変える（ルビテストは幅を許容 0 で断言）。
 
-## B. 文書構造・アクセシビリティ（優先度: 中）
+## B. アクセシビリティ
 
-3. **タグ付き PDF の意味構造強化**（基盤は実装済み）
-   上流（copperpdf/foliojet）が HTML の構造を `beginStructElement` に流し込む接続、
-   テーブル構造（Table/TR/TH/TD + Scope）、リンク注釈と Link 構造要素の関連付け
-   （PDF/UA の Link 要件）、見出しレベルの整合検証。veraPDF が通っても
-   「意味のある構造」は上流接続をして初めて完成する。
-4. **AES-256 (R6) 暗号化**
-   PDF 2.0 出力は実装済みだが、暗号化は AES-128 (AESV2) まで。PDF 2.0 の標準暗号は
-   AES-256 のみなので、V_2_0 で暗号化を使うなら必須になる。
+4. **タグ付き PDF の上流接続（foliojet / copperpdf）**
+   pdfg2d 側の API（`beginStructElement`/`endStructElement`、表 Scope、Link
+   の OBJR 関連付け、見出しレベル検証）は実装済み。foliojet は現状タグ付き
+   PDF を一切出力していない（`beginStructElement` 未使用）。HTML の要素構造を
+   ボックスツリー経由で pdfg2d の構造 API へ流し込めば、アクセシブルな
+   タグ付き PDF / PDF/UA を製品として出せる。**タグはメタデータでレイアウトを
+   変えないため、3.2 レイアウト維持と両立する**。規模は大きい（全ドキュメントの
+   構造伝播）が、レンダリング非破壊で進められる数少ない残項目。
 
-## C. テキスト（優先度: 中）
+## C. テキスト（さらなる高度化・pdfg2d 側）
 
-> 以下 5〜9 を単発で足すのではなく、段落スコープのパイプラインへ再設計して
-> まとめて受け止める設計案を [`TEXT_PIPELINE_REDESIGN.md`](./TEXT_PIPELINE_REDESIGN.md)
-> にまとめた（box-glue-penalty 行分割 + HarfBuzz 型字形モデル + UAX #9 bidi）。
-
-5. **ハイフネーション**
-   justify の既知の制限。Liang アルゴリズム + TeX パターン（LGPL 注意、または
-   libhyphen 形式）で `PageLayoutGlyphHandler` の行分割候補を増やす。
-6. **双方向テキスト（bidi）/ RTL**
-   現状 RTL は論理順のまま出力する制限を明文化済み。`java.text.Bidi` で並べ替えれば
-   外部依存なしで基本対応できる。アラビア語 shaping まで踏み込むなら HarfBuzz 系
-   (harfbuzz-ng の JNI) の検討が必要。
-7. **GPOS/GSUB ベースのカーニング・リガチャ**
-   現状は kern テーブルのみ。OpenType 専用フォントでは GPOS しか持たないものが多く、
-   高品質組版の詰めに効く。
-8. **ルビ支援**
-   日本語印刷物の必須機能。レイアウトは上流エンジン側でも、
-   ベースラインからのオフセット付き小書きテキストを効率よく出す下回りがあると良い。
-9. **カラーフォント（COLR/CPAL, SVG-in-OT）**
-   絵文字は専用モジュールで対応済みだが、一般のカラーフォントにも広げられる。
-
-## D. ファイルサイズ・性能（優先度: 低）
-
-10. **オブジェクトストリームのパック対象拡大**
-    現状は構造ツリーの小オブジェクトが中心。OCG・Filespec 等の他の小辞書も
-    `PDFObjectSink` 経由でパック対象にできる（拡張点は整備済み）。
+5. **Knuth-Plass 最適行分割**
+   段落パイプラインの `LineBreaker` は貪欲法。box-glue-penalty モデルは
+   最適法の入力にそのまま使えるため、戦略の差し替えで導入できる（設計済み）。
+6. **アラビア語・インド系の shaping（Tier 2）**
+   bidi の並べ替えは実装済みだが、接続形・文脈置換・並べ替えを伴う本格
+   shaping は未対応。`Shaper` インターフェースを HarfBuzz シグネチャに
+   合わせてあるため、必要なら HarfBuzz JNI 実装の差し替えで対応（純 Java 方針は既定で維持）。
+7. **DeviceN 色空間の多チャンネル拡張**
+   DeviceN（複数カラーラント）は実装済み。tint 変換関数の高度化
+   （NChannel、スポット + プロセスの厳密な掛け合わせ）は将来。
+8. **COLR v1 / SVG-in-OT カラーフォント**
+   COLR v0（レイヤー）は実装済み。COLR v1（グラデーション・合成）や
+   SVG-in-OT への拡張は将来。
 
 ## 意図的に対象外とするもの
 

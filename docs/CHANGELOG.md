@@ -3,6 +3,17 @@
 pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.md`](./PROPOSALS.md)、
 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md) を参照。
 
+## 2026-07-12 — bidi の製品統合
+
+- `TextImpl.reverse()` を追加（RTL ランを視覚順に配置するためのグリフ反転コピー、
+  クラスタ保持、単体テスト付き）。
+- foliojet 側で `AbstractLineBox.align()` に UAX #9 視覚順並べ替え + RTL ラン反転を
+  実装。純 LTR 行では厳密 no-op（`Bidi.isLeftToRight()` ガード）のため既存の
+  レンダリング（Copper PDF 3.2 レイアウト）を保持。pdfg2d 253 / foliojet 367 /
+  copperpdf 591 画像で LTR 出力の不変を実証。
+- 保留: ハイフネーション・ルビの foliojet 統合（既存ゴールデンを変えるため、
+  3.2 レイアウト維持の制約下では見送り）。
+
 ## 2026-07-12 — テキスト再設計（§C）と OpenType シェーピング
 
 - **段落パイプライン**（`gc.text.pipeline`、新設）: GlyphRun（HarfBuzz 型・
