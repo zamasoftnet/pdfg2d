@@ -216,10 +216,19 @@ public final class ParagraphLayout {
 		return new BreakNode.Penalty(width, 50, true, hyphen);
 	}
 
-	/** Shapes a hyphen in the given run's font, cached per font metrics. */
+	/** Cache of the hyphen glyph shaped per font style (immutable once shaped). */
+	private final java.util.Map<net.zamasoft.pdfg2d.gc.font.FontStyle, GlyphRun> hyphenCache =
+			new java.util.HashMap<>();
+
+	private static final GlyphRun NO_HYPHEN = new GlyphRun(null, null, 0);
+
+	/** Returns the hyphen glyph for the run's font, shaping it once per style. */
 	private GlyphRun hyphenGlyph(final GlyphRun run, final Item item) {
-		final var runs = this.shaper.shape(new char[] { '-' }, new Item(0, 1, item.bidiLevel(), item.style()));
-		return runs.isEmpty() ? null : runs.get(0);
+		final var cached = this.hyphenCache.computeIfAbsent(item.style(), style -> {
+			final var runs = this.shaper.shape(new char[] { '-' }, new Item(0, 1, (byte) 0, style));
+			return runs.isEmpty() ? NO_HYPHEN : runs.get(0);
+		});
+		return cached == NO_HYPHEN ? null : cached;
 	}
 
 	/** Positions one line: reorder by bidi, place left to right, justify. */
