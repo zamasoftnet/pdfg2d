@@ -102,14 +102,21 @@ pdfg2d 側の実装は完了しているが、製品の CSS 組版エンジン�
 
 ## B. アクセシビリティ
 
-4. **タグ付き PDF の上流接続（foliojet / copperpdf）**
-   pdfg2d 側の API（`beginStructElement`/`endStructElement`、表 Scope、Link
-   の OBJR 関連付け、見出しレベル検証）は実装済み。foliojet は現状タグ付き
-   PDF を一切出力していない（`beginStructElement` 未使用）。HTML の要素構造を
-   ボックスツリー経由で pdfg2d の構造 API へ流し込めば、アクセシブルな
-   タグ付き PDF / PDF/UA を製品として出せる。**タグはメタデータでレイアウトを
-   変えないため、3.2 レイアウト維持と両立する**。規模は大きい（全ドキュメントの
-   構造伝播）が、レンダリング非破壊で進められる数少ない残項目。
+4. **タグ付き PDF の上流接続（foliojet）** — ✅ v1 実装済み（2026-07-12）
+   pdfg2d 側 API（`beginStructElement`/`endStructElement`、内容の自動マーク
+   〔text/Figure/Artifact〕、表 Scope、Link の OBJR 関連付け、見出しレベル検証）
+   に加え、**foliojet が HTML 構造をタグツリーへ流し込むようになった**。
+   `output.pdf.tagged`（既定 OFF、A-2a/A-3a/UA-1 では自動 ON）有効時、描画パスの
+   ボックス描画に構造マーカー（`StructDrawable`、ゼロサイズ・描画順＝文書順）を
+   挿入し、pdfg2d の自動マークした内容が対応する構造要素に付く仕組み。
+   対応ロール: 見出し H1–H6、P、Div/Sect、L/LI、BlockQuote、Table/TR/TH/TD/
+   TBody/Caption（`TaggedPdf.blockRole`）。`AbstractBlockBox` と各テーブル
+   ボックスの `draw` で発行。**マーカーは非表示なのでレンダリング非破壊
+   （imageTest 安全）で、既定 OFF により未タグ文書の出力は不変**。
+   `_9500_PROFILE/OutputPdfProfileTest`（`/S /H1`・`/P`・`/L`・`/Table` 等の
+   バイト検証）でテスト。残: ページまたぎ要素の単一化（現状ページ毎に分割）、
+   フォームウィジェットの構造帰属（ビルド/ペイントのパス差）、リンクのインライン
+   構造、TH スコープ、Figure alt、リスト LBody、veraPDF による PDF/UA 検証。
 
 ## C. テキスト（さらなる高度化・pdfg2d 側）
 

@@ -3,6 +3,24 @@
 pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.md`](./PROPOSALS.md)、
 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md) を参照。
 
+## 2026-07-12 — タグ付き PDF の上流接続（foliojet）
+
+- foliojet が HTML 構造をタグ付き PDF の論理構造ツリーへ流し込むようになった
+  （`output.pdf.tagged`、既定 OFF、A-2a/A-3a/UA-1 で自動 ON）。
+- 仕組み: 描画パスのボックス描画に**ゼロサイズの構造マーカー**
+  （`StructDrawable`）を文書順で挿入し、ペイント時に
+  `beginStructElement`/`endStructElement` を呼ぶ。pdfg2d が内容を自動マーク
+  （text/Figure/Artifact）するため、マーカー間に描かれた内容が対応する構造要素に
+  付く。`AbstractBlockBox` と各テーブルボックスの `draw` に実装。
+- ロール対応（`TaggedPdf.blockRole`）: 見出し H1–H6、P、Div/Sect、L/LI、
+  BlockQuote、Table/TR/TH/TD/TBody/Caption。
+- **マーカーは非表示なのでレンダリング非破壊（imageTest 安全）、既定 OFF により
+  未タグ文書の出力は Copper PDF 3.2 と完全同一**。`OutputPdfProfileTest` で
+  `/S /H1`・`/P`・`/L`・`/LI`・`/Table`・`/TR`・`/TH`・`/TD` を検証、foliojet
+  全テスト緑。
+- 残: ページまたぎ要素の単一化、フォームウィジェットの構造帰属、リンクの
+  インライン構造、TH スコープ、Figure alt、veraPDF による PDF/UA 検証。
+
 ## 2026-07-12 — フォームの製品統合（foliojet）
 
 - foliojet に `output.pdf.forms`（既定 OFF のオプトイン）を追加。有効時、HTML の
