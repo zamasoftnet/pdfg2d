@@ -19,6 +19,8 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
     リスト項目のように 1 要素が複数ボックスに分かれても構造要素は 1 つになる。
   - **LI は LBody を内包**（PDF/UA 7.2）。
   - **TH は Scope 属性**を付与（PDF/UA 7.5、HTML `scope` 属性・既定 Column）。
+  - フォーム有効時は**フォームウィジェットを `Form` 構造要素に内包**（PDF/UA
+    7.18.4）。`PdfUaValidationTest` はフォーム入力を含む文書でも PDF/UA-1 適合を検証。
 - **マーカーは非表示なのでレンダリング非破壊（imageTest 安全）、既定 OFF により
   未タグ文書の出力は Copper PDF 3.2 と完全同一**。
 - 検証: **`PdfUaValidationTest` が veraPDF で PDF/UA-1 適合を実証**（見出し・段落・
