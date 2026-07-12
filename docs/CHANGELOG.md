@@ -28,6 +28,10 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
   - 要素マッピング拡張: figcaption→Caption。
 - 検証: `PdfUaValidationTest` が veraPDF PDF/UA-1 で、見出し・段落・リスト・表に
   加え**フォーム入力・画像・リンクを含む文書**の適合を実証。
+- **読み順位置**: `Drawer` を `Visitor.visitBox` に渡し、リンク注釈とフォーム
+  フィールドをペイント時に文書順で発行（`PDFOutputDrawable`）。これにより
+  `Link`/`Form` 構造要素が包含ブロック配下にネストする（従来は文書直下に集約）。
+  copperpdf imageTest 591/0（レンダリング非破壊）で確認。
 - **マーカーは非表示なのでレンダリング非破壊（imageTest 安全）、既定 OFF により
   未タグ文書の出力は Copper PDF 3.2 と完全同一**。
 - 検証: **`PdfUaValidationTest` が veraPDF で PDF/UA-1 適合を実証**（見出し・段落・
