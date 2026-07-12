@@ -81,18 +81,24 @@ pdfg2d 側の実装は完了しているが、製品の CSS 組版エンジン�
    foliojet の `RubyBox`（inline-block + nowrap）は基本描画のみ。ルビ掛け
    （JIS X 4051）・熟語ルビの行またぎ・Ruby/RB/RT タグ付き構造が未対応。
    いずれも既存ジオメトリを変える（ルビテストは幅を許容 0 で断言）。
-10. **AcroForm の製品統合（foliojet）** — ✅ 実装済み（2026-07-12、input/textarea）
-   `output.pdf.forms`（既定 OFF、`<input>`/`<textarea>` を対話フィールド化する
-   オプトイン）を追加。`AbstractVisitor.visitBox` がフォーム部品を検出し、
-   `PDFVisitor.addFormField()` が pdfg2d の `pdf.form` フィールド
-   （text/password→`TextField`、checkbox/radio→`CheckBoxField`、
-   submit/reset/button→`PushButtonField`、textarea→複数行 `TextField`）を発行。
+10. **AcroForm の製品統合（foliojet）** — ✅ 実装済み（2026-07-12）
+   `output.pdf.forms`（既定 OFF、フォーム部品を対話フィールド化するオプトイン）
+   を追加。`AbstractVisitor.visitBox` がフォーム部品を検出し、`PDFVisitor` が
+   pdfg2d の `pdf.form` フィールドを発行:
+   - `<input type=text/password>` → `TextField`
+   - `<input type=checkbox>` → `CheckBoxField`
+   - `<input type=radio>` → **`RadioGroup`（同名をまとめ、親フィールド + `/Kids`
+     ウィジェットの単一ラジオフィールドとして出力）**
+   - `<select>` → `ChoiceField`（`<option>` 子要素をビジター走査で収集し、
+     選択値・combo/list を反映。`endPage` でまとめて発行）
+   - `<textarea>` → 複数行 `TextField`
+   - `<input type=submit/reset/button>` → `PushButtonField`
    PDF/X ではフォーム禁止のため自動スキップ。**既定 OFF なのでフォームを含まない
    文書の出力は 3.2 と 1 バイトも変わらず**、有効時のみフォーム部品の見た目が
-   対話ウィジェットへ変わる。`_9510_FORM/FormFieldTest` でバイト検証、foliojet
-   全テスト緑。残: **`<select>`（`<option>` 子要素の取得が必要）**、ラジオ
-   グループの単一フィールド化、外観ストリームの精緻化、タグ付き文書での
-   `Form` 構造要素 + `/TU` 同時発行（B4 と一体）。
+   対話ウィジェットへ変わる。`_9510_FORM/FormFieldTest`（foliojet）+
+   `AcroFormTest`（pdfg2d, PDFBox でラジオグループ検証）でテスト済み、両プロダクト
+   全テスト緑。残: 外観ストリームの精緻化、タグ付き文書での `Form` 構造要素 +
+   `/TU` 同時発行（B4 と一体）。
 
 ## B. アクセシビリティ
 

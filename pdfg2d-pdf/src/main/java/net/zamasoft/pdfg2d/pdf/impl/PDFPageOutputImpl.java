@@ -345,6 +345,121 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		}
 	}
 
+	@Override
+	public void addRadioGroup(final net.zamasoft.pdfg2d.pdf.form.RadioGroup group) throws IOException {
+		final var writer = this.getPDFWriterImpl();
+		if (writer.getParams().version().isPdfX()) {
+			throw new UnsupportedOperationException("Form fields are not allowed in PDF/X.");
+		}
+		if (group.buttons().isEmpty()) {
+			return;
+		}
+		if (!this.hasAnnots) {
+			this.annotsFlow.writeName("Annots");
+			this.annotsFlow.startArray();
+			this.hasAnnots = true;
+		}
+		final var structure = writer.structure;
+		final var parentRef = writer.xref.nextObjectRef();
+		final var kidRefs = new java.util.ArrayList<ObjectRef>(group.buttons().size());
+
+		for (final var button : group.buttons()) {
+			final var rect = button.rect();
+			final double llx = rect.getX();
+			final double lly = this.height - (rect.getY() + rect.getHeight());
+			final double urx = rect.getX() + rect.getWidth();
+			final double ury = this.height - rect.getY();
+			final double w = rect.getWidth();
+			final double h = rect.getHeight();
+			final var on = (button.onValue() != null && !button.onValue().isEmpty()) ? button.onValue() : "On";
+
+			// Off: an empty ring; On: the ring with a filled centre.
+			final var offRef = writer.writeAppearanceStream(w, h, "q 1 1 " + fmt(w - 2) + " " + fmt(h - 2) + " re S Q");
+			final double i = 3;
+			final var onRef = writer.writeAppearanceStream(w, h, "q 1 1 " + fmt(w - 2) + " " + fmt(h - 2) + " re S "
+					+ fmt(i) + " " + fmt(i) + " " + fmt(w - 2 * i) + " " + fmt(h - 2 * i) + " re f Q");
+
+			final var kidRef = writer.xref.nextObjectRef();
+			kidRefs.add(kidRef);
+			this.annotRefs.add(kidRef);
+			this.annotsFlow.writeObjectRef(kidRef);
+			final var structParent = (structure != null) ? structure.associateAnnotation(this, kidRef) : -1;
+
+			final boolean selected = on.equals(group.selectedValue());
+			try (final var flow = writer.objectsFlow.forkFragment()) {
+				flow.startObject(kidRef);
+				flow.startHash();
+				flow.writeName("Type");
+				flow.writeName("Annot");
+				flow.writeName("Subtype");
+				flow.writeName("Widget");
+				flow.writeName("Parent");
+				flow.writeObjectRef(parentRef);
+				flow.writeName("Rect");
+				flow.startArray();
+				flow.writeReal(llx);
+				flow.writeReal(lly);
+				flow.writeReal(urx);
+				flow.writeReal(ury);
+				flow.endArray();
+				flow.lineBreak();
+				flow.writeName("F");
+				flow.writeInt(0x04); // Print
+				flow.lineBreak();
+				flow.writeName("AS");
+				flow.writeName(selected ? on : "Off");
+				flow.writeName("AP");
+				flow.startHash();
+				flow.writeName("N");
+				flow.startHash();
+				flow.writeName(on);
+				flow.writeObjectRef(onRef);
+				flow.writeName("Off");
+				flow.writeObjectRef(offRef);
+				flow.endHash();
+				flow.endHash();
+				flow.lineBreak();
+				if (structParent >= 0) {
+					flow.writeName("StructParent");
+					flow.writeInt(structParent);
+					flow.lineBreak();
+				}
+				flow.endHash();
+				flow.endObject();
+			}
+		}
+
+		writer.addAcroFormField(parentRef, false);
+		try (final var flow = writer.objectsFlow.forkFragment()) {
+			flow.startObject(parentRef);
+			flow.startHash();
+			flow.writeName("FT");
+			flow.writeName("Btn");
+			flow.writeName("Ff");
+			flow.writeInt(FF_RADIO | (group.readOnly() ? FF_READONLY : 0) | (group.required() ? FF_REQUIRED : 0));
+			flow.lineBreak();
+			flow.writeName("T");
+			flow.writeText(group.name());
+			flow.lineBreak();
+			if (group.tooltip() != null) {
+				flow.writeName("TU");
+				flow.writeUTF16(group.tooltip());
+				flow.lineBreak();
+			}
+			flow.writeName("V");
+			flow.writeName(group.selectedValue() != null ? group.selectedValue() : "Off");
+			flow.writeName("Kids");
+			flow.startArray();
+			for (final var kidRef : kidRefs) {
+				flow.writeObjectRef(kidRef);
+			}
+			flow.endArray();
+			flow.lineBreak();
+			flow.endHash();
+			flow.endObject();
+		}
+	}
+
 	private static String fmt(final double v) {
 		return String.format(java.util.Locale.US, "%.2f", v);
 	}

@@ -78,6 +78,37 @@ public class AcroFormTest {
 	}
 
 	@Test
+	public void testRadioGroupIsSingleField() throws Exception {
+		final var file = TestOutputFiles.outputFile(getClass(), "acroform_radio.pdf");
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder,
+					PDFParams.createDefault().withCompression(PDFParams.Compression.NONE));
+			final var page = pdf.nextPage(400, 400);
+			try (final var gc = new PDFGC(page)) {
+				page.addRadioGroup(new net.zamasoft.pdfg2d.pdf.form.RadioGroup("gender", "性別", "m", false, false,
+						List.of(new net.zamasoft.pdfg2d.pdf.form.RadioGroup.Button(
+								new Rectangle2D.Double(50, 50, 14, 14), "m"),
+								new net.zamasoft.pdfg2d.pdf.form.RadioGroup.Button(
+										new Rectangle2D.Double(50, 70, 14, 14), "f"))));
+			}
+			pdf.close();
+			builder.close();
+		}
+
+		try (final var doc = Loader.loadPDF(file)) {
+			final var form = doc.getDocumentCatalog().getAcroForm();
+			assertNotNull(form);
+			assertEquals(1, form.getFields().size(), "A radio group is one field, not two");
+			final var radio = (org.apache.pdfbox.pdmodel.interactive.form.PDRadioButton) form.getField("gender");
+			assertNotNull(radio);
+			assertEquals(2, radio.getWidgets().size(), "The group must have two button widgets");
+			assertEquals("m", radio.getValue(), "The initially selected button is 'm'");
+			assertTrue(radio.getOnValues().containsAll(List.of("m", "f")), "Both on-states must be present");
+		}
+	}
+
+	@Test
 	public void testFormsRejectedInPdfX() throws Exception {
 		final var file = TestOutputFiles.outputFile(getClass(), "acroform_pdfx.pdf");
 		try (final var out = new FileOutputStream(file)) {

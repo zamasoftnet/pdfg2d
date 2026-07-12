@@ -6,16 +6,21 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
 ## 2026-07-12 — フォームの製品統合（foliojet）
 
 - foliojet に `output.pdf.forms`（既定 OFF のオプトイン）を追加。有効時、HTML の
-  `<input>`/`<textarea>` を pdfg2d の対話フォームフィールドとして出力する
-  （`AbstractVisitor.visitBox` で検出 → `PDFVisitor.addFormField()`）。
-  text/password→`TextField`、checkbox/radio→`CheckBoxField`、
-  submit/reset/button→`PushButtonField`、textarea→複数行 `TextField`。
-  PDF/X はフォーム禁止のため自動スキップ。
+  フォーム部品を pdfg2d の対話フォームフィールドとして出力する
+  （`AbstractVisitor.visitBox` で検出 → `PDFVisitor`）:
+  - text/password → `TextField`、checkbox → `CheckBoxField`、
+    submit/reset/button → `PushButtonField`、textarea → 複数行 `TextField`
+  - **radio → `RadioGroup`**: 同名のラジオを 1 つの親フィールド + `/Kids`
+    ウィジェットにまとめ、相互排他を保証（pdfg2d に `RadioGroup` レコードと
+    `PDFPageOutput.addRadioGroup()` を新設）
+  - **select → `ChoiceField`**: `<option>` をビジター走査で収集し、選択値と
+    combo/list を反映（`endPage` で発行）
+  - PDF/X はフォーム禁止のため自動スキップ
 - **既定 OFF によりフォームを含まない文書の出力は Copper PDF 3.2 と完全同一**。
-  有効時のみフォーム部品の見た目が対話ウィジェットに変わる。`_9510_FORM/
-  FormFieldTest` でバイト検証、foliojet 全テスト緑。
-- 残: `<select>`（option 子要素の取得）、ラジオグループの単一フィールド化、
-  タグ付き文書での `Form` 構造要素併発。
+  有効時のみフォーム部品の見た目が対話ウィジェットに変わる。
+  `_9510_FORM/FormFieldTest`（foliojet バイト検証）、`AcroFormTest`
+  （pdfg2d, PDFBox でラジオグループを検証）でテスト、両プロダクト全テスト緑。
+- 残: 外観ストリームの精緻化、タグ付き文書での `Form` 構造要素併発。
 
 ## 2026-07-12 — AcroForm（対話フォーム）と電子インボイス（Factur-X）
 

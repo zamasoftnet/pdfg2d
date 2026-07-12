@@ -140,4 +140,15 @@ public abstract class PDFPageOutput extends PDFGraphicsOutput {
 	 */
 	public void addFormField(final net.zamasoft.pdfg2d.pdf.form.FormField field) throws java.io.IOException {
 	}
+
+	/**
+	 * Adds a group of mutually-exclusive radio buttons as a single AcroForm
+	 * field with multiple widget kids. No-op if the implementation does not
+	 * support forms.
+	 *
+	 * @param group the radio group
+	 * @throws java.io.IOException if an I/O error occurs
+	 */
+	public void addRadioGroup(final net.zamasoft.pdfg2d.pdf.form.RadioGroup group) throws java.io.IOException {
+	}
 }
