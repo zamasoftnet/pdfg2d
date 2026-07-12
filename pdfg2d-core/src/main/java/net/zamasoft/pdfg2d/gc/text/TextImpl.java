@@ -264,6 +264,32 @@ public class TextImpl extends AbstractText implements Serializable {
 	}
 
 	/**
+	 * Returns a copy of this run with its glyphs in reverse order, for placing
+	 * a right-to-left run visually. Clusters are kept with their glyphs so the
+	 * characters remain associated for text extraction.
+	 *
+	 * @return a glyph-reversed copy
+	 */
+	public TextImpl reverse() {
+		final TextImpl r = new TextImpl(this.charOffset, this.fontStyle, this.fontMetrics);
+		r.letterSpacing = this.letterSpacing;
+		// Character start offset of each glyph's cluster (prefix sums).
+		final int[] charStart = new int[this.glyphCount];
+		int pos = 0;
+		for (int g = 0; g < this.glyphCount; ++g) {
+			charStart[g] = pos;
+			pos += this.clusterLengths[g];
+		}
+		for (int g = this.glyphCount - 1; g >= 0; --g) {
+			r.appendGlyph(this.chars, charStart[g], this.clusterLengths[g], this.glyphIds[g]);
+		}
+		if (r.glyphCount > 0) {
+			r.pack();
+		}
+		return r;
+	}
+
+	/**
 	 * Trims all internal arrays to their exact sizes, reducing memory usage.
 	 * Should be called after all glyphs have been appended.
 	 */

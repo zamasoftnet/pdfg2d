@@ -306,6 +306,28 @@ class CoreApiTest {
     }
 
     @Test
+    void testTextImplReverseFlipsGlyphOrderAndKeepsClusters() {
+        final var metrics = new StubFontMetrics();
+        final var text = new TextImpl(0, new FontStyleImpl(FontFamilyList.SERIF, 12, FontStyle.Style.NORMAL,
+                FontStyle.Weight.W_400, FontStyle.Direction.RTL, FontPolicyList.FONT_POLICY_CORE_CID_KEYED_VALUE),
+                metrics);
+        // Three glyphs: 'A' (1 char), "BC" ligature (2 chars), 'D' (1 char).
+        text.appendGlyph("A".toCharArray(), 0, (byte) 1, 11);
+        text.appendGlyph("BC".toCharArray(), 0, (byte) 2, 12);
+        text.appendGlyph("D".toCharArray(), 0, (byte) 1, 13);
+        text.pack();
+
+        final var reversed = text.reverse();
+        // Glyphs reversed: D, BC, A. Clusters (char counts) travel with them.
+        assertEquals(3, reversed.getGlyphCount());
+        assertArrayEquals(new int[] { 13, 12, 11 }, reversed.getGlyphIds());
+        assertArrayEquals(new byte[] { 1, 2, 1 }, reversed.getClusterLengths());
+        // Characters follow the reversed glyph order: D, B, C, A.
+        assertArrayEquals(new char[] { 'D', 'B', 'C', 'A' }, reversed.getChars());
+        assertEquals(4, reversed.getCharCount());
+    }
+
+    @Test
     void testFontListMetricsAndTextControlsExposeExpectedMetrics() {
         final var metricsA = new StubFontMetrics(12, 7, 2, 5, 4);
         final var metricsB = new StubFontMetrics(14, 9, 3, 6, 5);
