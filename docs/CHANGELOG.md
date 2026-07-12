@@ -14,12 +14,18 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
   付く。`AbstractBlockBox` と各テーブルボックスの `draw` に実装。
 - ロール対応（`TaggedPdf.blockRole`）: 見出し H1–H6、P、Div/Sect、L/LI、
   BlockQuote、Table/TR/TH/TD/TBody/Caption。
+- **精緻化（PDF/UA-1 適合）**:
+  - 要素の同一性で重複ネストを排除（`PageBox` が開いた要素集合を管理）。
+    リスト項目のように 1 要素が複数ボックスに分かれても構造要素は 1 つになる。
+  - **LI は LBody を内包**（PDF/UA 7.2）。
+  - **TH は Scope 属性**を付与（PDF/UA 7.5、HTML `scope` 属性・既定 Column）。
 - **マーカーは非表示なのでレンダリング非破壊（imageTest 安全）、既定 OFF により
-  未タグ文書の出力は Copper PDF 3.2 と完全同一**。`OutputPdfProfileTest` で
-  `/S /H1`・`/P`・`/L`・`/LI`・`/Table`・`/TR`・`/TH`・`/TD` を検証、foliojet
-  全テスト緑。
+  未タグ文書の出力は Copper PDF 3.2 と完全同一**。
+- 検証: **`PdfUaValidationTest` が veraPDF で PDF/UA-1 適合を実証**（見出し・段落・
+  リスト・表を含む文書）。`OutputPdfProfileTest` で `/S /H1`・`/P`・`/L`・`/LI`・
+  `/Table`・`/TR`・`/TH`・`/TD` をバイト検証。foliojet 全テスト緑。
 - 残: ページまたぎ要素の単一化、フォームウィジェットの構造帰属、リンクの
-  インライン構造、TH スコープ、Figure alt、veraPDF による PDF/UA 検証。
+  インライン構造、Figure alt、より広い要素マッピング。
 
 ## 2026-07-12 — フォームの製品統合（foliojet）
 

@@ -54,6 +54,7 @@ pdfg2d は、Java の `Graphics2D`/独自 `GC` API を PDF 出力へ変換する
 - ファイル添付を埋め込めます（PDF/A-1・PDF/X では拒否）。AFRelationship（PDF/A-3）に対応。
 - 対話フォーム（AcroForm）フィールドを配置できます（テキスト・チェックボックス・選択・ボタン、`pdf.form`）。PDF/X では拒否。
 - 電子インボイス（Factur-X / ZUGFeRD）を PDF/A-3 に埋め込めます（`FacturX` ディスクリプタ + `fx:` XMP 拡張スキーマ。請求書 XML 本体は呼び出し側が用意）。
+- タグ付き PDF（論理構造）を出力できます（`beginStructElement`/`endStructElement`、内容の自動マーク、表 Scope、見出しレベル検証）。foliojet は HTML 構造から PDF/UA-1 準拠のタグツリーを生成（veraPDF 検証済み）。
 - 権限制御付き暗号化を設定できます。
   例: RC4/AES-128、ユーザーパスワード、オーナーパスワード、印刷/コピー/編集権限。
 - PDF 本文と画像の圧縮方式を切り替えられます。
@@ -132,6 +133,7 @@ PDF/A 全プロファイルと PDF/UA-1 を毎ビルド検証しています。
 - 添付ファイル: テスト有。`PDFAttachmentTest`
 - 対話フォーム（AcroForm）: テスト有。`AcroFormTest`
 - 電子インボイス（Factur-X, PDF/A-3）: テスト有。`PDFAVeraPDFComplianceTest#testFacturXInvoice`
+- タグ付き PDF / PDF/UA-1: テスト有。pdfg2d `TaggedPDFTest`、foliojet `PdfUaValidationTest`（veraPDF）
 - 権限制御付き暗号化: テスト有。`PDFEncryptionTest`
 - RGB / Gray / CMYK カラーモード: テスト有。`PDFColorModeTest`
 - PDF 本文圧縮: テスト有。`PDFCompressionTest`

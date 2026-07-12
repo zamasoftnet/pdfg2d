@@ -111,12 +111,16 @@ pdfg2d 側の実装は完了しているが、製品の CSS 組版エンジン�
    挿入し、pdfg2d の自動マークした内容が対応する構造要素に付く仕組み。
    対応ロール: 見出し H1–H6、P、Div/Sect、L/LI、BlockQuote、Table/TR/TH/TD/
    TBody/Caption（`TaggedPdf.blockRole`）。`AbstractBlockBox` と各テーブル
-   ボックスの `draw` で発行。**マーカーは非表示なのでレンダリング非破壊
+   ボックスの `draw` で発行。要素の同一性で重複ネストを排除（`PageBox` が開いた
+   要素集合を管理。リスト項目など 1 要素が複数ボックスに分かれても構造要素は 1 つ）。
+   PDF/UA 準拠のため **LI は LBody を内包**、**TH は Scope 属性**（HTML `scope`
+   属性、既定 Column）を付与。**マーカーは非表示なのでレンダリング非破壊
    （imageTest 安全）で、既定 OFF により未タグ文書の出力は不変**。
-   `_9500_PROFILE/OutputPdfProfileTest`（`/S /H1`・`/P`・`/L`・`/Table` 等の
-   バイト検証）でテスト。残: ページまたぎ要素の単一化（現状ページ毎に分割）、
-   フォームウィジェットの構造帰属（ビルド/ペイントのパス差）、リンクのインライン
-   構造、TH スコープ、Figure alt、リスト LBody、veraPDF による PDF/UA 検証。
+   **`_9520_UA/PdfUaValidationTest` が veraPDF で PDF/UA-1 適合を検証**（見出し・
+   段落・リスト・表を含む文書、埋め込みフォント使用）。`_9500_PROFILE` でも
+   `/S /H1`・`/P`・`/L`・`/Table` 等をバイト検証。残: ページまたぎ要素の単一化
+   （現状ページ毎に分割）、フォームウィジェットの構造帰属（ビルド/ペイントのパス差）、
+   リンクのインライン構造、Figure の alt、より広い要素マッピング。
 
 ## C. テキスト（さらなる高度化・pdfg2d 側）
 
