@@ -8,6 +8,7 @@ import java.util.List;
 
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
+import net.zamasoft.pdfg2d.pdf.PDFOutput;
 
 import net.zamasoft.pdfg2d.pdf.PDFPageOutput;
 import net.zamasoft.pdfg2d.pdf.PDFWriter;
@@ -261,6 +262,186 @@ class PDFPageOutputImpl extends PDFPageOutput {
 
 			objectsFlow.endHash();
 			objectsFlow.endObject();
+		}
+	}
+
+	@Override
+	public void addFormField(final net.zamasoft.pdfg2d.pdf.form.FormField field) throws IOException {
+		final var writer = this.getPDFWriterImpl();
+		if (writer.getParams().version().isPdfX()) {
+			throw new UnsupportedOperationException("Form fields are not allowed in PDF/X.");
+		}
+		final var rect = field.rect();
+		final double llx = rect.getX();
+		final double lly = this.height - (rect.getY() + rect.getHeight());
+		final double urx = rect.getX() + rect.getWidth();
+		final double ury = this.height - rect.getY();
+		final double w = rect.getWidth();
+		final double h = rect.getHeight();
+
+		if (!this.hasAnnots) {
+			this.annotsFlow.writeName("Annots");
+			this.annotsFlow.startArray();
+			this.hasAnnots = true;
+		}
+		final var fieldRef = writer.xref.nextObjectRef();
+		this.annotRefs.add(fieldRef);
+		this.annotsFlow.writeObjectRef(fieldRef);
+
+		// Associate with a Form structure element for accessible tagging.
+		final var structure = writer.structure;
+		final var structParent = (structure != null) ? structure.associateAnnotation(this, fieldRef) : -1;
+
+		// Checkbox appearance streams are written before the field object.
+		net.zamasoft.pdfg2d.pdf.ObjectRef onRef = null, offRef = null;
+		if (field instanceof net.zamasoft.pdfg2d.pdf.form.CheckBoxField) {
+			offRef = writer.writeAppearanceStream(w, h, "q 1 1 " + fmt(w - 2) + " " + fmt(h - 2) + " re S Q");
+			final double i = 3;
+			onRef = writer.writeAppearanceStream(w, h, "q 1 1 " + fmt(w - 2) + " " + fmt(h - 2) + " re S "
+					+ fmt(i) + " " + fmt(i) + " m " + fmt(w - i) + " " + fmt(h - i) + " l "
+					+ fmt(i) + " " + fmt(h - i) + " m " + fmt(w - i) + " " + fmt(i) + " l S Q");
+		}
+		final boolean needsAppearances = field instanceof net.zamasoft.pdfg2d.pdf.form.TextField
+				|| field instanceof net.zamasoft.pdfg2d.pdf.form.ChoiceField;
+		if (needsAppearances) {
+			writer.helvFontRef(); // ensure /Helv is in /DR
+		}
+		writer.addAcroFormField(fieldRef, needsAppearances);
+
+		try (final var flow = writer.objectsFlow.forkFragment()) {
+			flow.startObject(fieldRef);
+			flow.startHash();
+			flow.writeName("Type");
+			flow.writeName("Annot");
+			flow.writeName("Subtype");
+			flow.writeName("Widget");
+			flow.writeName("Rect");
+			flow.startArray();
+			flow.writeReal(llx);
+			flow.writeReal(lly);
+			flow.writeReal(urx);
+			flow.writeReal(ury);
+			flow.endArray();
+			flow.lineBreak();
+			flow.writeName("F");
+			flow.writeInt(0x04); // Print
+			flow.lineBreak();
+			flow.writeName("T");
+			flow.writeText(field.name());
+			flow.lineBreak();
+			if (field.tooltip() != null) {
+				flow.writeName("TU");
+				flow.writeUTF16(field.tooltip());
+				flow.lineBreak();
+			}
+			if (structParent >= 0) {
+				flow.writeName("StructParent");
+				flow.writeInt(structParent);
+				flow.lineBreak();
+			}
+			this.writeFieldBody(flow, field, w, h, onRef, offRef);
+			flow.endHash();
+			flow.endObject();
+		}
+	}
+
+	private static String fmt(final double v) {
+		return String.format(java.util.Locale.US, "%.2f", v);
+	}
+
+	/** Field flags (ISO 32000 table 227/228/230). */
+	private static final int FF_READONLY = 1 << 0, FF_REQUIRED = 1 << 1, FF_RADIO = 1 << 15, FF_PUSHBUTTON = 1 << 16,
+			FF_MULTILINE = 1 << 12, FF_COMBO = 1 << 17;
+
+	private void writeFieldBody(final PDFOutput flow, final net.zamasoft.pdfg2d.pdf.form.FormField field,
+			final double w, final double h, final ObjectRef onRef, final ObjectRef offRef) throws IOException {
+		int ff = 0;
+		if (field.readOnly()) {
+			ff |= FF_READONLY;
+		}
+		if (field.required()) {
+			ff |= FF_REQUIRED;
+		}
+		switch (field) {
+			case net.zamasoft.pdfg2d.pdf.form.TextField tf -> {
+				flow.writeName("FT");
+				flow.writeName("Tx");
+				if (tf.multiline()) {
+					ff |= FF_MULTILINE;
+				}
+				flow.writeName("DA");
+				flow.writeText("/Helv " + fmt(tf.fontSize()) + " Tf 0 g");
+				if (tf.value() != null) {
+					flow.writeName("V");
+					flow.writeUTF16(tf.value());
+					flow.lineBreak();
+				}
+				if (tf.maxLength() > 0) {
+					flow.writeName("MaxLen");
+					flow.writeInt(tf.maxLength());
+					flow.lineBreak();
+				}
+			}
+			case net.zamasoft.pdfg2d.pdf.form.CheckBoxField cb -> {
+				flow.writeName("FT");
+				flow.writeName("Btn");
+				if (cb.radio()) {
+					ff |= FF_RADIO;
+				}
+				final var on = (cb.onValue() != null && !cb.onValue().isEmpty()) ? cb.onValue() : "On";
+				flow.writeName("V");
+				flow.writeName(cb.checked() ? on : "Off");
+				flow.writeName("AS");
+				flow.writeName(cb.checked() ? on : "Off");
+				flow.writeName("AP");
+				flow.startHash();
+				flow.writeName("N");
+				flow.startHash();
+				flow.writeName(on);
+				flow.writeObjectRef(onRef);
+				flow.writeName("Off");
+				flow.writeObjectRef(offRef);
+				flow.endHash();
+				flow.endHash();
+				flow.lineBreak();
+			}
+			case net.zamasoft.pdfg2d.pdf.form.ChoiceField ch -> {
+				flow.writeName("FT");
+				flow.writeName("Ch");
+				if (ch.combo()) {
+					ff |= FF_COMBO;
+				}
+				flow.writeName("DA");
+				flow.writeText("/Helv " + fmt(ch.fontSize()) + " Tf 0 g");
+				flow.writeName("Opt");
+				flow.startArray();
+				for (final var opt : ch.options()) {
+					flow.writeUTF16(opt);
+				}
+				flow.endArray();
+				flow.lineBreak();
+				if (ch.selected() != null) {
+					flow.writeName("V");
+					flow.writeUTF16(ch.selected());
+					flow.lineBreak();
+				}
+			}
+			case net.zamasoft.pdfg2d.pdf.form.PushButtonField pb -> {
+				flow.writeName("FT");
+				flow.writeName("Btn");
+				ff |= FF_PUSHBUTTON;
+				flow.writeName("MK");
+				flow.startHash();
+				flow.writeName("CA");
+				flow.writeText(pb.caption() != null ? pb.caption() : "");
+				flow.endHash();
+				flow.lineBreak();
+			}
+		}
+		if (ff != 0) {
+			flow.writeName("Ff");
+			flow.writeInt(ff);
+			flow.lineBreak();
 		}
 	}
 

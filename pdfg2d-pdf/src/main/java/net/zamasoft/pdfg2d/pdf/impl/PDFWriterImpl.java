@@ -176,6 +176,99 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	/** PDF/VT document parts in order, or {@code null} when not PDF/VT. */
 	private List<DPartInfo> dparts = null;
 
+	/** AcroForm field object references, collected as fields are added. */
+	private List<ObjectRef> acroFormFields = null;
+
+	/** Whether a text or choice field needs viewer-generated appearances. */
+	private boolean acroFormNeedsAppearances = false;
+
+	/** Shared standard-font references for form default resources (/DR). */
+	private ObjectRef helvFontRef, zadbFontRef;
+
+	/**
+	 * Registers an AcroForm field object reference and notes whether the form
+	 * needs viewer-generated appearances (text/choice fields).
+	 *
+	 * @param fieldRef        the field object reference
+	 * @param needAppearances whether this field relies on {@code NeedAppearances}
+	 */
+	void addAcroFormField(final ObjectRef fieldRef, final boolean needAppearances) {
+		if (this.acroFormFields == null) {
+			this.acroFormFields = new ArrayList<>();
+		}
+		this.acroFormFields.add(fieldRef);
+		this.acroFormNeedsAppearances |= needAppearances;
+	}
+
+	/**
+	 * Returns the shared Helvetica font reference for form fields, allocating
+	 * and writing the standard Type1 font dictionary on first use.
+	 */
+	ObjectRef helvFontRef() throws IOException {
+		if (this.helvFontRef == null) {
+			this.helvFontRef = this.writeStandardFont("Helvetica");
+		}
+		return this.helvFontRef;
+	}
+
+	/** Returns the shared ZapfDingbats font reference (checkbox marks). */
+	ObjectRef zadbFontRef() throws IOException {
+		if (this.zadbFontRef == null) {
+			this.zadbFontRef = this.writeStandardFont("ZapfDingbats");
+		}
+		return this.zadbFontRef;
+	}
+
+	private ObjectRef writeStandardFont(final String baseFont) throws IOException {
+		final var ref = this.xref.nextObjectRef();
+		final var flow = this.objectsFlow;
+		flow.startObject(ref);
+		flow.startHash();
+		flow.writeName("Type");
+		flow.writeName("Font");
+		flow.writeName("Subtype");
+		flow.writeName("Type1");
+		flow.writeName("BaseFont");
+		flow.writeName(baseFont);
+		flow.endHash();
+		flow.endObject();
+		return ref;
+	}
+
+	/**
+	 * Writes a widget appearance as a Form XObject and returns its reference.
+	 *
+	 * @param width   the BBox width
+	 * @param height  the BBox height
+	 * @param content the content-stream operators
+	 * @return the appearance stream reference
+	 * @throws IOException if writing fails
+	 */
+	ObjectRef writeAppearanceStream(final double width, final double height, final String content) throws IOException {
+		final var ref = this.xref.nextObjectRef();
+		final var bytes = content.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+		final var flow = this.objectsFlow;
+		flow.startObject(ref);
+		flow.startHash();
+		flow.writeName("Type");
+		flow.writeName("XObject");
+		flow.writeName("Subtype");
+		flow.writeName("Form");
+		flow.writeName("BBox");
+		flow.startArray();
+		flow.writeReal(0);
+		flow.writeReal(0);
+		flow.writeReal(width);
+		flow.writeReal(height);
+		flow.endArray();
+		flow.lineBreak();
+		try (final var sout = flow.startStreamFromHash(PDFFragmentOutput.Mode.RAW)) {
+			sout.write(bytes);
+		}
+		flow.endObject();
+		return ref;
+	}
+
 	private ObjectRef linDictRef;
 	private PDFFragmentOutputImpl linDictFlow;
 
@@ -1703,6 +1796,42 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 					this.catalogFlow.writeString(lang);
 					this.catalogFlow.lineBreak();
 				}
+			}
+
+			// AcroForm (interactive form fields)
+			if (this.acroFormFields != null && !this.acroFormFields.isEmpty()) {
+				this.catalogFlow.writeName("AcroForm");
+				this.catalogFlow.startHash();
+				this.catalogFlow.writeName("Fields");
+				this.catalogFlow.startArray();
+				for (final var fieldRef : this.acroFormFields) {
+					this.catalogFlow.writeObjectRef(fieldRef);
+				}
+				this.catalogFlow.endArray();
+				this.catalogFlow.lineBreak();
+				// Default resources and appearance for viewer-drawn fields.
+				this.catalogFlow.writeName("DR");
+				this.catalogFlow.startHash();
+				this.catalogFlow.writeName("Font");
+				this.catalogFlow.startHash();
+				if (this.helvFontRef != null) {
+					this.catalogFlow.writeName("Helv");
+					this.catalogFlow.writeObjectRef(this.helvFontRef);
+				}
+				if (this.zadbFontRef != null) {
+					this.catalogFlow.writeName("ZaDb");
+					this.catalogFlow.writeObjectRef(this.zadbFontRef);
+				}
+				this.catalogFlow.endHash();
+				this.catalogFlow.endHash();
+				this.catalogFlow.writeName("DA");
+				this.catalogFlow.writeText("/Helv 0 Tf 0 g");
+				if (this.acroFormNeedsAppearances) {
+					this.catalogFlow.writeName("NeedAppearances");
+					this.catalogFlow.writeBoolean(true);
+				}
+				this.catalogFlow.endHash();
+				this.catalogFlow.lineBreak();
 			}
 
 			// ViewerPreferences

@@ -130,4 +130,14 @@ public abstract class PDFPageOutput extends PDFGraphicsOutput {
 	/** Closes the innermost structure element opened by {@link #beginStructElement}. */
 	public void endStructElement() {
 	}
+
+	/**
+	 * Adds an interactive AcroForm field (text input, checkbox, choice or
+	 * button) to this page. No-op if the implementation does not support forms.
+	 *
+	 * @param field the form field
+	 * @throws java.io.IOException if an I/O error occurs
+	 */
+	public void addFormField(final net.zamasoft.pdfg2d.pdf.form.FormField field) throws java.io.IOException {
+	}
 }
