@@ -20,7 +20,14 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
   - **LI は LBody を内包**（PDF/UA 7.2）。
   - **TH は Scope 属性**を付与（PDF/UA 7.5、HTML `scope` 属性・既定 Column）。
   - フォーム有効時は**フォームウィジェットを `Form` 構造要素に内包**（PDF/UA
-    7.18.4）。`PdfUaValidationTest` はフォーム入力を含む文書でも PDF/UA-1 適合を検証。
+    7.18.4）。
+  - **リンクを `Link` 構造要素に内包し、注釈に `/Contents`（代替説明、リンク
+    テキストまたは URI）を付与**（PDF/UA 7.18.5、7.18.1）。
+  - **画像を `Figure` 構造要素に内包し `/Alt`（HTML `alt`）を付与**（img/svg/
+    object）。従来は画像が包含段落の `/Alt` を汚染していたのを修正。
+  - 要素マッピング拡張: figcaption→Caption。
+- 検証: `PdfUaValidationTest` が veraPDF PDF/UA-1 で、見出し・段落・リスト・表に
+  加え**フォーム入力・画像・リンクを含む文書**の適合を実証。
 - **マーカーは非表示なのでレンダリング非破壊（imageTest 安全）、既定 OFF により
   未タグ文書の出力は Copper PDF 3.2 と完全同一**。
 - 検証: **`PdfUaValidationTest` が veraPDF で PDF/UA-1 適合を実証**（見出し・段落・
