@@ -154,6 +154,15 @@ public class FontManagerImpl implements FontManager, Closeable {
 
 		private int charOffset;
 
+		/**
+		 * The source offset of the first character of the pending glyph. The
+		 * pending glyph is emitted lazily (when the next character cannot
+		 * extend it), at which point {@link #charOffset} has already advanced
+		 * to the following character — emitting with {@code charOffset} would
+		 * shift every glyph's source mapping by one character.
+		 */
+		private int glyphOffset;
+
 		private byte len;
 
 		private int gid;
@@ -271,7 +280,7 @@ public class FontManagerImpl implements FontManager, Closeable {
 					this.gid = -1;
 					this.pgid = -1;
 					this.len = 0;
-					this.glyphHandler.startTextRun(charOffset, this.fontStyle, this.fontMetrics);
+					this.glyphHandler.startTextRun(this.charOffset, this.fontStyle, this.fontMetrics);
 				}
 
 				// Check for ligature
@@ -291,6 +300,7 @@ public class FontManagerImpl implements FontManager, Closeable {
 					if (this.gid != -1) {
 						this.glyph();
 					}
+					this.glyphOffset = this.charOffset;
 					this.ch[0] = c;
 					this.len = 1;
 					if (ls != 0) {
@@ -317,7 +327,7 @@ public class FontManagerImpl implements FontManager, Closeable {
 		}
 
 		private void glyph() {
-			this.glyphHandler.glyph(this.charOffset, this.ch, 0, this.len, this.gid);
+			this.glyphHandler.glyph(this.glyphOffset, this.ch, 0, this.len, this.gid);
 		}
 
 		private void endRun() {
