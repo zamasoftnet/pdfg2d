@@ -449,12 +449,28 @@ public final class TotalFit {
 			return best;
 		}
 
-		/** Skips discardable (glue) nodes at the head of a line. */
+		/**
+		 * Skips discardable nodes at the head of a line: glue and non-forced
+		 * penalties, up to the first box (TeX's post-break discarding). A forced
+		 * penalty stops the scan so an explicit empty line (two consecutive
+		 * forced breaks) is preserved. Skipping only glue is not enough: a break
+		 * candidate is emitted as [guard penalty, tail glue, penalty, space
+		 * glue], so a line starting right after an earlier break would otherwise
+		 * begin at the guard penalty and wrongly count the following space
+		 * glue's width into its natural width — an exactly-full line then looks
+		 * overfull and the break shifts one candidate early.
+		 */
 		private int skipDiscardables(final int start) {
 			int i = start;
 			final int n = this.nodes.size();
-			while (i < n && this.nodes.get(i) instanceof BreakNode.Glue) {
-				++i;
+			while (i < n) {
+				final BreakNode node = this.nodes.get(i);
+				if (node instanceof BreakNode.Glue
+						|| (node instanceof BreakNode.Penalty penalty && penalty.cost() > BreakNode.Penalty.FORCE)) {
+					++i;
+					continue;
+				}
+				break;
 			}
 			return i;
 		}
