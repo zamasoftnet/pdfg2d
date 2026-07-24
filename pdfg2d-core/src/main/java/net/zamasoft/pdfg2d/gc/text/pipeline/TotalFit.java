@@ -257,6 +257,14 @@ public final class TotalFit {
 			Active best = null;
 			double bestDemerits = Double.POSITIVE_INFINITY;
 			final List<Active> feasible = mandatory ? null : new ArrayList<>();
+			// Knuth-Plass deactivation: a candidate whose line is already
+			// overfull beyond its shrinkability can never become feasible at
+			// any later breakpoint (natural width only grows), so it is
+			// removed from the active list. Without this the active list
+			// grows with every breakpoint and the solver degenerates to
+			// quadratic-or-worse — observed as multi-minute hangs on long
+			// CJK paragraphs where every character boundary is a breakpoint.
+			final List<Active> deactivated = mandatory ? null : new ArrayList<>();
 			for (final Active active : actives) {
 				if (active.lineStart > b || (active.lineStart == b && !paragraphEnd && penaltyAt == null)) {
 					// The candidate line would be empty (break at its own head
@@ -284,6 +292,15 @@ public final class TotalFit {
 				final double badness = badness(r);
 				final boolean fits = r >= -1 && badness <= this.params.tolerance();
 				if (!mandatory && !fits) {
+					// Overfull beyond shrink — and hopeless forever, because
+					// the natural width only grows at later breakpoints. The
+					// penalty width at b counts only when actually breaking
+					// here, so the deactivation test conservatively uses the
+					// width without it.
+					final double naturalBase = this.sumWidth[b] - this.sumWidth[active.lineStart];
+					if (naturalBase > target + shrink) {
+						deactivated.add(active);
+					}
 					continue;
 				}
 
@@ -331,7 +348,21 @@ public final class TotalFit {
 				}
 				actives.clear();
 				actives.add(best);
-			} else if (feasible != null && !feasible.isEmpty()) {
+				return;
+			}
+			if (!deactivated.isEmpty()) {
+				if (deactivated.size() == actives.size() && feasible.isEmpty()) {
+					// Every candidate just became hopeless with no feasible
+					// break at b: force a break here from the least-bad one
+					// (fit-anyway), so the solver always makes progress.
+					final Active forced = this.fitAnyway(deactivated, b, penaltyAt, false);
+					actives.clear();
+					actives.add(forced);
+					return;
+				}
+				actives.removeAll(deactivated);
+			}
+			if (!feasible.isEmpty()) {
 				// Prune: among candidates broken at the same node with the same
 				// fitness, keep only the lowest total demerits.
 				for (final Active candidate : feasible) {

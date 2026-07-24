@@ -159,6 +159,49 @@ class TotalFitTest {
 	}
 
 	@Test
+	void longCjkParagraphSolvesInLinearTime() {
+		// 和文の典型: 全文字境界が分割候補(box+penalty(0)の繰り返し)。
+		// deactivation(shrink限界超過のactive除去)がないとactiveが
+		// 分割候補数に比例して伸び、実測で数分規模にハングした
+		// (2026-07-24、text.line-breaker既定化時に発覚)。10000字でも
+		// 秒未満で解けることを固定する。
+		final List<BreakNode> nodes = new ArrayList<>();
+		for (int i = 0; i < 10000; ++i) {
+			if (i > 0) {
+				nodes.add(new BreakNode.Penalty(0, 0, false, null));
+			}
+			nodes.add(box(10));
+		}
+		final long start = System.nanoTime();
+		final List<BrokenLine> lines = TotalFit.totalFit(nodes, 400,
+				Parameters.texDefaults().withLastLine(LastLinePolicy.JUSTIFY));
+		final long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
+		assertTrue(lines.size() > 200, "expected many lines, got " + lines.size());
+		assertTrue(elapsedMillis < 5000, "solver took " + elapsedMillis + "ms — deactivation regressed?");
+	}
+
+	@Test
+	void allCandidatesHopelessForcesProgress() {
+		// 分割禁止で結ばれた長大な塊の後に通常の分割候補が続く場合、
+		// 全activeが一斉にshrink限界を超えても、fit-anywayで前進する
+		// (無限ループ・空active落ちしない)。
+		final List<BreakNode> nodes = new ArrayList<>();
+		nodes.add(box(5));
+		nodes.add(glue(1, 0.5, 0));
+		// 幅50の行に対し到底収まらない不可分の塊
+		for (int i = 0; i < 30; ++i) {
+			nodes.add(box(10));
+			if (i < 29) {
+				nodes.add(BreakNode.Penalty.forbidden());
+			}
+		}
+		nodes.add(glue(1, 0.5, 0));
+		nodes.add(box(5));
+		final List<BrokenLine> lines = TotalFit.totalFit(nodes, 50, Parameters.texDefaults());
+		assertTrue(lines.size() >= 2, "expected the oversized chunk to be forced onto its own line(s)");
+	}
+
+	@Test
 	void fixedMeasureRejectsNonPositiveWidth() {
 		assertThrows(IllegalArgumentException.class, () -> LineMeasure.fixed(0));
 		assertThrows(IllegalArgumentException.class, () -> LineMeasure.fixed(Double.POSITIVE_INFINITY));
