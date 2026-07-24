@@ -173,6 +173,16 @@ public final class TotalFit {
 		private final List<BreakNode> nodes;
 		private final LineMeasure measure;
 		private final Parameters params;
+		/**
+		 * The line index from which the width is constant
+		 * ({@link LineMeasure#easyLine()}): line numbers at or beyond it are one
+		 * equivalence class for candidate dominance — the remaining widths, and
+		 * therefore the future demerits, are identical for both candidates, so
+		 * keeping only the lower-demerits prefix preserves the optimum. Without
+		 * this the active list holds one candidate per distinct line count
+		 * (unbounded divergence on breakpoint-dense paragraphs).
+		 */
+		private final int easyLine;
 		/** Cumulative natural width/stretch/shrink before each node index. */
 		private final double[] sumWidth, sumStretch, sumShrink;
 
@@ -180,6 +190,7 @@ public final class TotalFit {
 			this.nodes = nodes;
 			this.measure = measure;
 			this.params = params;
+			this.easyLine = measure.easyLine();
 			final int n = nodes.size();
 			this.sumWidth = new double[n + 1];
 			this.sumStretch = new double[n + 1];
@@ -256,7 +267,25 @@ public final class TotalFit {
 
 			Active best = null;
 			double bestDemerits = Double.POSITIVE_INFINITY;
-			final List<Active> feasible = mandatory ? null : new ArrayList<>();
+			// Non-mandatory pruning state: a candidate is kept only when its
+			// total demerits are strictly below every earlier candidate of the
+			// same (fitness, line-class) at this breakpoint — equivalent to the
+			// old post-hoc dominance scan ("dominated when an earlier candidate
+			// has <= total"), but checked before allocating the BrokenLine and
+			// Active. On breakpoint-dense paragraphs (CJK justification) the old
+			// order allocated hundreds of records per breakpoint only to discard
+			// nearly all of them.
+			final List<Active> addedAtB = mandatory ? null : new ArrayList<>();
+			final double[] minByClass;
+			final java.util.Map<Long, Double> minByClassWide;
+			if (mandatory || this.easyLine > 255) {
+				minByClass = null;
+				minByClassWide = mandatory ? null : new java.util.HashMap<>();
+			} else {
+				minByClass = new double[(this.easyLine + 1) * 4];
+				java.util.Arrays.fill(minByClass, Double.POSITIVE_INFINITY);
+				minByClassWide = null;
+			}
 			// Knuth-Plass deactivation: a candidate whose line is already
 			// overfull beyond its shrinkability can never become feasible at
 			// any later breakpoint (natural width only grows), so it is
@@ -323,6 +352,26 @@ public final class TotalFit {
 				}
 				final double total = active.totalDemerits + demerits;
 
+				if (!mandatory) {
+					final int lineClass = Math.min(active.line + 1, this.easyLine);
+					if (minByClass != null) {
+						final int key = lineClass * 4 + fitness;
+						if (total >= minByClass[key]) {
+							continue;
+						}
+						minByClass[key] = total;
+					} else {
+						final Long key = ((long) lineClass << 2) | fitness;
+						final Double min = minByClassWide.get(key);
+						if (min != null && total >= min) {
+							continue;
+						}
+						minByClassWide.put(key, total);
+					}
+				} else if (total >= bestDemerits) {
+					continue;
+				}
+
 				final BreakKind kind = paragraphEnd ? BreakKind.PARAGRAPH_END
 						: mandatory ? BreakKind.FORCED : BreakKind.NORMAL;
 				final double appliedRatio = raggedLast && natural < target ? 0 : clampApplied(r);
@@ -331,12 +380,10 @@ public final class TotalFit {
 				final Active continuation = new Active(b, skipDiscardables(b + 1), active.line + 1, fitness, flagged,
 						total, active, lineRecord);
 				if (mandatory) {
-					if (total < bestDemerits) {
-						bestDemerits = total;
-						best = continuation;
-					}
+					bestDemerits = total;
+					best = continuation;
 				} else {
-					feasible.add(continuation);
+					addedAtB.add(continuation);
 				}
 			}
 
@@ -351,7 +398,7 @@ public final class TotalFit {
 				return;
 			}
 			if (!deactivated.isEmpty()) {
-				if (deactivated.size() == actives.size() && feasible.isEmpty()) {
+				if (deactivated.size() == actives.size() && addedAtB.isEmpty()) {
 					// Every candidate just became hopeless with no feasible
 					// break at b: force a break here from the least-bad one
 					// (fit-anyway), so the solver always makes progress.
@@ -360,26 +407,15 @@ public final class TotalFit {
 					actives.add(forced);
 					return;
 				}
-				actives.removeAll(deactivated);
+				// Identity-based single pass; List.removeAll is
+				// O(|actives| * |deactivated|) which compounds with the hot
+				// per-breakpoint loop on breakpoint-dense paragraphs.
+				final java.util.Set<Active> dead = java.util.Collections
+						.newSetFromMap(new java.util.IdentityHashMap<>());
+				dead.addAll(deactivated);
+				actives.removeIf(dead::contains);
 			}
-			if (!feasible.isEmpty()) {
-				// Prune: among candidates broken at the same node with the same
-				// fitness, keep only the lowest total demerits.
-				for (final Active candidate : feasible) {
-					boolean dominated = false;
-					for (final Active existing : actives) {
-						if (existing.breakIndex == candidate.breakIndex && existing.fitness == candidate.fitness
-								&& existing.line == candidate.line
-								&& existing.totalDemerits <= candidate.totalDemerits) {
-							dominated = true;
-							break;
-						}
-					}
-					if (!dominated) {
-						actives.add(candidate);
-					}
-				}
-			}
+			actives.addAll(addedAtB);
 		}
 
 		/** Builds the least-bad continuation when nothing fits (fit-anyway). */
