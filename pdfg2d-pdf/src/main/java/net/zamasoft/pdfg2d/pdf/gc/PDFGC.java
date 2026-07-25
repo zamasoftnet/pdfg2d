@@ -456,6 +456,61 @@ public class PDFGC implements GC, Closeable {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>
+	 * Opens an {@code /Artifact} marked content sequence on tagged page
+	 * streams and keeps {@link #inMark} set for its whole duration, so the
+	 * drawing operations performed inside (fills, strokes, images and above
+	 * all text) do not open real content marks of their own: their output
+	 * lands unchanged inside the artifact. Untagged documents, patterns and
+	 * group images open nothing, so their output is byte-for-byte identical
+	 * to a call without the scope.
+	 * </p>
+	 *
+	 * <p>
+	 * Pending transform/clip state is flushed before the sequence is opened
+	 * (as {@link #fill} and friends do), so that the {@code q}/{@code cm}
+	 * belonging to the enclosing state does not end up inside the artifact.
+	 * </p>
+	 */
+	@Override
+	public State beginArtifactScope() throws GraphicsException {
+		if (DEBUG) {
+			LOG.fine("beginArtifactScope");
+		}
+		final boolean began;
+		try {
+			this.applyTransform();
+			this.applyClip();
+			began = this.beginArtifactTagged();
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+		if (!began) {
+			// Nothing was opened (untagged output, or an enclosing mark is
+			// already active): closing must be a no-op.
+			return GC.NO_OP_STATE;
+		}
+		return new State() {
+			private boolean closed;
+
+			@Override
+			public void close() throws GraphicsException {
+				if (this.closed) {
+					return;
+				}
+				this.closed = true;
+				try {
+					PDFGC.this.endTagged(true);
+				} catch (IOException e) {
+					throw new GraphicsException(e);
+				}
+			}
+		};
+	}
+
+	/**
 	 * Restores the most recently saved graphics state; invoked exactly once
 	 * when a {@link State} returned by {@link #begin()} is closed.
 	 */

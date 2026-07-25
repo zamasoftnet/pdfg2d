@@ -99,6 +99,48 @@ public interface GC {
 	 */
 	public State begin() throws GraphicsException;
 
+	/** A {@link State} whose {@code close()} does nothing. */
+	public static final State NO_OP_STATE = new State() {
+		@Override
+		public void close() throws GraphicsException {
+			// nothing to restore
+		}
+	};
+
+	/**
+	 * Opens an artifact scope: everything drawn until the returned handle is
+	 * closed is emitted as decorative content (a PDF {@code /Artifact} marked
+	 * content sequence) instead of real, extractable content. Real content
+	 * marks that the drawing operations would open themselves are suppressed
+	 * for the duration of the scope, so text stays text/vector operators but
+	 * carries no structure element and is skipped by text extraction and
+	 * assistive technology.
+	 *
+	 * <p>
+	 * Always use it with try-with-resources so that the scope is closed
+	 * symmetrically:
+	 * </p>
+	 *
+	 * <pre>{@code
+	 * try (GC.State artifact = gc.beginArtifactScope()) {
+	 *     drawable.draw(gc, x, y);
+	 * }
+	 * }</pre>
+	 *
+	 * <p>
+	 * The default implementation does nothing and returns {@link #NO_OP_STATE}:
+	 * back-ends without a logical structure (untagged PDF, patterns, group
+	 * images, Graphics2D bridges, recorders) emit exactly the same output as
+	 * before. Only tagged PDF page content streams behave differently.
+	 * </p>
+	 *
+	 * @return a handle that closes the artifact scope; never {@code null}
+	 * @throws GraphicsException if a graphics error occurs
+	 */
+	public default State beginArtifactScope() throws GraphicsException {
+		return NO_OP_STATE;
+	}
+
 	/**
 	 * Resets the current graphics state to the initial state.
 	 *
