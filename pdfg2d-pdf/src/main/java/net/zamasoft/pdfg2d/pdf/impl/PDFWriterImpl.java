@@ -700,13 +700,42 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	 * @return the resource contents
 	 * @throws IOException if the resource is missing or cannot be read
 	 */
+	/**
+	 * 同梱リソースのキャッシュ(2026-07-29)。
+	 *
+	 * <p>
+	 * 読み元はJAR内の<b>不変な</b>リソース(ICCプロファイル)なので、
+	 * 変換のたびに読み直す理由がない。しかも
+	 * {@code Class.getResourceAsStream}はJARの場合
+	 * {@code sun.net.www.protocol.jar.URLJarFile}を経由し、これが
+	 * <b>同期されている</b>ため、並行変換が互いを待つ。
+	 * </p>
+	 *
+	 * <p>
+	 * 実測(2026-07-29、掃過24スレッドのスレッドダンプ): PDFWriterの
+	 * 初期化でここに7スレッドが滞留していた。1変換につき1回とはいえ、
+	 * JARロック+deflate展開(146KB)を毎回払っていた。
+	 * <b>製品はサーバとして並行変換する</b>ので、本番のスループットにも効く。
+	 * </p>
+	 */
+	private static final java.util.concurrent.ConcurrentMap<String, byte[]> RESOURCE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+
 	private static byte[] loadResource(final String name) throws IOException {
+		final byte[] cached = RESOURCE_CACHE.get(name);
+		if (cached != null) {
+			// 呼び出し側が書き換えても他へ波及しないよう複製を渡す
+			// (JARロックとdeflateは消え、残るのはメモリ複製だけ)
+			return cached.clone();
+		}
+		final byte[] bytes;
 		try (final var in = PDFWriterImpl.class.getResourceAsStream(name)) {
 			if (in == null) {
 				throw new IOException("Missing bundled resource: " + name);
 			}
-			return in.readAllBytes();
+			bytes = in.readAllBytes();
 		}
+		RESOURCE_CACHE.putIfAbsent(name, bytes);
+		return bytes.clone();
 	}
 
 	ObjectRef ensurePageResourceRef() {
