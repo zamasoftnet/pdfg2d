@@ -68,7 +68,41 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 		this.poll();
 	}
 
+	/**
+	 * 設定の再検査をこの間隔より頻繁には行いません(ミリ秒)。
+	 * {@code -Dnet.zamasoft.pdfg2d.font.pollIntervalMillis} で変更でき、
+	 * {@code 0} を指定すると毎回検査する従来の挙動に戻ります。
+	 */
+	private static final long POLL_INTERVAL_MS = Long
+			.getLong("net.zamasoft.pdfg2d.font.pollIntervalMillis", 1000L);
+
+	/** 最後に設定を検査した時刻({@link System#nanoTime()}のミリ秒換算)。 */
+	private long lastPollAt = 0L;
+
 	protected synchronized void poll() {
+		// **検査の間隔をあける**(2026-07-29)。
+		//
+		// {@link #lookup}は同期メソッドで、そこから毎回この poll が呼ばれ、
+		// {@code config.exists()} が**ファイルシステムのstat**を行っていた。
+		// lookup は文字の並びごとに呼ばれる
+		// ({@code StyledTextUnitizer.characters} → {@code FontManagerImpl
+		// .getFontListMetrics})ため、<b>全変換の全文字がグローバルロックの中で
+		// syscallを1回する</b>ことになり、並行変換が事実上直列化していた。
+		//
+		// 実測(2026-07-29、掃過24スレッド): CPU時間/経過時間の比が
+		// <b>1.3</b>しかなく、スレッドダンプでは20本がこのモニタ待ちだった。
+		// 24スレッドでも12スレッドでも同じ速度、という症状の原因である。
+		//
+		// 設定ファイルの更新検出(ホットリロード)は維持するが、1秒に1回で
+		// 十分である——設定を書き換えた運用者が1秒待てないことはない。
+		if (this.configValidity != null) {
+			final long now = System.nanoTime() / 1_000_000L;
+			if (now - this.lastPollAt < POLL_INTERVAL_MS) {
+				return;
+			}
+			this.lastPollAt = now;
+		}
+
 		try {
 			if (!this.config.exists()) {
 				Exception e = new FileNotFoundException(this.config.getURI().toString());
