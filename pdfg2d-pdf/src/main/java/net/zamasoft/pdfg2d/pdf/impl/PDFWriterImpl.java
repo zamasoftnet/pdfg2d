@@ -906,7 +906,17 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		objectsFlow.lineBreak();
 
 		// Convert coordinate system from PDF default (bottom-left) to user default
-		// (top-left)
+		// (top-left).
+		//
+		// The scale factors are RECIPROCALS of the page size, so they must not
+		// be written at the coordinate precision used for content streams:
+		// 1/595.28 = 0.00168 rounds to 0 at 1-2 decimals and the matrix
+		// degenerates to [0 0 0 0 0 0], which is not invertible. Readers then
+		// report the page as damaged (Adobe Reader: "There was an error on this
+		// page") and the group renders as nothing. Raise the precision for this
+		// array only, then restore it.
+		final int savedPrecision = objectsFlow.getPrecision();
+		objectsFlow.setPrecision(12);
 		objectsFlow.writeName("Matrix");
 		objectsFlow.startArray();
 		objectsFlow.writeReal(1.0 / width);
@@ -916,6 +926,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		objectsFlow.writeReal(0);
 		objectsFlow.writeReal(0);
 		objectsFlow.endArray();
+		objectsFlow.setPrecision(savedPrecision);
 		objectsFlow.lineBreak();
 
 		objectsFlow.writeName("BBox");
