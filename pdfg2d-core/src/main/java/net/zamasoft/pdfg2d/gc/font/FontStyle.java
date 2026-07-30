@@ -72,8 +72,21 @@ public interface FontStyle {
 
 	/**
 	 * Returns the font policy list.
-	 * 
+	 *
 	 * @return the font policy list
 	 */
 	public FontPolicyList getPolicy();
+
+	/**
+	 * Returns the OpenType feature settings (CSS {@code font-feature-settings}
+	 * / {@code font-variant-east-asian}). The default is
+	 * {@link FontFeatureSet#EMPTY} so existing implementations keep the
+	 * engine's default shaping behaviour.
+	 *
+	 * @return the feature settings (never {@code null})
+	 * @since 1.3
+	 */
+	public default FontFeatureSet getFeatures() {
+		return FontFeatureSet.EMPTY;
+	}
 }
