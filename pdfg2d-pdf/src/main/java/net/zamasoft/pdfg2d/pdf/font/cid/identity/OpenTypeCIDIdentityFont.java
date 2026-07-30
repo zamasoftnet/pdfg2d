@@ -51,9 +51,7 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 	public int toGID(int c) {
 		OpenTypeCIDIdentityFontSource source = (OpenTypeCIDIdentityFontSource) this.getFontSource();
 		int gid = source.getCmapFormat().mapCharCode(c);
-		if (this.vSubst != null) {
-			gid = this.vSubst.substitute(gid);
-		}
+		gid = this.substituteVertical(gid);
 		return gid;
 	}
 

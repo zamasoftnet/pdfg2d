@@ -87,9 +87,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		if (fgid == 0) {
 			return 0;
 		}
-		if (this.vSubst != null) {
-			fgid = this.vSubst.substitute(fgid);
-		}
+		fgid = this.substituteVertical(fgid);
 		int gid = this.fgidToGid.get(fgid);
 		if (gid == -1) {
 			gid = this.glyphCount++;
@@ -128,9 +126,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		if (secondFgid == 0) {
 			return -1;
 		}
-		if (this.vSubst != null) {
-			secondFgid = this.vSubst.substitute(secondFgid);
-		}
+		secondFgid = this.substituteVertical(secondFgid);
 		int ligFgid = this.gsubLigature(firstFgid, secondFgid);
 		if (ligFgid <= 0) {
 			return -1;
@@ -207,7 +203,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 
 	public void drawTo(GC gc, Text text) throws IOException, GraphicsException {
 		if (gc instanceof PDFGC) {
-			PDFFontUtils.drawCIDTo(((PDFGC) gc).getPDFGraphicsOutput(), text, this.vSubst != null);
+			PDFFontUtils.drawCIDTo(((PDFGC) gc).getPDFGraphicsOutput(), text, !this.vSubsts.isEmpty());
 		} else {
 			FontUtils.drawText(gc, this, text);
 		}
@@ -218,7 +214,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		final int[] unicodea = this.gidToCid.toArray();
 		final short[] w = this.widths.toArray();
 		final short[] w2;
-		if (this.vSubst != null) {
+		if (!this.vSubsts.isEmpty()) {
 			w2 = this.heights.toArray();
 		} else {
 			w2 = null;

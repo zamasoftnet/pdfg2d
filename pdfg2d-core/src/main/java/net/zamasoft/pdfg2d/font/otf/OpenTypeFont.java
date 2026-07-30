@@ -52,7 +52,8 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 
 	protected final OpenTypeFontSource source;
 
-	protected final SingleSubst vSubst;
+	/** Required vertical substitutions (vrt2/vert), empty in horizontal mode. */
+	protected final List<SingleSubst> vSubsts;
 
 	protected final XmtxTable vmtx, hmtx;
 
@@ -107,34 +108,45 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		this.cpal = (this.colr != null) ? (CpalTable) ttfFont.getTable(Table.CPAL) : null;
 
 		if (this.source.getDirection() == Direction.TB) {
-			// Vertical writing mode
+			// Vertical writing mode. vrt2 (all-vertical alternates) supersedes
+			// vert when the font has it; either way apply every matching
+			// lookup's subtables, in lookup-list order — the former
+			// first-lookup/first-subtable shortcut dropped substitutions in
+			// fonts that split vert across subtables (unified 2026-07-31 with
+			// the generic feature-plan collection; script/language filtering
+			// matches liga/kern: none).
 			final var gsub = (GsubTable) ttfFont.getTable(Table.GSUB);
-			final var scriptList = gsub.getScriptList();
-			var script = scriptList.findScript(ScriptTags.SCRIPT_TAG_KANA);
-			if (script == null) {
-				script = scriptList.findScript(ScriptTags.SCRIPT_TAG_HANI);
-			}
-			if (script == null) {
-				script = scriptList.findScript(ScriptTags.SCRIPT_TAG_LATN);
-			}
-			if (script == null) {
-				script = scriptList.findScript(ScriptTags.SCRIPT_TAG_HANG);
-			}
-			if (script != null) {
-				final var langSys = script.getDefaultLangSys();
-				final var featureList = gsub.getFeatureList();
-				final var feature = featureList.findFeature(langSys, FeatureTags.FEATURE_TAG_VERT);
-				if (feature != null) {
-					final var lookupList = gsub.getLookupList();
-					final var lookup = lookupList.getLookup(feature, 0);
-					this.vSubst = (SingleSubst) lookup.getSubtable(0);
+			if (gsub != null) {
+				var subs = gsub.collectSingleSubstitutions(TAG_VRT2);
+				if (subs.isEmpty()) {
+					subs = gsub.collectSingleSubstitutions(TAG_VERT);
+				}
+				if (!subs.isEmpty()) {
+					this.vSubsts = subs;
 					this.vmtx = (XmtxTable) ttfFont.getTable(Table.VMTX);
 					return;
 				}
 			}
 		}
-		this.vSubst = null;
+		this.vSubsts = List.of();
 		this.vmtx = null;
+	}
+
+	/** Packed {@code vrt2}/{@code vert} feature tags. */
+	private static final int TAG_VRT2 = 0x76727432, TAG_VERT = 0x76657274;
+
+	/**
+	 * Applies the required vertical substitution ({@code vrt2}/{@code vert})
+	 * to a font glyph id; identity in horizontal mode.
+	 *
+	 * @param gid the font glyph id after cmap (and optional feature GSUB)
+	 * @return the (possibly substituted) font glyph id
+	 */
+	protected final int substituteVertical(int gid) {
+		for (int i = 0; i < this.vSubsts.size(); ++i) {
+			gid = this.vSubsts.get(i).substitute(gid);
+		}
+		return gid;
 	}
 
 	/**
@@ -218,10 +230,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	public int toGID(final int c) {
 		final var source = (OpenTypeFontSource) this.getFontSource();
 		int gid = source.getCmapFormat().mapCharCode(c);
-		if (this.vSubst != null) {
-			gid = this.vSubst.substitute(gid);
-		}
-		return gid;
+		return this.substituteVertical(gid);
 	}
 
 	@Override
@@ -232,10 +241,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		// エンジン必須のvertはCSSからは無効化させない(印刷エンジンとしての
 		// 意図的仕様差——consult-codex-2026-07-31-font-features.txt §3.7)
 		gid = this.substituteFeatures(gid, features);
-		if (this.vSubst != null) {
-			gid = this.vSubst.substitute(gid);
-		}
-		return gid;
+		return this.substituteVertical(gid);
 	}
 
 	/**

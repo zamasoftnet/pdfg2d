@@ -52,7 +52,23 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 
 	protected Collection<FontSource> allFonts = new ArrayList<FontSource>();
 
-	transient protected Map<FontStyle, FontSource[]> fontListCache = null;
+	/**
+	 * フォント選択はfamily/weight/style/direction/policyだけを読む(size・
+	 * OpenType featureは整形の話で選択に関与しない)ため、キャッシュキーは
+	 * その5成分に限定する——FontStyle全体をキーにするとfeature集合や
+	 * サイズ違いだけの大量のstyleで無駄に分裂する(2026-07-31、
+	 * consult-codex-2026-07-31-font-features.txt §3.8)。
+	 */
+	protected record SelectionKey(net.zamasoft.pdfg2d.gc.font.FontFamilyList family, FontStyle.Weight weight,
+			FontStyle.Style style, FontStyle.Direction direction,
+			net.zamasoft.pdfg2d.gc.font.FontPolicyList policy) {
+		static SelectionKey of(final FontStyle fontStyle) {
+			return new SelectionKey(fontStyle.getFamily(), fontStyle.getWeight(), fontStyle.getStyle(),
+					fontStyle.getDirection(), fontStyle.getPolicy());
+		}
+	}
+
+	transient protected Map<SelectionKey, FontSource[]> fontListCache = null;
 
 	protected final boolean strictMatchName;
 
@@ -214,9 +230,10 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 			return this.allFonts.toArray(new FontSource[this.allFonts.size()]);
 		}
 
+		final SelectionKey key = SelectionKey.of(fontStyle);
 		FontSource[] fonts;
 		if (this.fontListCache != null) {
-			fonts = this.fontListCache.get(fontStyle);
+			fonts = this.fontListCache.get(key);
 			if (fonts != null) {
 				return fonts;
 			}
@@ -226,9 +243,9 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 		this.lookup(fontStyle, fontStyle.getFamily(), fontList, false);
 		fonts = fontList.toArray(new FontSource[fontList.size()]);
 		if (this.fontListCache == null) {
-			this.fontListCache = new LRUCache<FontStyle, FontSource[]>(128);
+			this.fontListCache = new LRUCache<SelectionKey, FontSource[]>(128);
 		}
-		this.fontListCache.put(fontStyle, fonts);
+		this.fontListCache.put(key, fonts);
 		return fonts;
 	}
 
