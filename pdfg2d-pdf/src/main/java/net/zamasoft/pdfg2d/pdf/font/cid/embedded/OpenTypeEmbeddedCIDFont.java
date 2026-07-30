@@ -153,6 +153,13 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	}
 
 	@Override
+	public short getAdvanceAdjustment(int gid, net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		// Translate the subset glyph id back to a font glyph id for GPOS.
+		int fgid = this.gidToFgid.get(gid);
+		return fgid >= 0 ? super.getAdvanceAdjustment(fgid, features) : 0;
+	}
+
+	@Override
 	public short getKerning(int sgid, int gid) {
 		// Translate the subset glyph ids back to font glyph ids for GPOS.
 		int f1 = this.gidToFgid.get(sgid);

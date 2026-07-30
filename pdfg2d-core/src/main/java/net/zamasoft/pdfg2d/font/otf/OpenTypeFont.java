@@ -16,6 +16,7 @@ import net.zamasoft.pdfg2d.font.table.GposTable;
 import net.zamasoft.pdfg2d.font.table.GsubTable;
 import net.zamasoft.pdfg2d.font.table.PairPos;
 import net.zamasoft.pdfg2d.font.table.ScriptTags;
+import net.zamasoft.pdfg2d.font.table.SinglePos;
 import net.zamasoft.pdfg2d.font.table.SingleSubst;
 import net.zamasoft.pdfg2d.font.table.Table;
 import net.zamasoft.pdfg2d.font.table.XmtxTable;
@@ -67,6 +68,13 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	 * because plans are cheap to rebuild after deserialisation.
 	 */
 	private transient volatile java.util.concurrent.ConcurrentHashMap<net.zamasoft.pdfg2d.gc.font.FontFeatureSet, java.util.List<SingleSubst>> featurePlans;
+
+	/**
+	 * Cache of composed GPOS single-adjustment plans per feature set
+	 * ({@code palt}, {@code vpal}, ...) — same sharing rules as
+	 * {@link #featurePlans}.
+	 */
+	private transient volatile java.util.concurrent.ConcurrentHashMap<net.zamasoft.pdfg2d.gc.font.FontFeatureSet, java.util.List<SinglePos>> positionPlans;
 
 	/** GPOS {@code kern} pair-adjustment subtables, or {@code null}. */
 	private final List<PairPos> kernPairs;
@@ -256,6 +264,60 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 			gid = plan.get(i).substitute(gid);
 		}
 		return gid;
+	}
+
+	@Override
+	public short getAdvanceAdjustment(final int gid, final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		if (gid == 0 || features.isEmpty()) {
+			return 0;
+		}
+		var plans = this.positionPlans;
+		if (plans == null) {
+			synchronized (this) {
+				plans = this.positionPlans;
+				if (plans == null) {
+					this.positionPlans = plans = new java.util.concurrent.ConcurrentHashMap<>();
+				}
+			}
+		}
+		final var plan = plans.computeIfAbsent(features, this::buildPositionPlan);
+		if (plan.isEmpty()) {
+			return 0;
+		}
+		// 書字軸の成分だけを合算する。横書きにvpal(x成分ほぼ0)、縦書きに
+		// palt(y成分ほぼ0)が指定されても自然に無効果になり、タグと方向の
+		// 対応表は不要(consult-codex-2026-07-31-font-features.txt §3.7)
+		final boolean vertical = this.isVertical();
+		int adjustment = 0;
+		for (int i = 0; i < plan.size(); ++i) {
+			final var pos = plan.get(i).getPosition(gid);
+			if (pos != null) {
+				adjustment += vertical ? pos.yAdvance() : pos.xAdvance();
+			}
+		}
+		// hmtx幅(getHAdvance)と同じ基準へ正規化する(2048 UPMのTTF等)
+		return (short) (adjustment * FontSource.DEFAULT_UNITS_PER_EM
+				/ ((OpenTypeFontSource) this.getFontSource()).getUnitsPerEm());
+	}
+
+	/**
+	 * Composes the GPOS single-adjustment subtables of the enabled features.
+	 * Like {@link #buildFeaturePlan}, lookup boundaries are flattened (each
+	 * covering subtable contributes) — the fonts in practice carry one lookup
+	 * per metrics feature.
+	 */
+	private java.util.List<SinglePos> buildPositionPlan(final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		final var gpos = (GposTable) this.source.getOpenTypeFont().getTable(Table.GPOS);
+		if (gpos == null) {
+			return java.util.List.of();
+		}
+		final var plan = new java.util.ArrayList<SinglePos>();
+		for (int i = 0; i < features.size(); ++i) {
+			if (features.valueAt(i) > 0) {
+				plan.addAll(gpos.collectSinglePositions(features.tagAt(i)));
+			}
+		}
+		return java.util.List.copyOf(plan);
 	}
 
 	/** Composes the GSUB single-substitution subtables of the enabled features. */

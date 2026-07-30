@@ -40,12 +40,29 @@ public interface FontMetrics extends Serializable {
 	public double getDescent();
 
 	/**
-	 * Returns the advance width of the specified glyph.
-	 * 
+	 * Returns the advance width of the specified glyph. Includes the
+	 * feature-derived adjustment ({@link #getAdvanceAdjustment(int)}) when the
+	 * implementation carries feature settings.
+	 *
 	 * @param gid the glyph ID
 	 * @return the advance width
 	 */
 	public double getAdvance(int gid);
+
+	/**
+	 * Returns the glyph's advance adjustment from OpenType features such as
+	 * {@code palt} (already included in {@link #getAdvance(int)}). Renderers
+	 * whose base pen movement comes from the font's own widths (PDF {@code /W}
+	 * + {@code TJ}) emit this separately, the same way kerning is re-derived
+	 * at draw time.
+	 *
+	 * @param gid the glyph ID
+	 * @return the advance adjustment (0 when no metrics feature is enabled)
+	 * @since 1.3
+	 */
+	public default double getAdvanceAdjustment(final int gid) {
+		return 0;
+	}
 
 	/**
 	 * Returns the width of the specified glyph.

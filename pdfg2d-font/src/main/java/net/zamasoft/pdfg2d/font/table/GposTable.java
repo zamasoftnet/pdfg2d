@@ -33,9 +33,11 @@ public record GposTable(ScriptList scriptList, FeatureList featureList, LookupLi
 			final int featureListOffset = raf.readUnsignedShort();
 			final int lookupListOffset = raf.readUnsignedShort();
 
-			// Pair adjustment (type 2) is parsed for kerning; other lookup
-			// types are not needed for positioning here.
+			// Single adjustment (type 1, e.g. palt/vpal) and pair adjustment
+			// (type 2, kerning) are parsed; other lookup types are not needed
+			// for positioning here.
 			final LookupSubtableFactory factory = (type, subRaf, offset1) -> switch (type) {
+				case 1 -> SinglePos.read(subRaf, offset1);
 				case 2 -> PairPos.read(subRaf, offset1);
 				default -> null;
 			};
@@ -56,6 +58,7 @@ public record GposTable(ScriptList scriptList, FeatureList featureList, LookupLi
 	@Override
 	public LookupSubtable read(final int type, final RandomAccessFile raf, final int offset) throws IOException {
 		return switch (type) {
+			case 1 -> SinglePos.read(raf, offset);
 			case 2 -> PairPos.read(raf, offset);
 			default -> null;
 		};
@@ -94,6 +97,47 @@ public record GposTable(ScriptList scriptList, FeatureList featureList, LookupLi
 					}
 				}
 			}
+		}
+		return result;
+	}
+
+	/**
+	 * Collects the {@link SinglePos} subtables of every feature record with
+	 * the given tag (e.g. {@code palt}, {@code vpal}), across scripts and
+	 * languages — same collection policy as {@link #collectKernPairPos()}:
+	 * no script/language filtering, shared lookups deduplicated. Subtables
+	 * are returned in ascending lookup-list order.
+	 *
+	 * @param tag the packed 4-byte feature tag
+	 * @return the single-positioning subtables (possibly empty)
+	 */
+	public java.util.List<SinglePos> collectSinglePositions(final int tag) {
+		final var records = this.featureList.featureRecords();
+		final var features = this.featureList.features();
+		final var byLookup = new java.util.TreeMap<Integer, java.util.List<SinglePos>>();
+		for (int i = 0; i < records.length; i++) {
+			if (records[i].tag() != tag) {
+				continue;
+			}
+			final var feature = features[i];
+			for (int li = 0; li < feature.getLookupCount(); li++) {
+				final int lookupIndex = feature.getLookupListIndex(li);
+				if (byLookup.containsKey(lookupIndex)) {
+					continue;
+				}
+				final var subs = new java.util.ArrayList<SinglePos>();
+				final var lookup = this.lookupList.lookups()[lookupIndex];
+				for (int si = 0; si < lookup.getSubtableCount(); si++) {
+					if (lookup.getSubtable(si) instanceof SinglePos sp) {
+						subs.add(sp);
+					}
+				}
+				byLookup.put(lookupIndex, subs);
+			}
+		}
+		final var result = new java.util.ArrayList<SinglePos>();
+		for (final var subs : byLookup.values()) {
+			result.addAll(subs);
 		}
 		return result;
 	}

@@ -22,11 +22,14 @@ public class FontMetricsImpl implements FontMetrics {
 
 	protected final double ascent, descent;
 
+	/** The style's OpenType feature settings (advance adjustments, etc.). */
+	protected final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features;
+
 	protected Font font = null;
 
 	/**
 	 * Creates a new FontMetricsImpl.
-	 * 
+	 *
 	 * @param fontStore  the font store
 	 * @param fontSource the font source
 	 * @param fontStyle  the font style
@@ -34,6 +37,7 @@ public class FontMetricsImpl implements FontMetrics {
 	public FontMetricsImpl(final FontStore fontStore, final FontSource fontSource, final FontStyle fontStyle) {
 		this.fontStore = fontStore;
 		this.source = fontSource;
+		this.features = fontStyle.getFeatures();
 		this.size = fontStyle.getSize();
 		this.xheight = this.size * this.source.getXHeight() / FontSource.DEFAULT_UNITS_PER_EM;
 
@@ -111,7 +115,20 @@ public class FontMetricsImpl implements FontMetrics {
 
 	@Override
 	public double getAdvance(final int gid) {
-		return this.size * this.getFont().getAdvance(gid) / FontSource.DEFAULT_UNITS_PER_EM;
+		double advance = this.size * this.getFont().getAdvance(gid) / FontSource.DEFAULT_UNITS_PER_EM;
+		if (!this.features.isEmpty()) {
+			advance += this.getAdvanceAdjustment(gid);
+		}
+		return advance;
+	}
+
+	@Override
+	public double getAdvanceAdjustment(final int gid) {
+		if (this.features.isEmpty()) {
+			return 0;
+		}
+		return this.size * this.getFont().getAdvanceAdjustment(gid, this.features)
+				/ FontSource.DEFAULT_UNITS_PER_EM;
 	}
 
 	@Override

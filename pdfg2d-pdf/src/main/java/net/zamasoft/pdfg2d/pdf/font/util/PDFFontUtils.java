@@ -93,6 +93,11 @@ public class PDFFontUtils {
 			double xadvance = xadvances == null ? 0 : xadvances[i];
 			if (i > 0) {
 				xadvance -= fm.getKerning(gids[i - 1], gids[i]);
+				// palt等のfeature由来の詰めもkerningと同型のTJ調整で再現する
+				// (ベースのペン移動は/W幅=素のグリフ幅から来るため)。行内の
+				// 最終グリフの調整は後続が無く不要——次のrunは配置座標が
+				// レイアウト(metrics=調整込み)から決まる
+				xadvance += fm.getAdvanceAdjustment(gids[i - 1]);
 			}
 			if (xadvance != 0) {
 				if (verticalFont) {

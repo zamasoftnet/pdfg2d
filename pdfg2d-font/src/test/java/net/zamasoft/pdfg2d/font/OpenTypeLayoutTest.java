@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import net.zamasoft.pdfg2d.font.table.CmapTable;
 import net.zamasoft.pdfg2d.font.table.GposTable;
 import net.zamasoft.pdfg2d.font.table.GsubTable;
+import net.zamasoft.pdfg2d.font.table.SinglePos;
 import net.zamasoft.pdfg2d.font.table.Table;
 
 /**
@@ -76,6 +77,39 @@ public class OpenTypeLayoutTest {
 			// not an error (the caller composes tags without kind dispatch).
 			assertTrue(gsub.collectSingleSubstitutions(0x70616c74).isEmpty(), // 'palt'
 					"palt is a GPOS feature and must yield no GSUB substitutions");
+		}
+	}
+
+	@Test
+	public void testGposSinglePositionsByFeatureTag() throws Exception {
+		// palt of U+3001 (cmap GID 1397): xPlacement=-19, xAdvance=-500 in a
+		// 1000-UPM font — verified directly against the font binary
+		// (2026-07-31). The full-width advance 1000 halves under palt.
+		try (final var otf = font()) {
+			final var gpos = (GposTable) otf.getTable(Table.GPOS);
+			assertNotNull(gpos, "The test font must have a GPOS table");
+			final var cmap = ((CmapTable) otf.getTable(Table.CMAP))
+					.getCmapFormat(Table.PLATFORM_MICROSOFT, (short) 1);
+			final int comma = cmap.mapCharCode(0x3001);
+			assertEquals(1397, comma, "cmap GID of U+3001");
+
+			final var palt = gpos.collectSinglePositions(0x70616c74); // 'palt'
+			assertTrue(!palt.isEmpty(), "The test font must carry palt single positions");
+			SinglePos.GlyphPosition pos = null;
+			for (final var sp : palt) {
+				final var p = sp.getPosition(comma);
+				if (p != null) {
+					pos = p;
+				}
+			}
+			assertNotNull(pos, "U+3001 must be palt-covered");
+			assertEquals(-19, pos.xPlacement(), "palt xPlacement of U+3001");
+			assertEquals(-500, pos.xAdvance(), "palt xAdvance of U+3001");
+
+			// A glyph outside the coverage yields null, and a GSUB-only tag
+			// yields an empty plan.
+			assertTrue(gpos.collectSinglePositions(0x6a703738).isEmpty(), // 'jp78'
+					"jp78 is a GSUB feature and must yield no GPOS positions");
 		}
 	}
 

@@ -45,6 +45,22 @@ public interface Font extends Serializable {
 	}
 
 	/**
+	 * Returns the glyph's advance adjustment (in font design units, along the
+	 * writing axis) from the enabled features' GPOS single adjustments (e.g.
+	 * {@code palt}/{@code vpal}). The default is 0 so existing implementations
+	 * keep their behaviour.
+	 *
+	 * @param gid      the glyph ID
+	 * @param features the feature settings (never {@code null})
+	 * @return the advance adjustment (usually negative for {@code palt})
+	 * @since 1.3
+	 */
+	public default short getAdvanceAdjustment(final int gid,
+			final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		return 0;
+	}
+
+	/**
 	 * Returns the advance width of the glyph.
 	 * 
 	 * @param gid the glyph ID
