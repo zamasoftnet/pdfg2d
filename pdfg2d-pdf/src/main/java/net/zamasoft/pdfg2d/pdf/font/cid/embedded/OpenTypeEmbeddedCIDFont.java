@@ -72,6 +72,17 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		return this.addGID(c, fgid);
 	}
 
+	@Override
+	public int toGID(int c, net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		OpenTypeEmbeddedCIDFontSource source = (OpenTypeEmbeddedCIDFontSource) this.getFontSource();
+		int fgid = source.getCmapFormat().mapCharCode(c);
+		// cmap後・subset登録前にfeature置換(jp78等)。addGIDが縦書き置換と
+		// subset GIDの採番・width登録を行うため、置換後のfont GIDを渡せば
+		// advanceも置換後グリフのものが自然に載る
+		fgid = this.substituteFeatures(fgid, features);
+		return this.addGID(c, fgid);
+	}
+
 	private int addGID(int c, int fgid) {
 		if (fgid == 0) {
 			return 0;

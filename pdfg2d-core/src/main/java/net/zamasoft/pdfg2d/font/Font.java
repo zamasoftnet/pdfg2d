@@ -23,11 +23,26 @@ public interface Font extends Serializable {
 
 	/**
 	 * Converts a character to a glyph ID (GID).
-	 * 
+	 *
 	 * @param c the character to convert
 	 * @return the glyph ID
 	 */
 	public int toGID(int c);
+
+	/**
+	 * Converts a character to a glyph ID with OpenType feature settings
+	 * applied (e.g. GSUB single substitutions for {@code jp78}, {@code pwid}).
+	 * The default ignores the features so existing implementations keep their
+	 * behaviour.
+	 *
+	 * @param c        the character to convert
+	 * @param features the feature settings (never {@code null})
+	 * @return the glyph ID
+	 * @since 1.3
+	 */
+	public default int toGID(final int c, final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		return this.toGID(c);
+	}
 
 	/**
 	 * Returns the advance width of the glyph.

@@ -123,6 +123,48 @@ public record GsubTable(ScriptList scriptList, FeatureList featureList, LookupLi
 		return result;
 	}
 
+	/**
+	 * Collects the {@link SingleSubst} subtables of every feature record with
+	 * the given tag, across scripts and languages (same collection policy as
+	 * {@link #collectLigatures()}: no script/language filtering, shared lookups
+	 * deduplicated). Subtables are returned in ascending lookup-list order so
+	 * that composing them applies the font's intended precedence.
+	 *
+	 * @param tag the packed 4-byte feature tag (e.g. {@code 0x6a703738} for
+	 *            {@code jp78})
+	 * @return the single-substitution subtables (possibly empty)
+	 */
+	public java.util.List<SingleSubst> collectSingleSubstitutions(final int tag) {
+		final var records = this.featureList.featureRecords();
+		final var features = this.featureList.features();
+		final var byLookup = new java.util.TreeMap<Integer, java.util.List<SingleSubst>>();
+		for (int i = 0; i < records.length; i++) {
+			if (records[i].tag() != tag) {
+				continue;
+			}
+			final var feature = features[i];
+			for (int li = 0; li < feature.getLookupCount(); li++) {
+				final int lookupIndex = feature.getLookupListIndex(li);
+				if (byLookup.containsKey(lookupIndex)) {
+					continue;
+				}
+				final var subs = new java.util.ArrayList<SingleSubst>();
+				final var lookup = this.lookupList.lookups()[lookupIndex];
+				for (int si = 0; si < lookup.getSubtableCount(); si++) {
+					if (lookup.getSubtable(si) instanceof SingleSubst ss) {
+						subs.add(ss);
+					}
+				}
+				byLookup.put(lookupIndex, subs);
+			}
+		}
+		final var result = new java.util.ArrayList<SingleSubst>();
+		for (final var subs : byLookup.values()) {
+			result.addAll(subs);
+		}
+		return result;
+	}
+
 	@Override
 	public int getType() {
 		return GSUB;

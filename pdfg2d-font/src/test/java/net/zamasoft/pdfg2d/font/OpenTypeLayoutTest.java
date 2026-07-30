@@ -1,5 +1,6 @@
 package net.zamasoft.pdfg2d.font;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,6 +48,34 @@ public class OpenTypeLayoutTest {
 				}
 			}
 			assertTrue(found, "The fi ligature (f + i) must be discoverable through the retained coverage");
+		}
+	}
+
+	@Test
+	public void testGsubSingleSubstitutionsByFeatureTag() throws Exception {
+		// The bundled CJK test font maps U+4E08 to GID 9512 and its jp78
+		// (JIS78 variant) substitution to GID 61232 — both verified directly
+		// against the font binary (2026-07-31).
+		try (final var otf = font()) {
+			final var gsub = (GsubTable) otf.getTable(Table.GSUB);
+			assertNotNull(gsub, "The test font must have a GSUB table");
+			final var cmap = ((CmapTable) otf.getTable(Table.CMAP))
+					.getCmapFormat(Table.PLATFORM_MICROSOFT, (short) 1);
+			final int base = cmap.mapCharCode(0x4E08);
+			assertEquals(9512, base, "cmap GID of U+4E08");
+
+			final var jp78 = gsub.collectSingleSubstitutions(0x6a703738); // 'jp78'
+			assertTrue(!jp78.isEmpty(), "The test font must carry jp78 single substitutions");
+			int gid = base;
+			for (final var ss : jp78) {
+				gid = ss.substitute(gid);
+			}
+			assertEquals(61232, gid, "jp78 variant GID of U+4E08");
+
+			// A GPOS-only feature tag has no GSUB lookups — the plan is empty,
+			// not an error (the caller composes tags without kind dispatch).
+			assertTrue(gsub.collectSingleSubstitutions(0x70616c74).isEmpty(), // 'palt'
+					"palt is a GPOS feature and must yield no GSUB substitutions");
 		}
 	}
 

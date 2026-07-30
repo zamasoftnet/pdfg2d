@@ -30,6 +30,13 @@ public class OpenTypeFontImpl extends OpenTypeFont {
 	}
 
 	@Override
+	public int toGID(final int c, final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		final int gid = super.toGID(c, features);
+		this.unicodes.set(gid, (char) c);
+		return gid;
+	}
+
+	@Override
 	protected int toChar(final int gid) {
 		return this.unicodes.get(gid);
 	}

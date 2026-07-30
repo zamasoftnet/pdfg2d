@@ -273,7 +273,7 @@ public class FontManagerImpl implements FontManager, Closeable {
 
 				// Process as normal character
 				Font font = this.fontMetrics.getFont();
-				int gid = font.toGID(cc);
+				int gid = font.toGID(cc, this.fontStyle.getFeatures());
 
 				if (this.outOfRun) {
 					this.outOfRun = false;

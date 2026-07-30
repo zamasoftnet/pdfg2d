@@ -58,6 +58,16 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	/** GSUB {@code liga} pairs: key {@code (firstGid << 32) | secondGid} to ligature glyph. */
 	private final Map<Long, Integer> ligatures;
 
+	/**
+	 * Cache of composed GSUB single-substitution plans per feature set
+	 * ({@code jp78}, {@code pwid}, ...). This font instance is shared per
+	 * source across all styles ({@code DefaultFontStore}), so the cache is
+	 * keyed by the immutable {@link net.zamasoft.pdfg2d.gc.font.FontFeatureSet}
+	 * — never mutable "current feature" state. Lazily initialised; transient
+	 * because plans are cheap to rebuild after deserialisation.
+	 */
+	private transient volatile java.util.concurrent.ConcurrentHashMap<net.zamasoft.pdfg2d.gc.font.FontFeatureSet, java.util.List<SingleSubst>> featurePlans;
+
 	/** GPOS {@code kern} pair-adjustment subtables, or {@code null}. */
 	private final List<PairPos> kernPairs;
 
@@ -204,6 +214,65 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 			gid = this.vSubst.substitute(gid);
 		}
 		return gid;
+	}
+
+	@Override
+	public int toGID(final int c, final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		final var source = (OpenTypeFontSource) this.getFontSource();
+		int gid = source.getCmapFormat().mapCharCode(c);
+		// cmap → 有効featureのGSUB単一置換 → 必須の縦書き置換(vert)。
+		// エンジン必須のvertはCSSからは無効化させない(印刷エンジンとしての
+		// 意図的仕様差——consult-codex-2026-07-31-font-features.txt §3.7)
+		gid = this.substituteFeatures(gid, features);
+		if (this.vSubst != null) {
+			gid = this.vSubst.substitute(gid);
+		}
+		return gid;
+	}
+
+	/**
+	 * Applies the enabled features' GSUB single substitutions to a font glyph
+	 * id (identity when the set is empty or the font has no matching lookups).
+	 *
+	 * @param gid      the font glyph id after cmap
+	 * @param features the feature settings
+	 * @return the (possibly substituted) font glyph id
+	 */
+	protected final int substituteFeatures(int gid, final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		if (gid == 0 || features.isEmpty()) {
+			return gid;
+		}
+		var plans = this.featurePlans;
+		if (plans == null) {
+			synchronized (this) {
+				plans = this.featurePlans;
+				if (plans == null) {
+					this.featurePlans = plans = new java.util.concurrent.ConcurrentHashMap<>();
+				}
+			}
+		}
+		final var plan = plans.computeIfAbsent(features, this::buildFeaturePlan);
+		for (int i = 0; i < plan.size(); ++i) {
+			gid = plan.get(i).substitute(gid);
+		}
+		return gid;
+	}
+
+	/** Composes the GSUB single-substitution subtables of the enabled features. */
+	private java.util.List<SingleSubst> buildFeaturePlan(final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		final var gsub = (GsubTable) this.source.getOpenTypeFont().getTable(Table.GSUB);
+		if (gsub == null) {
+			return java.util.List.of();
+		}
+		final var plan = new java.util.ArrayList<SingleSubst>();
+		for (int i = 0; i < features.size(); ++i) {
+			if (features.valueAt(i) > 0) {
+				// GPOS系タグ(palt等)やliga(type 4)はtype 1 lookupを持たないため
+				// ここでは自然に空になる(タグ種別の分岐は不要)
+				plan.addAll(gsub.collectSingleSubstitutions(features.tagAt(i)));
+			}
+		}
+		return java.util.List.copyOf(plan);
 	}
 
 	@Override
