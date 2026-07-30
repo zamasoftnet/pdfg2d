@@ -136,19 +136,32 @@ public class FontMetricsImpl implements FontMetrics {
 		return this.size * this.getFont().getWidth(gid) / FontSource.DEFAULT_UNITS_PER_EM;
 	}
 
+	/** Packed {@code kern}/{@code liga} tags for the explicit-off checks. */
+	private static final int TAG_KERN = 0x6b65726e, TAG_LIGA = 0x6c696761;
+
 	@Override
 	public double getKerning(final int gid, final int sgid) {
+		// font-feature-settings "kern" 0: 明示offのみ無効化(無指定=-1は
+		// 既定どおり有効)。push型と新pipelineの両経路がここへ委譲する
+		if (this.features.value(TAG_KERN) == 0) {
+			return 0;
+		}
 		return this.size * this.getFont().getKerning(gid, sgid) / FontSource.DEFAULT_UNITS_PER_EM;
 	}
 
 	/**
 	 * Returns the ligature glyph ID for the given glyph and following character.
+	 * Explicitly disabled by {@code font-feature-settings "liga" 0} (an
+	 * unspecified {@code liga} keeps the default behaviour).
 	 *
 	 * @param gid the current glyph ID
 	 * @param cid the following character code
 	 * @return the ligature glyph ID, or a negative value if none exists
 	 */
 	public int getLigature(final int gid, final int cid) {
+		if (this.features.value(TAG_LIGA) == 0) {
+			return -1;
+		}
 		return this.getFont().getLigature(gid, cid);
 	}
 
