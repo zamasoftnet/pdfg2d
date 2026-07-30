@@ -917,16 +917,19 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		// array only, then restore it.
 		final int savedPrecision = objectsFlow.getPrecision();
 		objectsFlow.setPrecision(12);
-		objectsFlow.writeName("Matrix");
-		objectsFlow.startArray();
-		objectsFlow.writeReal(1.0 / width);
-		objectsFlow.writeReal(0);
-		objectsFlow.writeReal(0);
-		objectsFlow.writeReal(1.0 / height);
-		objectsFlow.writeReal(0);
-		objectsFlow.writeReal(0);
-		objectsFlow.endArray();
-		objectsFlow.setPrecision(savedPrecision);
+		try {
+			objectsFlow.writeName("Matrix");
+			objectsFlow.startArray();
+			objectsFlow.writeReal(1.0 / width);
+			objectsFlow.writeReal(0);
+			objectsFlow.writeReal(0);
+			objectsFlow.writeReal(1.0 / height);
+			objectsFlow.writeReal(0);
+			objectsFlow.writeReal(0);
+			objectsFlow.endArray();
+		} finally {
+			objectsFlow.setPrecision(savedPrecision);
+		}
 		objectsFlow.lineBreak();
 
 		objectsFlow.writeName("BBox");

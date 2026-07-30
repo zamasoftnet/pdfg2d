@@ -6,7 +6,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
+import net.zamasoft.pdfg2d.pdf.StructureRef;
 
 /**
  * Collects the logical structure of a tagged PDF while content is being
@@ -27,8 +31,8 @@ import net.zamasoft.pdfg2d.pdf.ObjectRef;
  */
 final class StructureTreeBuilder {
 
-	/** A structure element node. */
-	private static final class Elem {
+	/** A structure element node (also the public {@link StructureRef} handle). */
+	private static final class Elem implements StructureRef {
 		final Elem parent;
 		final String role;
 		String alt;
@@ -125,6 +129,64 @@ final class StructureTreeBuilder {
 	}
 
 	/**
+	 * Declares a structure element without opening it for content. The
+	 * element's position in its parent's {@code /K} array is fixed by
+	 * declaration order (= logical document order), independent of when its
+	 * content is painted. Attach content later with
+	 * {@link #beginContent(StructureRef)} (2026-07-30, B-2).
+	 *
+	 * @param parent the declared parent, or {@code null} for the root
+	 * @param role   the structure type
+	 * @param scope  the table-header scope, or {@code null}
+	 * @return the handle to attach content and annotations to
+	 */
+	StructureRef declare(final StructureRef parent, final String role, final String scope) {
+		final var p = parent instanceof Elem elem ? elem : this.document;
+		final var child = new Elem(p, role, null);
+		child.scope = scope;
+		p.kids.add(child);
+
+		final var level = headingLevel(role);
+		if (level > 0) {
+			// Declaration order is logical order, so skip detection is
+			// meaningful here (same rule as begin()).
+			if (this.lastHeadingLevel > 0 && level > this.lastHeadingLevel + 1) {
+				this.headingSkip = true;
+			}
+			this.lastHeadingLevel = level;
+		}
+		return child;
+	}
+
+	/**
+	 * Stack of {@link #current} values saved by {@link #beginContent} so the
+	 * paint-order traversal can attach content to declared elements without
+	 * disturbing the (legacy) implicit begin()/end() nesting.
+	 */
+	private final Deque<Elem> contentRestore = new ArrayDeque<>();
+
+	/**
+	 * Routes subsequent marks (and annotation associations) to a declared
+	 * element until {@link #endContent()}. May be nested and may interleave
+	 * with painting order freely; the structure order is fixed by
+	 * {@link #declare}.
+	 */
+	void beginContent(final StructureRef target) {
+		if (!(target instanceof Elem elem)) {
+			return;
+		}
+		this.contentRestore.push(this.current);
+		this.current = elem;
+	}
+
+	/** Restores the routing state saved by {@link #beginContent}. */
+	void endContent() {
+		if (!this.contentRestore.isEmpty()) {
+			this.current = this.contentRestore.pop();
+		}
+	}
+
+	/**
 	 * Associates an annotation (typically a Link) with the currently open
 	 * structure element via an object reference (OBJR), and returns the
 	 * element's parent-tree key for the annotation's {@code /StructParent}.
@@ -214,7 +276,21 @@ final class StructureTreeBuilder {
 		final var rootRef = xref.nextObjectRef();
 		this.allocate(this.document, xref);
 
-		this.writeElem(sink, this.document, rootRef);
+		// Iterative pre-order walk (same emission order as the former
+		// recursion: parent object first, then children in /K order).
+		record WriteStep(Elem elem, ObjectRef parentRef) {
+		}
+		final Deque<WriteStep> work = new ArrayDeque<>();
+		work.push(new WriteStep(this.document, rootRef));
+		while (!work.isEmpty()) {
+			final var step = work.pop();
+			this.writeElem(sink, step.elem(), step.parentRef());
+			for (var i = step.elem().kids.size() - 1; i >= 0; --i) {
+				if (step.elem().kids.get(i) instanceof Elem child) {
+					work.push(new WriteStep(child, step.elem().ref));
+				}
+			}
+		}
 
 		// Parent tree: a number tree mapping each page's /StructParents key to
 		// the MCID-indexed array of owning elements, and each annotation's
@@ -260,11 +336,18 @@ final class StructureTreeBuilder {
 		return rootRef;
 	}
 
-	private void allocate(final Elem elem, final XRefImpl xref) {
-		elem.ref = xref.nextObjectRef();
-		for (final var kid : elem.kids) {
-			if (kid instanceof Elem child) {
-				this.allocate(child, xref);
+	private void allocate(final Elem root, final XRefImpl xref) {
+		// Iterative pre-order walk; structure depth follows document nesting
+		// and must not be bounded by the Java stack.
+		final Deque<Elem> work = new ArrayDeque<>();
+		work.push(root);
+		while (!work.isEmpty()) {
+			final var elem = work.pop();
+			elem.ref = xref.nextObjectRef();
+			for (var i = elem.kids.size() - 1; i >= 0; --i) {
+				if (elem.kids.get(i) instanceof Elem child) {
+					work.push(child);
+				}
 			}
 		}
 	}
@@ -336,11 +419,5 @@ final class StructureTreeBuilder {
 		out.endArray();
 		out.endHash();
 		sink.endObject();
-
-		for (final var kid : elem.kids) {
-			if (kid instanceof Elem child) {
-				this.writeElem(sink, child, elem.ref);
-			}
-		}
 	}
 }

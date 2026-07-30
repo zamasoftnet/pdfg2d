@@ -176,6 +176,29 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		}
 	}
 
+	@Override
+	public net.zamasoft.pdfg2d.pdf.StructureRef declareStructElement(
+			final net.zamasoft.pdfg2d.pdf.StructureRef parent, final String role, final String scope) {
+		final var structure = this.getPDFWriterImpl().structure;
+		return structure != null ? structure.declare(parent, role, scope) : null;
+	}
+
+	@Override
+	public void beginStructContent(final net.zamasoft.pdfg2d.pdf.StructureRef target) {
+		final var structure = this.getPDFWriterImpl().structure;
+		if (structure != null && target != null) {
+			structure.beginContent(target);
+		}
+	}
+
+	@Override
+	public void endStructContent() {
+		final var structure = this.getPDFWriterImpl().structure;
+		if (structure != null) {
+			structure.endContent();
+		}
+	}
+
 	/**
 	 * Ensures that the named resource is declared in the page resource dictionary.
 	 * <p>

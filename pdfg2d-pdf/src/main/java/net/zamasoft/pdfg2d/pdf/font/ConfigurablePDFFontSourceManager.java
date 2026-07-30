@@ -76,8 +76,13 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 	private static final long POLL_INTERVAL_MS = Long
 			.getLong("net.zamasoft.pdfg2d.font.pollIntervalMillis", 1000L);
 
-	/** 最後に設定を検査した時刻({@link System#nanoTime()}のミリ秒換算)。 */
-	private long lastPollAt = 0L;
+	/**
+	 * 最後に設定を検査した時刻({@link System#nanoTime()}のミリ秒換算)。
+	 * {@code nanoTime}の原点は任意(負値も許される)ため、0 で初期化すると
+	 * 負の環境では {@code now - 0 < interval} が長期間真のままになり、
+	 * ホットリロードが止まる。実時刻基準で初期化する(2026-07-30)。
+	 */
+	private long lastPollAt = System.nanoTime() / 1_000_000L - POLL_INTERVAL_MS;
 
 	protected synchronized void poll() {
 		// **検査の間隔をあける**(2026-07-29)。

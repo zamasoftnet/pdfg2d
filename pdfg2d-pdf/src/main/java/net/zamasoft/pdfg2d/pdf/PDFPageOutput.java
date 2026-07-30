@@ -132,6 +132,41 @@ public abstract class PDFPageOutput extends PDFGraphicsOutput {
 	}
 
 	/**
+	 * Declares a structure element in logical (declaration) order without
+	 * opening it for content; paint content into it later with
+	 * {@link #beginStructContent(StructureRef)}. Use this when paint order
+	 * (e.g. z-index) differs from document order. No-op (returns
+	 * {@code null}) for untagged documents.
+	 *
+	 * @param parent the declared parent, or {@code null} for the root
+	 * @param role   the structure type
+	 * @param scope  the table-header scope, or {@code null}
+	 * @return the element handle, or {@code null} when untagged
+	 * @since 1.3
+	 */
+	public StructureRef declareStructElement(final StructureRef parent, final String role, final String scope) {
+		return null;
+	}
+
+	/**
+	 * Routes subsequently painted content (and annotation associations) to a
+	 * declared structure element until {@link #endStructContent()}. No-op
+	 * for untagged documents or a {@code null} target.
+	 *
+	 * @since 1.3
+	 */
+	public void beginStructContent(final StructureRef target) {
+	}
+
+	/**
+	 * Ends the routing started by {@link #beginStructContent(StructureRef)}.
+	 *
+	 * @since 1.3
+	 */
+	public void endStructContent() {
+	}
+
+	/**
 	 * Adds an interactive AcroForm field (text input, checkbox, choice or
 	 * button) to this page. No-op if the implementation does not support forms.
 	 *
