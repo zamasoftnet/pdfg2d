@@ -287,7 +287,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 
 		final var tagged = this.params.tagged();
-		this.structure = (tagged != null) ? new StructureTreeBuilder() : null;
+		this.structure = (tagged != null) ? new StructureTreeBuilder(tagged.pdfuaPart() >= 2) : null;
 		if (tagged != null && tagged.pdfua()) {
 			// PDF/UA requires the window title to come from the document
 			// title rather than the file name.
@@ -1705,7 +1705,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			// XML Metadata
 			if (this.xmpmetaFlow != null) {
 				XMPMetadataWriter.write(this.xmpmetaFlow, this.params.version(),
-						taggedParams != null && taggedParams.pdfua(), author, creator, producer, title,
+						taggedParams != null ? taggedParams.pdfuaPart() : 0, author, creator, producer, title,
 						keywords, create, modify, info.getFacturX());
 			}
 			// Catalog - Page Info

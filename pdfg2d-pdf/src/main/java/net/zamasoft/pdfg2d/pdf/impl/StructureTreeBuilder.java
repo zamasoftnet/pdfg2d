@@ -43,6 +43,12 @@ final class StructureTreeBuilder {
 		/** Page of the first contained MCID; used for the /Pg entry. */
 		PDFPageOutputImpl page;
 		ObjectRef ref;
+		/**
+		 * The implicit {@code P} wrapper receiving direct content of a
+		 * grouping element (PDF/UA-2: ISO 32005 forbids content items in
+		 * {@code Div}/{@code Sect} etc.). Reused while it stays the last kid.
+		 */
+		Elem contentWrapper;
 
 		Elem(final Elem parent, final String role, final String alt) {
 			this.parent = parent;
@@ -73,6 +79,56 @@ final class StructureTreeBuilder {
 	private final Elem document = new Elem(null, "Document", null);
 
 	private Elem current = this.document;
+
+	/**
+	 * Whether to attribute structure elements to the PDF 2.0 standard
+	 * structure namespace (required by PDF/UA-2). When set, the
+	 * {@code /StructTreeRoot} carries a {@code /Namespaces} array and every
+	 * element a {@code /NS} reference.
+	 */
+	private final boolean pdf2Namespace;
+
+	/** The PDF 2.0 standard structure namespace URI (ISO 32000-2 §14.8.6). */
+	private static final String PDF2_NAMESPACE = "http://iso.org/pdf2/ssn";
+
+	/**
+	 * Structure types (among those this writer emits) that exist in the
+	 * PDF 2.0 standard structure namespace. Legacy-only types (e.g.
+	 * {@code Sect}, {@code BlockQuote}) get no {@code /NS} and thus stay in
+	 * the default PDF 1.7 namespace, which ISO 14289-2 §8.2.4 also permits.
+	 */
+	private static final java.util.Set<String> PDF2_ROLES = java.util.Set.of("Document", "DocumentFragment", "Part",
+			"Div", "Aside", "NonStruct", "P", "Title", "Lbl", "Em", "Strong", "Span", "Link", "Annot", "Form",
+			"Ruby", "RB", "RT", "RP", "Warichu", "WT", "WP", "L", "LI", "LBody", "Table", "TR", "TH", "TD", "THead",
+			"TBody", "TFoot", "Caption", "Figure", "Formula", "Artifact", "Sub", "FENote");
+
+	/** Is the role a PDF 2.0 namespace type ({@code Hn} has unbounded n)? */
+	private static boolean isPdf2Role(final String role) {
+		if (PDF2_ROLES.contains(role)) {
+			return true;
+		}
+		if (role.length() >= 2 && role.charAt(0) == 'H') {
+			for (int i = 1; i < role.length(); ++i) {
+				if (role.charAt(i) < '0' || role.charAt(i) > '9') {
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Grouping types that must not own content items directly
+	 * (ISO 32005 §6.2) — their marks go into an implicit {@code P} wrapper
+	 * when writing PDF/UA-2.
+	 */
+	private static final java.util.Set<String> GROUPING_ROLES = java.util.Set.of("Div", "Sect", "Part", "Aside",
+			"NonStruct", "Art", "DocumentFragment");
+
+	StructureTreeBuilder(final boolean pdf2Namespace) {
+		this.pdf2Namespace = pdf2Namespace;
+	}
 
 	/** Highest heading level seen so far (1..6), for skip detection. */
 	private int lastHeadingLevel = 0;
@@ -252,7 +308,7 @@ final class StructureTreeBuilder {
 	 * @return the MCID and BDC tag to write
 	 */
 	Mark mark(final PDFPageOutputImpl page, final String defaultRole, final String alt) {
-		final Elem target;
+		Elem target;
 		if (this.current == this.document) {
 			target = new Elem(this.document, defaultRole, alt);
 			this.document.kids.add(target);
@@ -261,6 +317,18 @@ final class StructureTreeBuilder {
 			if (alt != null && target.alt == null) {
 				target.alt = alt;
 			}
+		}
+		if (this.pdf2Namespace && GROUPING_ROLES.contains(target.role)) {
+			// PDF/UA-2: グループ化要素は内容を直接持てない(ISO 32005 §6.2)。
+			// 連続する内容は同じ暗黙Pへ継ぎ足し、間に子要素が入ったら
+			// 新しいPを開く(順序保持)
+			if (target.contentWrapper == null || target.kids.isEmpty()
+					|| target.kids.get(target.kids.size() - 1) != target.contentWrapper) {
+				final var wrapper = new Elem(target, "P", null);
+				target.kids.add(wrapper);
+				target.contentWrapper = wrapper;
+			}
+			target = target.contentWrapper;
 		}
 		if (target.page == null) {
 			target.page = page;
@@ -291,6 +359,20 @@ final class StructureTreeBuilder {
 	ObjectRef writeTo(final PDFObjectSink sink, final XRefImpl xref) throws IOException {
 		final var rootRef = xref.nextObjectRef();
 		this.allocate(this.document, xref);
+
+		// PDF/UA-2: the PDF 2.0 standard structure namespace object, shared
+		// by every element via /NS and listed in the root's /Namespaces.
+		if (this.pdf2Namespace) {
+			this.namespaceRef = xref.nextObjectRef();
+			final var nsOut = sink.startObject(this.namespaceRef);
+			nsOut.startHash();
+			nsOut.writeName("Type");
+			nsOut.writeName("Namespace");
+			nsOut.writeName("NS");
+			nsOut.writeString(PDF2_NAMESPACE);
+			nsOut.endHash();
+			sink.endObject();
+		}
 
 		// Iterative pre-order walk (same emission order as the former
 		// recursion: parent object first, then children in /K order).
@@ -347,10 +429,19 @@ final class StructureTreeBuilder {
 		out.writeObjectRef(parentTreeRef);
 		out.writeName("ParentTreeNextKey");
 		out.writeInt(this.nextKey);
+		if (this.namespaceRef != null) {
+			out.writeName("Namespaces");
+			out.startArray();
+			out.writeObjectRef(this.namespaceRef);
+			out.endArray();
+		}
 		out.endHash();
 		sink.endObject();
 		return rootRef;
 	}
+
+	/** The shared PDF 2.0 namespace object, allocated in {@link #writeTo}. */
+	private ObjectRef namespaceRef = null;
 
 	private void allocate(final Elem root, final XRefImpl xref) {
 		// Iterative pre-order walk; structure depth follows document nesting
@@ -378,6 +469,13 @@ final class StructureTreeBuilder {
 		out.writeName(elem.role);
 		out.writeName("P");
 		out.writeObjectRef(parentRef);
+		if (this.namespaceRef != null && isPdf2Role(elem.role)) {
+			// PDF/UA-2: attribute the element to the PDF 2.0 standard
+			// structure namespace. Legacy-only types (Sect, BlockQuote, ...)
+			// get no /NS and stay in the default PDF 1.7 namespace.
+			out.writeName("NS");
+			out.writeObjectRef(this.namespaceRef);
+		}
 		out.lineBreak();
 		if (elem.page != null) {
 			out.writeName("Pg");

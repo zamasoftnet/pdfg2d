@@ -113,7 +113,7 @@ final class XMPMetadataWriter {
 	 *                    {@code -1} to omit
 	 * @throws IOException if an I/O error occurs
 	 */
-	static void write(final PDFFragmentOutputImpl xmpmetaFlow, final PDFParams.Version version, final boolean pdfua,
+	static void write(final PDFFragmentOutputImpl xmpmetaFlow, final PDFParams.Version version, final int pdfuaPart,
 			final String author, final String creator, final String producer, final String title,
 			final String keywords, final long create, final long modify,
 			final net.zamasoft.pdfg2d.pdf.FacturX facturX) throws IOException {
@@ -156,10 +156,15 @@ final class XMPMetadataWriter {
 			}
 
 			// PDF/UA identification schema
-			if (pdfua) {
+			if (pdfuaPart > 0) {
 				sb.append("  <rdf:Description rdf:about=\"\"")
 						.append(" xmlns:pdfuaid=\"http://www.aiim.org/pdfua/ns/id/\">\n");
-				sb.append("   <pdfuaid:part>1</pdfuaid:part>\n");
+				sb.append("   <pdfuaid:part>").append(pdfuaPart).append("</pdfuaid:part>\n");
+				if (pdfuaPart >= 2) {
+					// PDF/UA-2 (ISO 14289-2:2024) identifies the standard's
+					// revision year, like PDF/A-4.
+					sb.append("   <pdfuaid:rev>2024</pdfuaid:rev>\n");
+				}
 				sb.append("  </rdf:Description>\n");
 			}
 
