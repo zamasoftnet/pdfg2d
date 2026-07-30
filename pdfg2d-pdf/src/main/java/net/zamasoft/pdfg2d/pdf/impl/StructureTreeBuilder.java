@@ -170,13 +170,19 @@ final class StructureTreeBuilder {
 	 * element until {@link #endContent()}. May be nested and may interleave
 	 * with painting order freely; the structure order is fixed by
 	 * {@link #declare}.
+	 *
+	 * <p>
+	 * A {@code null} (or foreign) target still pushes a restore frame so that
+	 * every {@code beginContent} balances its {@code endContent} — callers can
+	 * bracket unconditionally without corrupting an enclosing frame.
+	 * </p>
 	 */
 	void beginContent(final StructureRef target) {
-		if (!(target instanceof Elem elem)) {
-			return;
-		}
 		this.contentRestore.push(this.current);
-		this.current = elem;
+		if (target instanceof Elem elem) {
+			assert this.owns(elem) : "StructureRef from another writer: " + target;
+			this.current = elem;
+		}
 	}
 
 	/** Restores the routing state saved by {@link #beginContent}. */
@@ -184,6 +190,16 @@ final class StructureTreeBuilder {
 		if (!this.contentRestore.isEmpty()) {
 			this.current = this.contentRestore.pop();
 		}
+	}
+
+	/** Assertion helper: does the parent chain of {@code e} reach this tree's root? */
+	private boolean owns(Elem e) {
+		for (; e != null; e = e.parent) {
+			if (e == this.document) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

@@ -186,7 +186,9 @@ class PDFPageOutputImpl extends PDFPageOutput {
 	@Override
 	public void beginStructContent(final net.zamasoft.pdfg2d.pdf.StructureRef target) {
 		final var structure = this.getPDFWriterImpl().structure;
-		if (structure != null && target != null) {
+		if (structure != null) {
+			// A null target still pushes a restore frame in the builder so this
+			// call always balances endStructContent (no conditional bracketing).
 			structure.beginContent(target);
 		}
 	}
