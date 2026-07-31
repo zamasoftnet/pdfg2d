@@ -275,16 +275,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		if (gid == 0 || features.isEmpty()) {
 			return 0;
 		}
-		var plans = this.positionPlans;
-		if (plans == null) {
-			synchronized (this) {
-				plans = this.positionPlans;
-				if (plans == null) {
-					this.positionPlans = plans = new java.util.concurrent.ConcurrentHashMap<>();
-				}
-			}
-		}
-		final var plan = plans.computeIfAbsent(features, this::buildPositionPlan);
+		final var plan = this.positionPlan(features);
 		if (plan.isEmpty()) {
 			return 0;
 		}
@@ -299,9 +290,47 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 				adjustment += vertical ? pos.yAdvance() : pos.xAdvance();
 			}
 		}
-		// hmtx幅(getHAdvance)と同じ基準へ正規化する(2048 UPMのTTF等)
-		return (short) (adjustment * FontSource.DEFAULT_UNITS_PER_EM
+		return this.normalizeUnits(adjustment);
+	}
+
+	@Override
+	public short getPlacementAdjustment(final int gid, final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		// 字面の視覚シフト(ペンは進めない)。縦書きのyPlacementはGPOSのy-up
+		// 規約と描画座標の対応を実フォントで未検証のため未搬送(0)——
+		// 横書きxPlacementのみ(増分⑤、consult-codex-2026-07-31-font-features
+		// .txt §3.6。既知の限界として記録)
+		if (gid == 0 || features.isEmpty() || this.isVertical()) {
+			return 0;
+		}
+		final var plan = this.positionPlan(features);
+		int adjustment = 0;
+		for (int i = 0; i < plan.size(); ++i) {
+			final var pos = plan.get(i).getPosition(gid);
+			if (pos != null) {
+				adjustment += pos.xPlacement();
+			}
+		}
+		return this.normalizeUnits(adjustment);
+	}
+
+	/** hmtx幅(getHAdvance)と同じ基準へ正規化する(2048 UPMのTTF等)。 */
+	private short normalizeUnits(final int value) {
+		return (short) (value * FontSource.DEFAULT_UNITS_PER_EM
 				/ ((OpenTypeFontSource) this.getFontSource()).getUnitsPerEm());
+	}
+
+	/** 有効featureのGPOS単一調整plan(キャッシュ、遅延構築)。 */
+	private java.util.List<SinglePos> positionPlan(final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		var plans = this.positionPlans;
+		if (plans == null) {
+			synchronized (this) {
+				plans = this.positionPlans;
+				if (plans == null) {
+					this.positionPlans = plans = new java.util.concurrent.ConcurrentHashMap<>();
+				}
+			}
+		}
+		return plans.computeIfAbsent(features, this::buildPositionPlan);
 	}
 
 	/**

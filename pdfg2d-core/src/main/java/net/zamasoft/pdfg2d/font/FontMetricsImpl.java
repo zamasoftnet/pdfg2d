@@ -132,6 +132,15 @@ public class FontMetricsImpl implements FontMetrics {
 	}
 
 	@Override
+	public double getPlacementAdjustment(final int gid) {
+		if (this.features.isEmpty()) {
+			return 0;
+		}
+		return this.size * this.getFont().getPlacementAdjustment(gid, this.features)
+				/ FontSource.DEFAULT_UNITS_PER_EM;
+	}
+
+	@Override
 	public double getWidth(final int gid) {
 		return this.size * this.getFont().getWidth(gid) / FontSource.DEFAULT_UNITS_PER_EM;
 	}

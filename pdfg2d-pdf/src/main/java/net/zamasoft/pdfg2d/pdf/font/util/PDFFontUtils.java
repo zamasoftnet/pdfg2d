@@ -89,6 +89,7 @@ public class PDFFontUtils {
 		int len = 0;
 		int off = 0;
 		double size = fm.getFontSize();
+		double prevPlacement = 0;
 		for (int i = 0; i < glyphCount; ++i) {
 			double xadvance = xadvances == null ? 0 : xadvances[i];
 			if (i > 0) {
@@ -99,6 +100,12 @@ public class PDFFontUtils {
 				// レイアウト(metrics=調整込み)から決まる
 				xadvance += fm.getAdvanceAdjustment(gids[i - 1]);
 			}
+			// 字面の視覚シフト(palt xPlacement——増分⑤): ペンは進めないため、
+			// グリフの前でシフトし、次の境界で戻す(前後の対のTJ調整)。
+			// 最終グリフの戻しは不要(同上)
+			final double placement = fm.getPlacementAdjustment(gids[i]);
+			xadvance += placement - prevPlacement;
+			prevPlacement = placement;
 			if (xadvance != 0) {
 				if (verticalFont) {
 					xadvance = -xadvance;

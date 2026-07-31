@@ -161,6 +161,12 @@ public final class FontUtils {
 				final var at2 = new AffineTransform(transform);
 				var shape = ((ShapedFont) font).getShapeByGID(gid);
 				if (shape != null) {
+					// 字面の視覚シフト(palt xPlacement——増分⑤): ペン(at)は
+					// 進めず、このグリフの描画にだけ適用する
+					final double placement = fm.getPlacementAdjustment(gid);
+					if (placement != 0) {
+						at2.translate(placement, 0);
+					}
 					at2.concatenate(at);
 					if (oblique != null) {
 						shape = oblique.createTransformedShape(shape);
@@ -294,6 +300,14 @@ public final class FontUtils {
 						}
 						at.preConcatenate(AffineTransform.getTranslateInstance(dx, 0));
 					}
+					// 字面の視覚シフト(palt xPlacement——増分⑤): ペン(at)は
+					// 進めず、このグリフの描画にだけ適用する
+					var gat = at;
+					final double placement = fm.getPlacementAdjustment(gid);
+					if (placement != 0) {
+						gat = new AffineTransform(at);
+						gat.preConcatenate(AffineTransform.getTranslateInstance(placement, 0));
+					}
 					if (font instanceof net.zamasoft.pdfg2d.font.ColorGlyphFont cgf && cgf.isColorGlyph(gid)) {
 						// Flush the pending monochrome outline before the color
 						// glyph so drawing order (and thus overlap) is preserved.
@@ -301,7 +315,7 @@ public final class FontUtils {
 							drawPath(gc, path, textMode);
 							path = null;
 						}
-						cgf.drawColorGlyph(gc, gid, at);
+						cgf.drawColorGlyph(gc, gid, gat);
 					} else if (font instanceof ShapedFont) {
 						var shape = ((ShapedFont) font).getShapeByGID(gid);
 						if (shape != null) {
@@ -311,10 +325,10 @@ public final class FontUtils {
 							if (path == null) {
 								path = new GeneralPath();
 							}
-							path.append(shape.getPathIterator(at), false);
+							path.append(shape.getPathIterator(gat), false);
 						}
 					} else {
-						((ImageFont) font).drawGlyphForGid(gc, gid, at);
+						((ImageFont) font).drawGlyphForGid(gc, gid, gat);
 					}
 					pgid = gid;
 				}

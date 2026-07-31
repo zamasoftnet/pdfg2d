@@ -65,6 +65,21 @@ public interface FontMetrics extends Serializable {
 	}
 
 	/**
+	 * Returns the glyph's placement adjustment from OpenType features such as
+	 * {@code palt} xPlacement — the visual shift of the glyph shape along the
+	 * writing axis that does not move the pen. Not included in
+	 * {@link #getAdvance(int)}; renderers apply it to the drawn shape (outline
+	 * transform) or as paired {@code TJ} adjustments (PDF CID).
+	 *
+	 * @param gid the glyph ID
+	 * @return the placement adjustment (0 when no metrics feature is enabled)
+	 * @since 1.3
+	 */
+	public default double getPlacementAdjustment(final int gid) {
+		return 0;
+	}
+
+	/**
 	 * Returns the width of the specified glyph.
 	 * 
 	 * @param gid the glyph ID
