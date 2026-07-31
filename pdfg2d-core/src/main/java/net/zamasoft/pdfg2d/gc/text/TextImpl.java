@@ -98,6 +98,29 @@ public class TextImpl extends AbstractText implements Serializable {
 		return this.xadvances;
 	}
 
+	/**
+	 * Adds a per-glyph advance adjustment, preserving any adjustments already
+	 * present (unlike {@code getXAdvances(true)} which resets the array).
+	 * Used by layout-level spacing (Japanese punctuation trimming etc.) so
+	 * that measurement and drawing observe the same adjusted advances.
+	 *
+	 * @param glyphIndex the glyph index (0-based, &lt; {@link #getGlyphCount()})
+	 * @param delta      the advance delta to add (negative to tighten)
+	 */
+	public void addXAdvance(final int glyphIndex, final double delta) {
+		assert glyphIndex >= 0 && glyphIndex < this.glyphCount : "glyphIndex out of range: " + glyphIndex;
+		if (this.xadvances == null) {
+			this.xadvances = new double[this.glyphCount];
+		} else if (this.xadvances.length < this.glyphCount) {
+			// Allocated before further glyphs were appended - grow, keeping
+			// existing adjustments
+			final double[] grown = new double[this.glyphCount];
+			System.arraycopy(this.xadvances, 0, grown, 0, this.xadvances.length);
+			this.xadvances = grown;
+		}
+		this.xadvances[glyphIndex] += delta;
+	}
+
 	@Override
 	public double getAscent() {
 		return this.fontMetrics.getAscent();
@@ -193,6 +216,20 @@ public class TextImpl extends AbstractText implements Serializable {
 		this.glyphCount -= text.glyphCount;
 		System.arraycopy(this.glyphIds, text.glyphCount, this.glyphIds, 0, this.glyphCount);
 		System.arraycopy(this.clusterLengths, text.glyphCount, this.clusterLengths, 0, this.glyphCount);
+		if (this.xadvances != null) {
+			// Carry per-glyph adjustments across the split (head gets its
+			// prefix, the tail keeps its suffix). Without this, adjustments
+			// silently vanish on line splitting. The array may be shorter
+			// than glyphCount if it was allocated before further appends -
+			// copy defensively.
+			final double[] prev = this.xadvances;
+			text.xadvances = new double[text.glyphCount];
+			System.arraycopy(prev, 0, text.xadvances, 0, Math.min(prev.length, text.glyphCount));
+			final double[] tail = new double[this.glyphCount];
+			final int available = Math.max(0, prev.length - text.glyphCount);
+			System.arraycopy(prev, text.glyphCount, tail, 0, Math.min(available, this.glyphCount));
+			this.xadvances = tail;
+		}
 
 		this.advance -= text.advance;
 		// Restore kerning at the split point
