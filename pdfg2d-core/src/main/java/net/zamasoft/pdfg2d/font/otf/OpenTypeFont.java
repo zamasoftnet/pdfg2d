@@ -29,8 +29,6 @@ import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Direction;
 import net.zamasoft.pdfg2d.gc.font.util.FontUtils;
 import net.zamasoft.pdfg2d.gc.text.Text;
-import net.zamasoft.pdfg2d.gc.text.breaking.impl.BitSetCharacterSet;
-import net.zamasoft.pdfg2d.gc.text.breaking.impl.CharacterSet;
 
 /**
  * Abstract base class for an OpenType (TrueType/CFF) font.
@@ -381,44 +379,18 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	 */
 	protected abstract int toChar(int gid);
 
-	// Opening brackets
-	private static final CharacterSet CL01 = new BitSetCharacterSet("‘“（〔［｛〈《「『【⦅〖«〝");
-	// Closing brackets
-	private static final CharacterSet CL02 = new BitSetCharacterSet("’”）〕］｝〉》」』】⦆〙〗»〟");
-	// Punctuation
-	private static final CharacterSet CL0607 = new BitSetCharacterSet("。．、，");
-
 	@Override
 	public short getKerning(final int sgid, final int gid) {
-		// GPOS pair kerning first (glyph ids are font glyph ids for the
+		// GPOS pair kerning (glyph ids are font glyph ids for the
 		// non-embedding font; subclasses that remap glyphs translate before
 		// calling gposKerning).
-		final short gpos = this.gposKerning(sgid, gid);
-		if (gpos != 0) {
-			return gpos;
-		}
-
-		final int scid = this.toChar(sgid);
-		// Kerning for brackets and punctuation
-		final short THRESHOLD = 750, KERNING = 500;
-		if (CL01.contains((char) scid) && this.getWidth(sgid) > THRESHOLD) {
-			final int cid = this.toChar(gid);
-			if (CL01.contains((char) cid) && this.getWidth(gid) > THRESHOLD) {
-				return KERNING;
-			}
-		} else if (CL02.contains((char) scid) && this.getWidth(sgid) > THRESHOLD) {
-			final int cid = this.toChar(gid);
-			if ((CL01.contains((char) cid) || CL02.contains((char) cid) || CL0607.contains((char) cid))
-					&& this.getWidth(gid) > THRESHOLD) {
-				return KERNING;
-			}
-		} else if (CL0607.contains((char) scid) && this.getWidth(sgid) > THRESHOLD) {
-			final int cid = this.toChar(gid);
-			if ((CL01.contains((char) cid) || (CL02.contains((char) cid)) && this.getWidth(gid) > THRESHOLD)) {
-				return KERNING;
-			}
-		}
-		return 0;
+		//
+		// Japanese punctuation trimming (CL01/CL02/CL06/07 pairs, formerly
+		// hardcoded here) moved to the layout layer so it can be controlled
+		// by CSS text-spacing-trim (foliojet4
+		// consult-codex-2026-07-31-text-spacing.txt T1a). The layout layer
+		// reproduces the same pair table via per-glyph advance adjustments.
+		return this.gposKerning(sgid, gid);
 	}
 
 	@Override

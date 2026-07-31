@@ -99,6 +99,26 @@ public class TextImpl extends AbstractText implements Serializable {
 	}
 
 	/**
+	 * Returns the per-glyph adjustment array, allocating (or growing) it as
+	 * needed while <b>preserving</b> any adjustments already present - unlike
+	 * {@code getXAdvances(true)} which resets the array. Use this from
+	 * consumers that add their own spacing on top of earlier adjustments
+	 * (e.g. justification over Japanese punctuation trimming).
+	 *
+	 * @return the adjustment array, aligned to {@link #getGlyphCount()}
+	 */
+	public double[] ensureXAdvances() {
+		if (this.xadvances == null) {
+			this.xadvances = new double[this.glyphCount];
+		} else if (this.xadvances.length < this.glyphCount) {
+			final double[] grown = new double[this.glyphCount];
+			System.arraycopy(this.xadvances, 0, grown, 0, this.xadvances.length);
+			this.xadvances = grown;
+		}
+		return this.xadvances;
+	}
+
+	/**
 	 * Adds a per-glyph advance adjustment, preserving any adjustments already
 	 * present (unlike {@code getXAdvances(true)} which resets the array).
 	 * Used by layout-level spacing (Japanese punctuation trimming etc.) so
@@ -282,6 +302,13 @@ public class TextImpl extends AbstractText implements Serializable {
 				this.clusterLengths = new byte[newLen];
 				System.arraycopy(a, 0, this.clusterLengths, 0, a.length);
 			}
+		}
+		if (this.xadvances != null && this.xadvances.length < newGlyphCount) {
+			// Keep per-glyph adjustments aligned with glyph growth - font
+			// drawTo implementations iterate xadvances by glyphCount
+			final double[] a = this.xadvances;
+			this.xadvances = new double[Math.max(newGlyphCount, this.glyphIds.length)];
+			System.arraycopy(a, 0, this.xadvances, 0, a.length);
 		}
 
 		final int newCharCount = this.charCount + clen;
