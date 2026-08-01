@@ -1,7 +1,7 @@
 package net.zamasoft.pdfg2d.pdf.font.cid;
 
 import java.io.Serializable;
-import java.lang.ref.WeakReference;
+import java.lang.ref.SoftReference;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
@@ -32,7 +32,12 @@ public class CIDTable implements Serializable {
 
 	protected final String javaEncoding;
 
-	transient protected WeakReference<IntMap> toCID = null;
+	/**
+	 * CID表のキャッシュです。WeakReferenceだとGCのたびに消えて重い
+	 * CID表パースが繰り返されるため、SoftReference(ヒープ圧まで温存、
+	 * OutOfMemoryErrorより先に回収)へ変更(2026-08-01)。
+	 */
+	transient protected SoftReference<IntMap> toCID = null;
 
 	transient protected int missingCID = 0;
 
@@ -112,7 +117,7 @@ public class CIDTable implements Serializable {
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
-		this.toCID = new WeakReference<IntMap>(toCid);
+		this.toCID = new SoftReference<IntMap>(toCid);
 		return toCid;
 	}
 

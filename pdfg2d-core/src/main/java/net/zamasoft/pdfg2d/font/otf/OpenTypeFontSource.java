@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.WeakHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -44,7 +43,20 @@ public class OpenTypeFontSource extends AbstractFontSource {
 
 	private static final long serialVersionUID = 4L;
 
-	protected static Map<File, FontFile> fileToFont = new WeakHashMap<>();
+	/**
+	 * パース済みフォントファイルのキャッシュです。
+	 *
+	 * <p>
+	 * 旧実装は{@code WeakHashMap<File, FontFile>}だったが、キーのFile
+	 * インスタンスを各FontSourceが{@code this.file}として強参照するため
+	 * エントリが決して回収されず、実質的に永久キャッシュだった——
+	 * 全宣言フォントの全テーブル(loca・GSUB・name等)がヒープに残る
+	 * (290フォントで約66MB、2026-08-01実測)。パス文字列キー+
+	 * SoftReference値に変更: 使用中のフォントはヒープ圧まで温存され、
+	 * 未使用フォントの表はOutOfMemoryErrorより先に回収される。
+	 * </p>
+	 */
+	protected static final Map<String, java.lang.ref.SoftReference<FontFile>> fileToFont = new java.util.HashMap<>();
 
 	protected final File file;
 
@@ -193,13 +205,16 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	public static OpenTypeFont getOpenTypeFont(final File file, final int index) {
 		try {
 			final var timestamp = file.lastModified();
-			var fontFile = getCachedFontFile(file, timestamp);
+			final String key = file.getPath();
+			var fontFile = getCachedFontFile(key, timestamp);
 			if (fontFile == null) {
 				final var loadedFontFile = new FontFile(file);
 				synchronized (fileToFont) {
-					fontFile = fileToFont.get(file);
+					// 並行ロードの勝者を採る(従来と同じdouble-check)
+					final var ref = fileToFont.get(key);
+					fontFile = ref == null ? null : ref.get();
 					if (fontFile == null || fontFile.timestamp != timestamp) {
-						fileToFont.put(file, loadedFontFile);
+						fileToFont.put(key, new java.lang.ref.SoftReference<>(loadedFontFile));
 						fontFile = loadedFontFile;
 					}
 				}
@@ -210,9 +225,10 @@ public class OpenTypeFontSource extends AbstractFontSource {
 		}
 	}
 
-	private static FontFile getCachedFontFile(final File file, final long timestamp) {
+	private static FontFile getCachedFontFile(final String key, final long timestamp) {
 		synchronized (fileToFont) {
-			final var fontFile = fileToFont.get(file);
+			final var ref = fileToFont.get(key);
+			final var fontFile = ref == null ? null : ref.get();
 			return fontFile != null && fontFile.timestamp == timestamp ? fontFile : null;
 		}
 	}

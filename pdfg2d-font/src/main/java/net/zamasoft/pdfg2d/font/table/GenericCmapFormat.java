@@ -28,20 +28,36 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
+ * 文字コード→GID写像の圧縮範囲表現です(2026-08-01に全文字HashMap展開から
+ * 置換)。
+ *
+ * <p>
+ * 従来はどのformatも{@code HashMap<Integer, Integer>}へ1文字=1エントリで
+ * 展開していたため、CJKフォント1つで数MB、290フォントの起動で約350MBを
+ * 保持していた(実測)。cmap format 12/13と同型の範囲(先頭コード・末尾
+ * コード・GID基点・GID固定フラグ)の並びに圧縮すると数KB/フォントになり、
+ * 参照({@link #mapCharCode})もboxingなしの二分探索になる。
+ * </p>
+ *
+ * @param starts   各範囲の先頭文字コード(昇順)
+ * @param ends     各範囲の末尾文字コード(両端含む)
+ * @param gids     各範囲のGID基点
+ * @param constant 真なら範囲内の全コードが同じGID(format 13の多対一)、
+ *                 偽ならコードとともにGIDも+1ずつ進む
  * @since 1.0
  * @author <a href="mailto:david@steadystate.co.uk">David Schweinsberg</a>
  */
-public record GenericCmapFormat(int[] glyphIdToCharacterCode, Map<Integer, Integer> characterCodeToGlyphId)
+public record GenericCmapFormat(int[] starts, int[] ends, int[] gids, boolean[] constant)
 		implements CmapFormat, Serializable {
 	private static final Logger LOG = Logger.getLogger(GenericCmapFormat.class.getName());
-	private static final long serialVersionUID = 0L;
+	private static final long serialVersionUID = 1L;
 
 	protected static final long LEAD_OFFSET = 0xD800 - (0x10000 >> 10);
 	protected static final long SURROGATE_OFFSET = 0x10000 - (0xD800 << 10) - 0xDC00;
 
 	/**
 	 * This will read the required data from the stream.
-	 * 
+	 *
 	 * @param format    the CMAP this encoding belongs to.
 	 * @param numGlyphs number of glyphs.
 	 * @param data      The stream to read the data from.
@@ -69,7 +85,48 @@ public record GenericCmapFormat(int[] glyphIdToCharacterCode, Map<Integer, Integ
 			case 13 -> processSubtype13(data, numGlyphs);
 			default -> throw new IOException("Unknown cmap format:" + format);
 		};
-		return new GenericCmapFormat(cmapData.glyphIdToCharacterCode, cmapData.characterCodeToGlyphId);
+		return compress(cmapData.characterCodeToGlyphId);
+	}
+
+	/**
+	 * パース中に組み立てた写像を圧縮範囲へ変換します(パース用のMapと
+	 * 逆引き配列はここで捨てる——保持するのは範囲配列だけ)。
+	 */
+	private static GenericCmapFormat compress(final Map<Integer, Integer> characterCodeToGlyphId) {
+		final long[] pairs = new long[characterCodeToGlyphId.size()];
+		int n = 0;
+		for (final Entry<Integer, Integer> e : characterCodeToGlyphId.entrySet()) {
+			pairs[n++] = ((long) e.getKey() << 16) | (e.getValue() & 0xFFFFL);
+		}
+		Arrays.sort(pairs);
+		int rangeCount = 0;
+		final int[] starts = new int[n], ends = new int[n], gids = new int[n];
+		final boolean[] constant = new boolean[n];
+		for (int i = 0; i < n; ++i) {
+			final int code = (int) (pairs[i] >>> 16);
+			final int gid = (int) (pairs[i] & 0xFFFFL);
+			if (rangeCount > 0 && code == ends[rangeCount - 1] + 1) {
+				final int k = rangeCount - 1;
+				final int length = ends[k] - starts[k] + 1;
+				if (length == 1 && gid == gids[k]) {
+					// 2点目で固定GIDモードが確定
+					constant[k] = true;
+					ends[k] = code;
+					continue;
+				}
+				if (constant[k] ? gid == gids[k] : gid == gids[k] + length) {
+					ends[k] = code;
+					continue;
+				}
+			}
+			starts[rangeCount] = code;
+			ends[rangeCount] = code;
+			gids[rangeCount] = gid;
+			constant[rangeCount] = false;
+			++rangeCount;
+		}
+		return new GenericCmapFormat(Arrays.copyOf(starts, rangeCount), Arrays.copyOf(ends, rangeCount),
+				Arrays.copyOf(gids, rangeCount), Arrays.copyOf(constant, rangeCount));
 	}
 
 	private record CmapData(int[] glyphIdToCharacterCode, Map<Integer, Integer> characterCodeToGlyphId) {
@@ -466,28 +523,45 @@ public record GenericCmapFormat(int[] glyphIdToCharacterCode, Map<Integer, Integ
 	 */
 	@Override
 	public int mapCharCode(int characterCode) {
-		Integer glyphId = characterCodeToGlyphId.get(characterCode);
-		return glyphId == null ? 0 : glyphId;
+		// startsがcharacterCode以下の最後の範囲を二分探索
+		int low = 0, high = this.starts.length - 1;
+		while (low <= high) {
+			final int mid = (low + high) >>> 1;
+			if (this.starts[mid] <= characterCode) {
+				low = mid + 1;
+			} else {
+				high = mid - 1;
+			}
+		}
+		final int k = low - 1;
+		if (k < 0 || characterCode > this.ends[k]) {
+			return 0;
+		}
+		return this.constant[k] ? this.gids[k] : this.gids[k] + (characterCode - this.starts[k]);
 	}
 
 	/**
 	 * Returns the character code for the given GID, or null if there is none.
+	 * 複数のコードが同じGIDへ写る場合は最小のコードを返します(旧実装は
+	 * formatにより挙動が揺れていた——挿入順の最初または最後)。
 	 *
 	 * @param gid glyph id
 	 * @return character code
 	 */
 	public Integer getCharacterCode(int gid) {
-		if (gid < 0 || gid >= glyphIdToCharacterCode.length) {
-			return null;
+		for (int k = 0; k < this.starts.length; ++k) {
+			if (this.constant[k]) {
+				if (gid == this.gids[k]) {
+					return this.starts[k];
+				}
+				continue;
+			}
+			final int offset = gid - this.gids[k];
+			if (offset >= 0 && offset <= this.ends[k] - this.starts[k]) {
+				return this.starts[k] + offset;
+			}
 		}
-		// workaround for the fact that glyphIdToCharacterCode doesn't distinguish
-		// between
-		// missing character codes and code 0.
-		int code = glyphIdToCharacterCode[gid];
-		if (code == -1) {
-			return null;
-		}
-		return code;
+		return null;
 	}
 
 	/**
