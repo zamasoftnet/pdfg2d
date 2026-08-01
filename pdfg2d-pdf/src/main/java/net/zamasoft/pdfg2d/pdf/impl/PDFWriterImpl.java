@@ -312,6 +312,81 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 	}
 
+	/**
+	 * Catalog骨格が割り当てた間接参照です(2026-08-01、増分11——
+	 * コンストラクタのフェーズ間受け渡しをrecordで明示する)。
+	 *
+	 * @param pages        ページツリーのルート
+	 * @param metadata     XMPメタデータ(PDF 1.4未満ではnull)
+	 * @param outputIntent OutputIntent辞書(PDF 1.4未満ではnull)
+	 */
+	private record CatalogRefs(ObjectRef pages, ObjectRef metadata, ObjectRef outputIntent) {
+	}
+
+	/** PDFヘッダとバイナリ識別コメントを書き出します。 */
+	private void writeHeader(final PDFParams.Version pdfVersion) throws IOException {
+		this.mainFlow.write(HEADER);
+		this.mainFlow.write(pdfVersion.baseVersion().getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+		this.mainFlow.lineBreak();
+		// Binary identification comment: four bytes with values above 127
+		// mark the file as binary for transfer tools. Required in practice by
+		// PDF/A and PDF/X validators and recommended for every PDF.
+		// (128..255: the spec demands strictly greater than 127.)
+		this.mainFlow.write('%');
+		for (var i = 0; i < 4; ++i) {
+			this.mainFlow.write(RND.nextInt(128) + 128);
+		}
+		this.mainFlow.lineBreak();
+	}
+
+	/**
+	 * Catalog辞書の骨格(Type/Version/Pages/Metadata/OutputIntentsの参照)を
+	 * 書き出し、割り当てた参照を返します。オブジェクト番号の割当順は
+	 * 従来と同一(Pages→Metadata→OutputIntent)。
+	 */
+	private CatalogRefs beginCatalog(final PDFParams.Version pdfVersion) throws IOException {
+		this.mainFlow.startHash();
+
+		this.mainFlow.writeName("Type");
+		this.mainFlow.writeName("Catalog");
+		this.mainFlow.lineBreak();
+
+		// Version (deprecated in PDF 2.0, where the header is authoritative)
+		if (pdfVersion.v >= PDFParams.Version.V_1_4.v && pdfVersion.v < PDFParams.Version.V_2_0.v) {
+			this.mainFlow.writeName("Version");
+			this.mainFlow.writeName(pdfVersion.baseVersion());
+			this.mainFlow.lineBreak();
+		}
+
+		// Page Tree
+		this.mainFlow.writeName("Pages");
+		final ObjectRef pagesRef = this.xref.nextObjectRef();
+		this.mainFlow.writeObjectRef(pagesRef);
+		this.mainFlow.lineBreak();
+
+		// XMP Metadata
+		ObjectRef xmpmetaRef = null;
+		if (pdfVersion.v >= PDFParams.Version.V_1_4.v) {
+			xmpmetaRef = this.xref.nextObjectRef();
+			this.mainFlow.writeName("Metadata");
+			this.mainFlow.writeObjectRef(xmpmetaRef);
+			this.mainFlow.lineBreak();
+		}
+
+		// OutputIntents
+		ObjectRef outputIntentRef = null;
+		if (pdfVersion.v >= PDFParams.Version.V_1_4.v) {
+			outputIntentRef = this.xref.nextObjectRef();
+			this.mainFlow.writeName("OutputIntents");
+			this.mainFlow.startArray();
+			this.mainFlow.writeObjectRef(outputIntentRef);
+			this.mainFlow.endArray();
+			this.mainFlow.lineBreak();
+		}
+
+		return new CatalogRefs(pagesRef, xmpmetaRef, outputIntentRef);
+	}
+
 	private ObjectRef linDictRef;
 	private PDFFragmentOutputImpl linDictFlow;
 
@@ -340,18 +415,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 		// Header
 		final var pdfVersion = this.params.version();
-		this.mainFlow.write(HEADER);
-		this.mainFlow.write(pdfVersion.baseVersion().getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-		this.mainFlow.lineBreak();
-		// Binary identification comment: four bytes with values above 127
-		// mark the file as binary for transfer tools. Required in practice by
-		// PDF/A and PDF/X validators and recommended for every PDF.
-		// (128..255: the spec demands strictly greater than 127.)
-		this.mainFlow.write('%');
-		for (var i = 0; i < 4; ++i) {
-			this.mainFlow.write(RND.nextInt(128) + 128);
-		}
-		this.mainFlow.lineBreak();
+		this.writeHeader(pdfVersion);
 
 		if (this.params.linearized()) {
 			this.linDictFlow = this.mainFlow.forkFragment();
@@ -374,44 +438,12 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			// We will fill this later in closeLinearized
 		}
 
-		this.mainFlow.startHash();
-
-		this.mainFlow.writeName("Type");
-		this.mainFlow.writeName("Catalog");
-		this.mainFlow.lineBreak();
-
-		// Version (deprecated in PDF 2.0, where the header is authoritative)
-		if (pdfVersion.v >= PDFParams.Version.V_1_4.v && pdfVersion.v < PDFParams.Version.V_2_0.v) {
-			this.mainFlow.writeName("Version");
-			this.mainFlow.writeName(pdfVersion.baseVersion());
-			this.mainFlow.lineBreak();
-		}
-
-		// Page Tree
-		this.mainFlow.writeName("Pages");
-		this.rootPageRef = this.xref.nextObjectRef();
-		this.mainFlow.writeObjectRef(this.rootPageRef);
-		this.mainFlow.lineBreak();
-
-		// XMP Metadata
-		var xmpmetaRef = (ObjectRef) null;
-		if (this.params.version().v >= PDFParams.Version.V_1_4.v) {
-			xmpmetaRef = this.xref.nextObjectRef();
-			this.mainFlow.writeName("Metadata");
-			this.mainFlow.writeObjectRef(xmpmetaRef);
-			this.mainFlow.lineBreak();
-		}
-
-		// OutputIntents
-		var outputIntentRef = (ObjectRef) null;
-		if (this.params.version().v >= PDFParams.Version.V_1_4.v) {
-			outputIntentRef = this.xref.nextObjectRef();
-			this.mainFlow.writeName("OutputIntents");
-			this.mainFlow.startArray();
-			this.mainFlow.writeObjectRef(outputIntentRef);
-			this.mainFlow.endArray();
-			this.mainFlow.lineBreak();
-		}
+		// Catalog骨格(参照の割当と書き出しはbeginCatalogに集約——
+		// 以降のフェーズはこのrecordの参照だけに依存する)
+		final CatalogRefs catalogRefs = this.beginCatalog(pdfVersion);
+		this.rootPageRef = catalogRefs.pages();
+		final ObjectRef xmpmetaRef = catalogRefs.metadata();
+		final ObjectRef outputIntentRef = catalogRefs.outputIntent();
 
 		// Inside Catalog
 		this.catalogFlow = this.mainFlow.forkFragment();

@@ -162,16 +162,16 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 					.load(net.zamasoft.pdfg2d.font.FontSourceProvider.class)) {
 				try {
 					for (final FontSource source : provider.fontSources()) {
-						FontLoader.add(source, handler.nameToFonts);
+						FontLoader.add(source, handler.catalog.nameToFonts);
 					}
 				} catch (final Exception e) {
 					LOG.log(Level.WARNING, "Failed to load fonts from " + provider.getClass().getName(), e);
 				}
 			}
 
-			this.nameToFonts = MultimapUtils.unmodifiableMap(handler.nameToFonts);
-			this.genericToFamily = Collections.unmodifiableMap(handler.genericToFamily);
-			this.allFonts = handler.allFonts;
+			this.nameToFonts = MultimapUtils.unmodifiableMap(handler.catalog.nameToFonts);
+			this.genericToFamily = Collections.unmodifiableMap(handler.catalog.genericToFamily);
+			this.allFonts = handler.catalog.allFonts;
 
 			this.fontListCache = null;
 
