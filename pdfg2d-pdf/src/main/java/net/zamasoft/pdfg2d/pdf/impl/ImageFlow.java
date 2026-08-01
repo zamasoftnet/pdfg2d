@@ -1,5 +1,6 @@
 package net.zamasoft.pdfg2d.pdf.impl;
 
+import net.zamasoft.pdfg2d.util.ImageInputStreamProxy;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorModel;

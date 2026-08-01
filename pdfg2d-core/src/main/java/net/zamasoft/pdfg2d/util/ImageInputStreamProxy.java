@@ -1,4 +1,4 @@
-package net.zamasoft.pdfg2d.pdf.impl;
+package net.zamasoft.pdfg2d.util;
 
 import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
@@ -16,7 +16,7 @@ import java.io.InputStream;
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
-class ImageInputStreamProxy extends InputStream {
+public class ImageInputStreamProxy extends InputStream {
 	private final ImageInputStream imageInputStream;
 
 	/**
@@ -25,7 +25,7 @@ class ImageInputStreamProxy extends InputStream {
 	 * @param imageInputStream the underlying image input stream; must not be
 	 *                         {@code null}
 	 */
-	ImageInputStreamProxy(ImageInputStream imageInputStream) {
+	public ImageInputStreamProxy(ImageInputStream imageInputStream) {
 		this.imageInputStream = imageInputStream;
 	}
 
@@ -51,7 +51,13 @@ class ImageInputStreamProxy extends InputStream {
 
 	@Override
 	public int available() throws IOException {
-		long available = imageInputStream.length() - imageInputStream.getStreamPosition();
+		// length()が不明(-1)のストリームで負のavailableを返さない
+		// (foliojet側フォークにあった改良を2026-08-01の一本化で移植)
+		long length = imageInputStream.length();
+		if (length < 0) {
+			return 0;
+		}
+		long available = length - imageInputStream.getStreamPosition();
 		return available > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) available;
 	}
 
