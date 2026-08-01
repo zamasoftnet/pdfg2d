@@ -95,7 +95,7 @@ public final class FontUtils {
 		final var glyphCount = text.getGlyphCount();
 		final var glyphIds = text.getGlyphIds();
 		final var letterSpacing = text.getLetterSpacing();
-		final var xadvances = text.getXAdvances(false);
+		final net.zamasoft.pdfg2d.gc.text.GlyphAdvances xadvances = text.xAdvances();
 		final var fm = text.getFontMetrics();
 
 		final var s = fontSize / FontSource.DEFAULT_UNITS_PER_EM;
@@ -124,7 +124,7 @@ public final class FontUtils {
 					double dy = fm.getAdvance(pgid) + letterSpacing;
 					dy -= fm.getKerning(pgid, gid);
 					if (xadvances != null) {
-						dy += xadvances[i];
+						dy += xadvances.get(i);
 					}
 					at.preConcatenate(AffineTransform.getTranslateInstance(0, dy));
 				}
@@ -154,7 +154,7 @@ public final class FontUtils {
 						dx -= fm.getKerning(pgid, gid);
 					}
 					if (xadvances != null) {
-						dx += xadvances[i];
+						dx += xadvances.get(i);
 					}
 					at.preConcatenate(AffineTransform.getTranslateInstance(dx, 0));
 				}
@@ -194,7 +194,7 @@ public final class FontUtils {
 			final var glyphCount = text.getGlyphCount();
 			final var glyphIds = text.getGlyphIds();
 			final var letterSpacing = text.getLetterSpacing();
-			final var xadvances = text.getXAdvances(false);
+			final net.zamasoft.pdfg2d.gc.text.GlyphAdvances xadvances = text.xAdvances();
 			final var fm = text.getFontMetrics();
 			AffineTransform at;
 			{
@@ -253,7 +253,7 @@ public final class FontUtils {
 						double dy = fm.getAdvance(pgid) + letterSpacing;
 						dy -= fm.getKerning(pgid, gid);
 						if (xadvances != null) {
-							dy += xadvances[i];
+							dy += xadvances.get(i);
 						}
 						at.preConcatenate(AffineTransform.getTranslateInstance(0, dy));
 					}
@@ -296,7 +296,7 @@ public final class FontUtils {
 							dx -= fm.getKerning(pgid, gid);
 						}
 						if (xadvances != null) {
-							dx += xadvances[i];
+							dx += xadvances.get(i);
 						}
 						at.preConcatenate(AffineTransform.getTranslateInstance(dx, 0));
 					}

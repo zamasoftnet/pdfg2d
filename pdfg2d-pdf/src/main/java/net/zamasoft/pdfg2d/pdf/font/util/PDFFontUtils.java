@@ -83,7 +83,7 @@ public class PDFFontUtils {
 	public static void drawCIDTo(PDFGraphicsOutput out, Text text, boolean verticalFont) throws IOException {
 		int[] gids = text.getGlyphIds();
 		int glyphCount = text.getGlyphCount();
-		double[] xadvances = text.getXAdvances(false);
+		final net.zamasoft.pdfg2d.gc.text.GlyphAdvances xadvances = text.xAdvances();
 		FontMetrics fm = text.getFontMetrics();
 		out.startArray();
 		int len = 0;
@@ -91,7 +91,7 @@ public class PDFFontUtils {
 		double size = fm.getFontSize();
 		double prevPlacement = 0;
 		for (int i = 0; i < glyphCount; ++i) {
-			double xadvance = xadvances == null ? 0 : xadvances[i];
+			double xadvance = xadvances == null ? 0 : xadvances.get(i);
 			if (i > 0) {
 				xadvance -= fm.getKerning(gids[i - 1], gids[i]);
 				// palt等のfeature由来の詰めもkerningと同型のTJ調整で再現する
@@ -147,7 +147,7 @@ public class PDFFontUtils {
 		final byte[] clens = text.getClusterLengths();
 		char[] chars = text.getChars();
 		double letterSpacing = text.getLetterSpacing();
-		double[] xadvances = text.getXAdvances(false);
+		final net.zamasoft.pdfg2d.gc.text.GlyphAdvances xadvances = text.xAdvances();
 		FontMetrics fm = text.getFontMetrics();
 		TextMode textMode = gc.getTextMode();
 
@@ -196,7 +196,7 @@ public class PDFFontUtils {
 				dx -= fm.getKerning(pgid, gid);
 			}
 			if (xadvances != null) {
-				dx += xadvances[i];
+				dx += xadvances.get(i);
 			}
 			gc.transform(AffineTransform.getTranslateInstance(dx, 0));
 			k += gclen;

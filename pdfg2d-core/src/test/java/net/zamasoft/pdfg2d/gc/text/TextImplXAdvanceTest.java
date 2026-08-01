@@ -86,7 +86,7 @@ public class TextImplXAdvanceTest {
 		text.addXAdvance(1, -5);
 		text.addXAdvance(1, -1);
 		text.addXAdvance(2, 2);
-		assertArrayEquals(new double[] { 0, -6, 2 }, text.getXAdvances(false), 0.0001);
+		assertArrayEquals(new double[] { 0, -6, 2 }, toArray(text.xAdvances()), 0.0001);
 		assertEquals(30 - 6 + 2, text.getAdvance(), 0.0001);
 	}
 
@@ -97,10 +97,18 @@ public class TextImplXAdvanceTest {
 		text.addXAdvance(3, -2); // tail側
 		final TextImpl head = (TextImpl) text.split(2);
 		// head: glyphs 0-1, adjustments [-5, 0]
-		assertArrayEquals(new double[] { -5, 0 }, head.getXAdvances(false), 0.0001);
+		assertArrayEquals(new double[] { -5, 0 }, toArray(head.xAdvances()), 0.0001);
 		assertEquals(20 - 5, head.getAdvance(), 0.0001);
 		// tail: glyphs 2-3, adjustments [0, -2]
-		assertArrayEquals(new double[] { 0, -2 }, text.getXAdvances(false), 0.0001);
+		assertArrayEquals(new double[] { 0, -2 }, toArray(text.xAdvances()), 0.0001);
 		assertEquals(20 - 2, text.getAdvance(), 0.0001);
 	}
+	private static double[] toArray(final net.zamasoft.pdfg2d.gc.text.GlyphAdvances advances) {
+		final double[] values = new double[advances.size()];
+		for (int i = 0; i < values.length; ++i) {
+			values[i] = advances.get(i);
+		}
+		return values;
+	}
+
 }

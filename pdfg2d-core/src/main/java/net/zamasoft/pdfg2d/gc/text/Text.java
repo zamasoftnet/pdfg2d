@@ -96,12 +96,13 @@ public non-sealed interface Text extends Element {
 	public void toGlyphs(GlyphHandler gh);
 
 	/**
-	 * Returns the per-glyph extra advance adjustments, optionally creating
-	 * the array if it does not yet exist.
+	 * Returns the per-glyph extra advance adjustments as a read-only view,
+	 * or {@code null} if no adjustments have been applied.
+	 * 生配列公開({@code getXAdvances(boolean)})の置換(2026-08-01)——
+	 * 書き込みは{@link TextImpl}の意味のある操作
+	 * ({@code addXAdvance}/{@code resetXAdvances})に限定する。
 	 *
-	 * @param make if {@code true}, create the array when it does not exist
-	 * @return the per-glyph x-advance array, or {@code null} if not set and
-	 *         {@code make} is {@code false}
+	 * @return the per-glyph x-advance view, or {@code null}
 	 */
-	public double[] getXAdvances(boolean make);
+	public GlyphAdvances xAdvances();
 }

@@ -281,7 +281,8 @@ class CoreApiTest {
         assertEquals(11.0, text.appendGlyph("A".toCharArray(), 0, (byte) 1, 11));
         assertEquals(10.0, text.appendGlyph("BC".toCharArray(), 0, (byte) 2, 12));
         text.setLetterSpacing(0.5);
-        text.getXAdvances(true)[1] = 1.25;
+        text.resetXAdvances();
+        text.addXAdvance(1, 1.25);
         text.pack();
 
         assertEquals(2, text.getGlyphCount());

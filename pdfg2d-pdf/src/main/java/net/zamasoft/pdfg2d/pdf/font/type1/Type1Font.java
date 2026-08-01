@@ -133,7 +133,7 @@ class Type1Font implements PDFFont {
 			PDFGraphicsOutput out = ((PDFGC) gc).getPDFGraphicsOutput();
 			int glyphCount = text.getGlyphCount();
 			int[] glyphIds = text.getGlyphIds();
-			double[] xadvances = text.getXAdvances(false);
+			final net.zamasoft.pdfg2d.gc.text.GlyphAdvances xadvances = text.xAdvances();
 			double size = text.getFontMetrics().getFontSize();
 			out.startArray();
 			int pgid = 0;
@@ -143,12 +143,12 @@ class Type1Font implements PDFFont {
 				short kerning = this.source.getKerning(gid, pgid);
 				if (xadvances != null) {
 					if (j == 0) {
-						double xadvance = xadvances[j];
+						double xadvance = xadvances.get(j);
 						if (xadvance != 0) {
 							out.writeReal(-xadvance * FontSource.DEFAULT_UNITS_PER_EM / size);
 						}
 					} else {
-						kerning += xadvances[j] * FontSource.DEFAULT_UNITS_PER_EM / size;
+						kerning += xadvances.get(j) * FontSource.DEFAULT_UNITS_PER_EM / size;
 					}
 				}
 				if (kerning != 0) {

@@ -50,9 +50,15 @@ public class TextImpl extends AbstractText implements Serializable {
 	public double letterSpacing = 0;
 
 	/**
-	 * The extra spacing added for each glyph.
+	 * The extra spacing added for each glyph. 生配列の公開をやめ、読み取りは
+	 * {@link #xAdvances()}(読み取り専用ビュー)、書き込みは
+	 * {@link #addXAdvance(int, double)}/{@link #resetXAdvances()}に限定
+	 * (2026-08-01、90点計画増分12)。
 	 */
-	public double[] xadvances = null;
+	private double[] xadvances = null;
+
+	/** {@link #xAdvances()}が返す読み取り専用ビュー(遅延生成・再利用)。 */
+	private transient GlyphAdvances xadvancesView = null;
 
 	/**
 	 * Constructs a new TextImpl.
@@ -91,36 +97,40 @@ public class TextImpl extends AbstractText implements Serializable {
 	}
 
 	@Override
-	public double[] getXAdvances(final boolean make) {
-		if (make) {
-			this.xadvances = new double[this.glyphCount];
+	public GlyphAdvances xAdvances() {
+		if (this.xadvances == null) {
+			return null;
 		}
-		return this.xadvances;
+		if (this.xadvancesView == null) {
+			this.xadvancesView = new GlyphAdvances() {
+				@Override
+				public int size() {
+					return TextImpl.this.glyphCount;
+				}
+
+				@Override
+				public double get(final int glyphIndex) {
+					// 調整配列はグリフ追加に遅れて伸びることがある
+					// (grow前の末尾グリフは調整ゼロ)
+					final double[] values = TextImpl.this.xadvances;
+					return (values != null && glyphIndex < values.length) ? values[glyphIndex] : 0;
+				}
+			};
+		}
+		return this.xadvancesView;
 	}
 
 	/**
-	 * Returns the per-glyph adjustment array, allocating (or growing) it as
-	 * needed while <b>preserving</b> any adjustments already present - unlike
-	 * {@code getXAdvances(true)} which resets the array. Use this from
-	 * consumers that add their own spacing on top of earlier adjustments
-	 * (e.g. justification over Japanese punctuation trimming).
-	 *
-	 * @return the adjustment array, aligned to {@link #getGlyphCount()}
+	 * 全グリフの送り量調整をゼロへ戻します(旧{@code getXAdvances(true)}の
+	 * 置換。ルビの均等配置のように調整を作り直す書き込み側が使う)。
 	 */
-	public double[] ensureXAdvances() {
-		if (this.xadvances == null) {
-			this.xadvances = new double[this.glyphCount];
-		} else if (this.xadvances.length < this.glyphCount) {
-			final double[] grown = new double[this.glyphCount];
-			System.arraycopy(this.xadvances, 0, grown, 0, this.xadvances.length);
-			this.xadvances = grown;
-		}
-		return this.xadvances;
+	public void resetXAdvances() {
+		this.xadvances = new double[this.glyphCount];
 	}
 
 	/**
 	 * Adds a per-glyph advance adjustment, preserving any adjustments already
-	 * present (unlike {@code getXAdvances(true)} which resets the array).
+	 * present (unlike {@link #resetXAdvances()} which resets the array).
 	 * Used by layout-level spacing (Japanese punctuation trimming etc.) so
 	 * that measurement and drawing observe the same adjusted advances.
 	 *

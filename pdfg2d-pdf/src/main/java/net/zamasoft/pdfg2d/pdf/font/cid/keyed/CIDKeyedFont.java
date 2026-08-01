@@ -47,7 +47,7 @@ class CIDKeyedFont extends CIDFont {
 			// Native character encoding
 			char[] ch = text.getChars();
 			int clen = text.getCharCount();
-			double[] xadvances = text.getXAdvances(false);
+			final net.zamasoft.pdfg2d.gc.text.GlyphAdvances xadvances = text.xAdvances();
 			if (xadvances == null) {
 				this.writeByte8(out, ch, 0, clen);
 				out.writeOperator("Tj");
@@ -59,7 +59,7 @@ class CIDKeyedFont extends CIDFont {
 				int off = 0;
 				double size = text.getFontMetrics().getFontSize();
 				for (int i = 0; i < glyphCount; ++i) {
-					double xadvance = xadvances[i];
+					double xadvance = xadvances.get(i);
 					if (xadvance != 0) {
 						// Use negative values for vertical writing (SPEC PDF1.3 8.7.1.1)
 						if (this.source.getDirection() == Direction.TB) {
