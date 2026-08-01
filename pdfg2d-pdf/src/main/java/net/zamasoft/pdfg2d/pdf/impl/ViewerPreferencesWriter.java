@@ -26,11 +26,16 @@ final class ViewerPreferencesWriter {
 	 * Writes the viewer preferences from {@code params} to the catalog flow.
 	 * Does nothing when no preferences are configured.
 	 *
-	 * @param catalogFlow the catalog dictionary flow
-	 * @param params      the PDF generation parameters
+	 * @param catalogFlow          the catalog dictionary flow
+	 * @param params               the PDF generation parameters
+	 * @param forceDisplayDocTitle PDF/UAの要件でDisplayDocTitleを強制するか
+	 *                             (2026-08-01——従来は呼び出し側の
+	 *                             ViewerPreferencesを直接変更していた副作用を
+	 *                             出力判定へ移した)
 	 * @throws IOException if an I/O error occurs
 	 */
-	static void write(final PDFFragmentOutputImpl catalogFlow, final PDFParams params) throws IOException {
+	static void write(final PDFFragmentOutputImpl catalogFlow, final PDFParams params,
+			final boolean forceDisplayDocTitle) throws IOException {
 		final ViewerPreferences vp = params.viewerPreferences();
 		if (vp == null) {
 			return;
@@ -68,7 +73,7 @@ final class ViewerPreferencesWriter {
 			catalogFlow.lineBreak();
 		}
 
-		if (vp.isDisplayDocTitle()) {
+		if (vp.isDisplayDocTitle() || forceDisplayDocTitle) {
 			if (params.version().v < PDFParams.Version.V_1_4.v) {
 				throw new UnsupportedOperationException("ViewerPreference DisplayDocTitle requires PDF 1.4 or later.");
 			}

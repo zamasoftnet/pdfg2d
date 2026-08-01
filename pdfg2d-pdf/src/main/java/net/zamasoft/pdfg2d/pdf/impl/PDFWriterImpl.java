@@ -269,6 +269,49 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		return ref;
 	}
 
+	/** PDF/UA: 文書タイトルをウィンドウタイトルに使う要件(検証済み計画)。 */
+	private final boolean forceDisplayDocTitle;
+
+	/**
+	 * 出力開始前の妥当性検証です(2026-08-01)。ここで弾かれる組合せは
+	 * 1バイトも書かずにIllegalArgumentExceptionで失敗する。
+	 */
+	private static void validate(final PDFParams params) {
+		final var pdfVersion = params.version();
+		// PDF/A-1 forbids JavaScript actions and PDF/X forbids actions
+		// entirely; the only supported open action is JavaScript, so reject
+		// the combination up front rather than emitting a non-conformant file.
+		if (params.openAction() != null && (pdfVersion.isPdfA() || pdfVersion.isPdfX())) {
+			throw new IllegalArgumentException("OpenAction is not allowed in PDF/A or PDF/X.");
+		}
+		final var encryptionParams = params.encryption();
+		if (encryptionParams != null) {
+			if (pdfVersion.isPdfA()) {
+				throw new IllegalArgumentException("Encryption cannot be used in PDF/A.");
+			}
+			if (pdfVersion.isPdfX()) {
+				throw new IllegalArgumentException("Encryption cannot be used in PDF/X.");
+			}
+			final var encType = encryptionParams.getType();
+			if (encType == EncryptionParams.Type.V2 && pdfVersion.v < PDFParams.Version.V_1_3.v) {
+				throw new IllegalArgumentException("V2 encryption requires PDF 1.3 or later.");
+			}
+			if (encryptionParams instanceof final V4EncryptionParams v4Params) {
+				if (pdfVersion.v < PDFParams.Version.V_1_5.v) {
+					throw new IllegalArgumentException("V4 encryption requires PDF 1.5 or later.");
+				}
+				if (v4Params.getCFM() == V4EncryptionParams.CFM.AESV2 && pdfVersion.v < PDFParams.Version.V_1_6.v) {
+					throw new IllegalArgumentException("AESV2 encryption requires PDF 1.6 or later.");
+				}
+			}
+			if (encType == EncryptionParams.Type.V5 && pdfVersion.v < PDFParams.Version.V_1_7.v) {
+				// AES-256 (R6) is standard in PDF 2.0 and accepted by PDF 1.7
+				// extension level 8 viewers.
+				throw new IllegalArgumentException("V5 (AES-256) encryption requires PDF 1.7 or later.");
+			}
+		}
+	}
+
 	private ObjectRef linDictRef;
 	private PDFFragmentOutputImpl linDictFlow;
 
@@ -278,21 +321,17 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.params = (params != null) ? params : PDFParams.createDefault();
 		this.builder = builder.supportsPositionInfo() ? builder : new PositionTrackingOutput(builder);
 
-		// PDF/A-1 forbids JavaScript actions and PDF/X forbids actions
-		// entirely; the only supported open action is JavaScript, so reject
-		// the combination up front rather than emitting a non-conformant file.
-		if (this.params.openAction() != null
-				&& (this.params.version().isPdfA() || this.params.version().isPdfX())) {
-			throw new IllegalArgumentException("OpenAction is not allowed in PDF/A or PDF/X.");
-		}
+		// 妥当性検証は1バイトも書く前に済ませる(2026-08-01——従来は
+		// 暗号化の不正な組合せがヘッダとCatalogを書き始めた後で失敗していた)
+		validate(this.params);
 
 		final var tagged = this.params.tagged();
 		this.structure = (tagged != null) ? new StructureTreeBuilder(tagged.pdfuaPart() >= 2) : null;
-		if (tagged != null && tagged.pdfua()) {
-			// PDF/UA requires the window title to come from the document
-			// title rather than the file name.
-			this.params.viewerPreferences().setDisplayDocTitle(true);
-		}
+		// PDF/UA requires the window title to come from the document title
+		// rather than the file name. 従来はここで呼び出し側の
+		// ViewerPreferencesをsetDisplayDocTitle(true)で直接変更していた——
+		// 副作用を除去し、書き出し時の判定(ViewerPreferencesWriter)へ移した
+		this.forceDisplayDocTitle = tagged != null && tagged.pdfua();
 
 		final var id = this.nextId();
 		this.builder.addFragment();
@@ -389,33 +428,9 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.mainFlow.endHash();
 		this.mainFlow.endObject();
 
-		// Encryption
+		// Encryption(妥当性はvalidate()で検証済み)
 		final var encryptionParams = this.params.encryption();
 		if (encryptionParams != null) {
-			if (pdfVersion.isPdfA()) {
-				throw new IllegalArgumentException("Encryption cannot be used in PDF/A.");
-			}
-			if (pdfVersion.isPdfX()) {
-				throw new IllegalArgumentException("Encryption cannot be used in PDF/X.");
-			}
-			final var encType = encryptionParams.getType();
-			if (encType == EncryptionParams.Type.V2 && pdfVersion.v < PDFParams.Version.V_1_3.v) {
-				throw new IllegalArgumentException("V2 encryption requires PDF 1.3 or later.");
-			}
-			if (encryptionParams instanceof final V4EncryptionParams v4Params) {
-				if (pdfVersion.v < PDFParams.Version.V_1_5.v) {
-					throw new IllegalArgumentException("V4 encryption requires PDF 1.5 or later.");
-				}
-				if (v4Params.getCFM() == V4EncryptionParams.CFM.AESV2 && pdfVersion.v < PDFParams.Version.V_1_6.v) {
-					throw new IllegalArgumentException("AESV2 encryption requires PDF 1.6 or later.");
-				}
-			}
-			if (encType == EncryptionParams.Type.V5 && pdfVersion.v < PDFParams.Version.V_1_7.v) {
-				// AES-256 (R6) is standard in PDF 2.0 and accepted by PDF 1.7
-				// extension level 8 viewers.
-				throw new IllegalArgumentException("V5 (AES-256) encryption requires PDF 1.7 or later.");
-			}
-
 			this.encryption = new Encryption(this.mainFlow, this.xref, this.fileid, encryptionParams);
 		}
 
@@ -430,81 +445,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			this.xmpmetaFlow = null;
 		}
 
-		// OutputIntents
+		// OutputIntents(辞書とICCプロファイルの書き出しはOutputIntentWriterへ
+		// 抽出——ViewerPreferencesWriter/XMPMetadataWriterと同じ様式)
 		if (outputIntentRef != null) {
-			this.mainFlow.startObject(outputIntentRef);
-			this.mainFlow.startHash();
-			this.mainFlow.writeName("Type");
-			this.mainFlow.writeName("OutputIntent");
-			this.mainFlow.lineBreak();
-
-			this.mainFlow.writeName("S");
-			this.mainFlow.writeName(pdfVersion.isPdfX() ? "GTS_PDFX" : "GTS_PDFA1");
-			this.mainFlow.lineBreak();
-
-			// Resolve the intent: explicit configuration wins; otherwise a
-			// built-in profile is chosen so that the intent's color space
-			// matches the device color space actually emitted (PDF/A-1
-			// requires DeviceRGB/DeviceCMYK content to be backed by an
-			// output intent of the same type).
-			var intent = this.params.outputIntent();
-			if (intent == null) {
-				if (pdfVersion == PDFParams.Version.V_PDFX1A
-						|| this.params.effectiveColorMode() == PDFParams.ColorMode.CMYK) {
-					intent = new OutputIntent("Probe Profile", null, null, "Probe CMYK profile",
-							loadResource("Probev1_ICCv2.icc"), 4);
-				} else {
-					intent = new OutputIntent("sRGB IEC61966-2.1", null, null, null,
-							loadResource("sRGB_IEC61966-2-1_no_black_scaling.icc"), 3);
-				}
-			}
-
-			this.mainFlow.writeName("OutputConditionIdentifier");
-			this.mainFlow.writeString(intent.outputConditionIdentifier());
-			this.mainFlow.lineBreak();
-
-			if (intent.outputCondition() != null) {
-				this.mainFlow.writeName("OutputCondition");
-				this.mainFlow.writeText(intent.outputCondition());
-				this.mainFlow.lineBreak();
-			}
-
-			if (intent.registryName() != null) {
-				this.mainFlow.writeName("RegistryName");
-				this.mainFlow.writeString(intent.registryName());
-				this.mainFlow.lineBreak();
-			}
-
-			if (intent.info() != null) {
-				this.mainFlow.writeName("Info");
-				this.mainFlow.writeText(intent.info());
-				this.mainFlow.lineBreak();
-			}
-
-			final var profileData = intent.iccProfile();
-			if (profileData != null) {
-				final var profRef = this.xref.nextObjectRef();
-				this.mainFlow.writeName("DestOutputProfile");
-				this.mainFlow.writeObjectRef(profRef);
-				this.mainFlow.lineBreak();
-
-				this.mainFlow.endHash();
-				this.mainFlow.endObject();
-
-				this.mainFlow.startObject(profRef);
-				this.mainFlow.startHash();
-
-				this.mainFlow.writeName("N");
-				this.mainFlow.writeInt(intent.colorComponents());
-				this.mainFlow.lineBreak();
-
-				try (final var pout = this.mainFlow.startStreamFromHash(PDFFragmentOutput.Mode.BINARY)) {
-					pout.write(profileData);
-				}
-			} else {
-				this.mainFlow.endHash();
-			}
-			this.mainFlow.endObject();
+			OutputIntentWriter.write(this.mainFlow, this.xref, this.params, outputIntentRef);
 		}
 
 		// Outline Info
@@ -720,7 +664,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	 */
 	private static final java.util.concurrent.ConcurrentMap<String, byte[]> RESOURCE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
 
-	private static byte[] loadResource(final String name) throws IOException {
+	static byte[] loadResource(final String name) throws IOException {
 		final byte[] cached = RESOURCE_CACHE.get(name);
 		if (cached != null) {
 			// 呼び出し側が書き換えても他へ波及しないよう複製を渡す
@@ -1879,7 +1823,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			}
 
 			// ViewerPreferences
-			ViewerPreferencesWriter.write(this.catalogFlow, this.params);
+			ViewerPreferencesWriter.write(this.catalogFlow, this.params, this.forceDisplayDocTitle);
 
 			// Open Action
 			final Action action = this.params.openAction();
