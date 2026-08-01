@@ -13,7 +13,6 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
-import java.awt.image.RenderedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,8 +26,6 @@ import javax.imageio.stream.ImageInputStream;
 
 import net.zamasoft.pdfg2d.g2d.gc.G2DGC;
 import net.zamasoft.pdfg2d.g2d.image.RasterImageImpl;
-import net.zamasoft.pdfg2d.g2d.image.png.PNGDecodeParam;
-import net.zamasoft.pdfg2d.g2d.image.png.PNGImage;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GC.LineCap;
 import net.zamasoft.pdfg2d.gc.GC.LineJoin;
@@ -389,15 +386,17 @@ public final class G2DUtils {
 	 */
 	public static BufferedImage loadImage(ImageReader reader, ImageInputStream imageIn) throws IOException {
 		try {
-			String type = reader.getFormatName();
 			BufferedImage buffer = null;
-			if (type.equalsIgnoreCase("png")) {
-				// Use custom PNG decoder
+			if ("png".equalsIgnoreCase(reader.getFormatName())) {
+				// PNGのgAMAガンマ補正(2026-08-01、旧JAI系自前デコーダ約2,500行の
+				// 置換)。ImageIOはgAMAチャンクを復号に反映しないが、ブラウザは
+				// 反映する——旧デコーダと同じ「表示指数2.2のガンマLUT」を
+				// ImageIOの復号結果へ適用して挙動を保存する(visual golden
+				// 0115-z-index/000-ABSOLUTE=gAMA 0.22727のorder.pngで固定)
 				try {
-					RenderedImage rimage = new PNGImage(new ImageInputStreamWrapper(imageIn), new PNGDecodeParam());
-					buffer = new BufferedImage(rimage.getWidth(), rimage.getHeight(), BufferedImage.TYPE_INT_ARGB);
-					((Graphics2D) buffer.getGraphics()).drawRenderedImage(rimage, new AffineTransform());
+					buffer = decodePngWithGamma(reader, imageIn);
 				} catch (Throwable e) {
+					buffer = null;
 					imageIn.seek(0);
 				}
 			}
@@ -463,6 +462,69 @@ public final class G2DUtils {
 	}
 
 	/**
+	 * ImageIOでPNGを復号し、gAMAチャンクがあれば旧JAI系デコーダと同じ
+	 * ガンマLUT(復号指数 = 1 / (fileGamma × 表示指数2.2))を適用します。
+	 * sRGBチャンクがある場合はgAMAを無視する(PNG仕様・旧デコーダと同じ)。
+	 * 実質恒等(標準のgAMA=1/2.2)の場合はLUTを掛けない。
+	 */
+	private static BufferedImage decodePngWithGamma(final ImageReader reader, final ImageInputStream imageIn)
+			throws IOException {
+		reader.setInput(imageIn);
+		final BufferedImage image = reader.read(0);
+		final double exponent = pngGammaExponent(reader);
+		if (exponent == 1.0) {
+			return image;
+		}
+		final int[] lut = new int[256];
+		for (int i = 0; i < 256; ++i) {
+			// 旧PNGImage.initGammaLutと同じ丸め
+			final int v = (int) (Math.pow(i / 255.0, exponent) * 255.0 + 0.5);
+			lut[i] = Math.min(v, 255);
+		}
+		final int w = image.getWidth(), h = image.getHeight();
+		final BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+		final int[] row = new int[w];
+		for (int y = 0; y < h; ++y) {
+			image.getRGB(0, y, w, 1, row, 0, w);
+			for (int x = 0; x < w; ++x) {
+				final int argb = row[x];
+				row[x] = (argb & 0xFF000000) | (lut[(argb >> 16) & 0xFF] << 16) | (lut[(argb >> 8) & 0xFF] << 8)
+						| lut[argb & 0xFF];
+			}
+			out.setRGB(0, y, w, 1, row, 0, w);
+		}
+		return out;
+	}
+
+	/**
+	 * PNGのガンマ復号指数を返します(補正不要なら1.0)。
+	 */
+	private static double pngGammaExponent(final ImageReader reader) {
+		try {
+			final org.w3c.dom.Node tree = reader.getImageMetadata(0).getAsTree("javax_imageio_png_1.0");
+			Double fileGamma = null;
+			for (org.w3c.dom.Node node = tree.getFirstChild(); node != null; node = node.getNextSibling()) {
+				if ("sRGB".equals(node.getNodeName())) {
+					// sRGBチャンクがあればgAMAは無視
+					return 1.0;
+				}
+				if ("gAMA".equals(node.getNodeName())) {
+					final org.w3c.dom.Node value = node.getAttributes().getNamedItem("value");
+					fileGamma = Double.parseDouble(value.getNodeValue()) / 100000.0;
+				}
+			}
+			if (fileGamma == null || fileGamma <= 0) {
+				return 1.0;
+			}
+			final double exponent = 1.0 / (fileGamma * 2.2);
+			// 標準のsRGB相当(gAMA=45455)は恒等——LUT適用を省く
+			return Math.abs(exponent - 1.0) < 0.01 ? 1.0 : exponent;
+		} catch (final Exception e) {
+			return 1.0;
+		}
+	}
+
+	/**
 	 * Decodes internal line cap to LineCap enum.
 	 *
 	 * @param lineCap Line cap value
@@ -498,26 +560,5 @@ public final class G2DUtils {
 			default:
 				throw new IllegalStateException();
 		}
-	}
-}
-
-class ImageInputStreamWrapper extends InputStream {
-	private final ImageInputStream in;
-
-	public ImageInputStreamWrapper(ImageInputStream in) throws IOException {
-		this.in = in;
-		this.in.seek(0);
-	}
-
-	public int read() throws IOException {
-		return this.in.read();
-	}
-
-	public int read(byte[] buff, int off, int len) throws IOException {
-		return this.in.read(buff, off, len);
-	}
-
-	public int read(byte[] buff) throws IOException {
-		return this.in.read(buff);
 	}
 }

@@ -10,10 +10,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
+
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -185,16 +185,19 @@ public final class FontIndex {
 
 	private static UvsCmapFormat readUvs(final DataInputStream in) throws IOException {
 		final int pairCount = in.readInt();
-		final Map<Long, Integer> codeToGlyphId = new HashMap<>(pairCount);
+		final long[] keys = new long[pairCount];
+		final int[] gids = new int[pairCount];
 		for (int i = 0; i < pairCount; ++i) {
-			codeToGlyphId.put(in.readLong(), in.readInt());
+			keys[i] = in.readLong();
+			gids[i] = in.readInt();
 		}
 		final int selCount = in.readInt();
-		final Set<Integer> varSelectors = new HashSet<>(selCount);
+		final int[] selectors = new int[selCount];
 		for (int i = 0; i < selCount; ++i) {
-			varSelectors.add(in.readInt());
+			selectors[i] = in.readInt();
 		}
-		return new UvsCmapFormat(codeToGlyphId, varSelectors);
+		return new UvsCmapFormat(net.zamasoft.pdfg2d.util.LongIntLookup.fromUnsorted(keys, gids, pairCount),
+				selectors);
 	}
 
 	private static SourceRecord readSource(final DataInputStream in, final GenericCmapFormat[] cmapPool,
@@ -380,13 +383,14 @@ public final class FontIndex {
 	}
 
 	private static void writeUvs(final DataOutputStream out, final UvsCmapFormat uvs) throws IOException {
-		out.writeInt(uvs.codeToGlyphId().size());
-		for (final Map.Entry<Long, Integer> e : uvs.codeToGlyphId().entrySet()) {
-			out.writeLong(e.getKey());
-			out.writeInt(e.getValue());
+		final net.zamasoft.pdfg2d.util.LongIntLookup lookup = uvs.codeToGlyphId();
+		out.writeInt(lookup.size());
+		for (int i = 0; i < lookup.size(); ++i) {
+			out.writeLong(lookup.keyAt(i));
+			out.writeInt(lookup.valueAt(i));
 		}
-		out.writeInt(uvs.varSelectors().size());
-		for (final Integer sel : uvs.varSelectors()) {
+		out.writeInt(uvs.selectors().length);
+		for (final int sel : uvs.selectors()) {
 			out.writeInt(sel);
 		}
 	}

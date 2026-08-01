@@ -156,13 +156,15 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 			this.configValidity = this.config.getValidity();
 
 			try {
+				// 絵文字フォントはオプショナル依存(pdfg2d-svg-emoji)。
+				// クラスパスに無ければ静かにスキップする
 				Class<?> clazz = Class.forName("net.zamasoft.pdfg2d.font.emoji.EmojiFontSource");
-				clazz.getField("INSTANCES_LTR").get(null);
 				FontLoader.add((FontSource) clazz.getField("INSTANCES_LTR").get(null), handler.nameToFonts);
 				FontLoader.add((FontSource) clazz.getField("INSTANCES_TB").get(null), handler.nameToFonts);
+			} catch (ClassNotFoundException e) {
+				// 絵文字モジュール非搭載の構成——正常
 			} catch (Exception e) {
-				e.printStackTrace();
-				// ignore
+				LOG.log(Level.WARNING, "Failed to initialize the emoji font source", e);
 			}
 
 			this.nameToFonts = MultimapUtils.unmodifiableMap(handler.nameToFonts);
