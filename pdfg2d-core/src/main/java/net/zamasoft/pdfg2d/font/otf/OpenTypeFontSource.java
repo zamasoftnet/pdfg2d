@@ -68,7 +68,17 @@ public class OpenTypeFontSource extends AbstractFontSource {
 
 	protected final BBox bbox;
 
-	protected final short ascent, descent, xHeight, capHeight, spaceAdvance, stemH, stemV;
+	protected final short ascent, descent, spaceAdvance, stemH, stemV;
+
+	/**
+	 * xHeight/capHeightは'x'/'H'のグリフ実データ(glyf/CFF)のパースを
+	 * 要するため、初回参照まで遅延します(2026-08-01)。従来は
+	 * コンストラクタで計算しており、宣言しただけの全フォントの
+	 * グリフ表パースが起動時間に乗っていた。
+	 */
+	private transient short xHeight, capHeight;
+
+	private transient volatile boolean heightsComputed;
 
 	protected Panose panose;
 
@@ -164,16 +174,6 @@ public class OpenTypeFontSource extends AbstractFontSource {
 			final int gid = this.cmap.mapCharCode(' ');
 			final var hmtx = (XmtxTable) ttFont.getTable(Table.HMTX);
 			this.spaceAdvance = (short) (hmtx.getAdvanceWidth(gid) * FontSource.DEFAULT_UNITS_PER_EM / this.upm);
-		}
-
-		{
-			final var font = this.getOpenTypeFont();
-			final var gx = font.getGlyph(this.cmap.mapCharCode('x'));
-			this.xHeight = (gx == null || gx.path() == null) ? DEFAULT_X_HEIGHT
-					: (short) gx.path().getBounds().height;
-			final var gh = font.getGlyph(this.cmap.mapCharCode('H'));
-			this.capHeight = (gh == null || gh.path() == null) ? DEFAULT_CAP_HEIGHT
-					: (short) gh.path().getBounds().height;
 		}
 
 		this.stemH = 0;
@@ -277,12 +277,33 @@ public class OpenTypeFontSource extends AbstractFontSource {
 
 	@Override
 	public short getXHeight() {
+		this.computeHeights();
 		return this.xHeight;
 	}
 
 	@Override
 	public short getCapHeight() {
+		this.computeHeights();
 		return this.capHeight;
+	}
+
+	private void computeHeights() {
+		if (this.heightsComputed) {
+			return;
+		}
+		synchronized (this) {
+			if (this.heightsComputed) {
+				return;
+			}
+			final var font = this.getOpenTypeFont();
+			final var gx = font.getGlyph(this.cmap.mapCharCode('x'));
+			this.xHeight = (gx == null || gx.path() == null) ? DEFAULT_X_HEIGHT
+					: (short) gx.path().getBounds().height;
+			final var gh = font.getGlyph(this.cmap.mapCharCode('H'));
+			this.capHeight = (gh == null || gh.path() == null) ? DEFAULT_CAP_HEIGHT
+					: (short) gh.path().getBounds().height;
+			this.heightsComputed = true;
+		}
 	}
 
 	@Override
