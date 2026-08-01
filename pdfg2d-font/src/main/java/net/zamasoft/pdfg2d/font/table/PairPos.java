@@ -73,7 +73,7 @@ public interface PairPos extends LookupSubtable {
 	}
 
 	/** Format 1: explicit per-pair kerning grouped by the first glyph. */
-	record Format1(Coverage coverage, int[][] secondGlyphs, int[][] kernings) implements PairPos {
+	record Format1(Coverage coverage, int[][] secondGlyphs, int[][] kernings, boolean sorted) implements PairPos {
 		static Format1 read(final RandomAccessFile raf, final int offset) throws IOException {
 			final int coverageOffset = raf.readUnsignedShort();
 			final int valueFormat1 = raf.readUnsignedShort();
@@ -88,6 +88,7 @@ public interface PairPos extends LookupSubtable {
 
 			final int[][] seconds = new int[pairSetCount][];
 			final int[][] kerns = new int[pairSetCount][];
+			boolean sorted = true;
 			for (int i = 0; i < pairSetCount; i++) {
 				raf.seek(offset + pairSetOffsets[i]);
 				final int pairCount = raf.readUnsignedShort();
@@ -95,6 +96,10 @@ public interface PairPos extends LookupSubtable {
 				kerns[i] = new int[pairCount];
 				for (int j = 0; j < pairCount; j++) {
 					seconds[i][j] = raf.readUnsignedShort();
+					if (j > 0 && seconds[i][j - 1] >= seconds[i][j]) {
+						// 仕様(第二GID昇順)に反するフォント——線形走査へ縮退
+						sorted = false;
+					}
 					kerns[i][j] = readXAdvance(raf, valueFormat1);
 					// Consume the second glyph's value record.
 					for (int k = 0, bits = valueSize(valueFormat2) / 2; k < bits; k++) {
@@ -102,7 +107,7 @@ public interface PairPos extends LookupSubtable {
 					}
 				}
 			}
-			return new Format1(coverage, seconds, kerns);
+			return new Format1(coverage, seconds, kerns, sorted);
 		}
 
 		@Override
@@ -112,6 +117,12 @@ public interface PairPos extends LookupSubtable {
 				return 0;
 			}
 			final int[] seconds = this.secondGlyphs[ci];
+			// グリフ対毎に呼ばれる。仕様どおり整列済みなら二分探索
+			// (2026-08-01、95点計画増分4)
+			if (this.sorted) {
+				final int j = java.util.Arrays.binarySearch(seconds, secondGid);
+				return j < 0 ? 0 : this.kernings[ci][j];
+			}
 			for (int j = 0; j < seconds.length; j++) {
 				if (seconds[j] == secondGid) {
 					return this.kernings[ci][j];

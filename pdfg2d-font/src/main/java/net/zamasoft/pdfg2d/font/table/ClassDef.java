@@ -56,23 +56,42 @@ public interface ClassDef extends Serializable {
 		}
 	}
 
-    /** Format 2: glyph ranges each assigned a class value. */
-	record Format2(int[] starts, int[] ends, int[] classes) implements ClassDef {
+	/** Format 2: glyph ranges each assigned a class value. */
+	record Format2(int[] starts, int[] ends, int[] classes, boolean sorted) implements ClassDef {
 		static Format2 read(final RandomAccessFile raf) throws IOException {
 			final int count = raf.readUnsignedShort();
 			final int[] starts = new int[count];
 			final int[] ends = new int[count];
 			final int[] classes = new int[count];
+			boolean sorted = true;
 			for (int i = 0; i < count; i++) {
 				starts[i] = raf.readUnsignedShort();
 				ends[i] = raf.readUnsignedShort();
 				classes[i] = raf.readUnsignedShort();
+				if (i > 0 && starts[i - 1] >= starts[i]) {
+					// 仕様(開始GID昇順)に反するフォント——線形走査へ縮退
+					sorted = false;
+				}
 			}
-			return new Format2(starts, ends, classes);
+			return new Format2(starts, ends, classes, sorted);
 		}
 
 		@Override
 		public int getClassValue(final int glyphId) {
+			// グリフ対毎に呼ばれる。仕様どおり整列済みなら二分探索
+			// (2026-08-01、95点計画増分4)
+			if (this.sorted) {
+				int low = 0, high = this.starts.length - 1;
+				while (low <= high) {
+					final int mid = (low + high) >>> 1;
+					if (this.starts[mid] <= glyphId) {
+						low = mid + 1;
+					} else {
+						high = mid - 1;
+					}
+				}
+				return (low > 0 && glyphId <= this.ends[low - 1]) ? this.classes[low - 1] : 0;
+			}
 			for (int i = 0; i < this.starts.length; i++) {
 				if (glyphId >= this.starts[i] && glyphId <= this.ends[i]) {
 					return this.classes[i];

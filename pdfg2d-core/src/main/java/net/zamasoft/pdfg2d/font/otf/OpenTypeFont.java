@@ -55,8 +55,12 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 
 	protected final XmtxTable vmtx, hmtx;
 
-	/** GSUB {@code liga} pairs: key {@code (firstGid << 32) | secondGid} to ligature glyph. */
-	private final Map<Long, Integer> ligatures;
+	/**
+	 * GSUB {@code liga} pairs: key {@code (firstGid << 32) | secondGid} to
+	 * ligature glyph. boxed Mapからプリミティブ索引へ(2026-08-01、95点計画
+	 * 増分3)——グリフ対毎に引かれる整形ホットパス。
+	 */
+	private final net.zamasoft.pdfg2d.util.LongIntLookup ligatures;
 
 	/**
 	 * Cache of composed GSUB single-substitution plans per feature set
@@ -442,9 +446,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		if (this.ligatures == null) {
 			return -1;
 		}
-		final Integer lig = this.ligatures
-				.get(((long) firstFontGid << 32) | (secondFontGid & 0xFFFFFFFFL));
-		return (lig != null) ? lig : -1;
+		return this.ligatures.getOrDefault(((long) firstFontGid << 32) | (secondFontGid & 0xFFFFFFFFL), -1);
 	}
 
 	/**
@@ -535,10 +537,12 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	 * Longer ligatures are formed incrementally by the shaper through the
 	 * intermediate ligatures that fonts conventionally also define.
 	 */
-	private static Map<Long, Integer> buildLigatures(final GsubTable gsub) {
+	private static net.zamasoft.pdfg2d.util.LongIntLookup buildLigatures(final GsubTable gsub) {
 		if (gsub == null) {
 			return null;
 		}
+		// 構築中のみboxed Mapを使う(重複キーのlast-wins意味論を保存)。
+		// 保持するのはプリミティブ索引だけ
 		final var map = new HashMap<Long, Integer>();
 		for (final var subst : gsub.collectLigatures()) {
 			final var firstGlyphs = subst.coverage().getGlyphIds();
@@ -553,7 +557,18 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 				}
 			}
 		}
-		return map.isEmpty() ? null : map;
+		if (map.isEmpty()) {
+			return null;
+		}
+		final long[] keys = new long[map.size()];
+		final int[] values = new int[map.size()];
+		int n = 0;
+		for (final var e : map.entrySet()) {
+			keys[n] = e.getKey();
+			values[n] = e.getValue();
+			++n;
+		}
+		return net.zamasoft.pdfg2d.util.LongIntLookup.fromUnsorted(keys, values, n);
 	}
 }
 
