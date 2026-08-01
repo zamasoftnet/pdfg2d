@@ -155,7 +155,10 @@ class PDFFontSourceManagerConfigurationHandler extends DefaultHandler {
 							final List<FontSource> list = this.catalog.systemFont(atts.getValue("src"),
 									atts.getValue("file"), atts.getValue("dir"), atts.getValue("types"),
 									FontLoader.toFontFace(atts));
-							this.fontSources = list.toArray(new PdfFontSourceWrapper[list.size()]);
+							// 旧実装は生ソースをPdfFontSourceWrapper[]へtoArrayしており
+							// ArrayStoreExceptionが潜在していた(system-font要素は
+							// テスト構成に無く未発火)。他経路と同じくラップする
+							this.fontSources = wrap(list);
 						} catch (Exception e) {
 							LOG.log(Level.WARNING, "Failed to get font info for '" + atts.getValue("src") + "'.", e);
 							this.fontSources = null;

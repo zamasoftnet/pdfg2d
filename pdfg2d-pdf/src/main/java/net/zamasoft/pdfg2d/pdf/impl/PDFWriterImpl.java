@@ -453,6 +453,9 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		if (fileId == null) {
 			fileId = new byte[16];
 			RND.nextBytes(fileId);
+		} else {
+			// 呼び出し側の配列と別名共有しない(浅い不変性の穴を塞ぐ)
+			fileId = fileId.clone();
 		}
 		this.fileid = new byte[][] { fileId, fileId };
 
