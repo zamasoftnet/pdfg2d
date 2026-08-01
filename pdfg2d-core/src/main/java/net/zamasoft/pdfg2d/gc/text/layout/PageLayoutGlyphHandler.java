@@ -1,7 +1,6 @@
 package net.zamasoft.pdfg2d.gc.text.layout;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 import net.zamasoft.pdfg2d.gc.GC;
@@ -14,7 +13,6 @@ import net.zamasoft.pdfg2d.gc.text.Element;
 import net.zamasoft.pdfg2d.gc.text.GlyphHandler;
 import net.zamasoft.pdfg2d.gc.text.TextControl;
 import net.zamasoft.pdfg2d.gc.text.Text;
-import net.zamasoft.pdfg2d.gc.text.TextImpl;
 import net.zamasoft.pdfg2d.gc.text.layout.control.Control;
 import net.zamasoft.pdfg2d.gc.text.layout.control.Tab;
 
@@ -83,29 +81,17 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 
 	private List<LineBufferItem> buffer = new ArrayList<>();
 
-	private Element[] elements;
-
 	private double lineFactor = 0;
 
-	private TextImpl text = null;
-
-	private final List<Element> textBuffer = new ArrayList<>();
-
-	private double letterSpacing = 0;
-
-	private double advance = 0;
+	/** 行の組み立て(蓄積・分割・justify・計測)はLineAssemblerへ分離
+	 * (2026-08-01、増分13)。このクラスは段配置と描画だけを持つ。 */
+	private final LineAssembler assembler = new LineAssembler();
 
 	// A "text unit" is the run of elements/glyphs accumulated since the last
 	// break opportunity (i.e. since the caller last invoked flush()). When a
 	// line overflows, endLine(false) keeps the current unit intact and moves
 	// it wholesale to the next line; only these counters tell it where the
 	// unit begins.
-
-	/** Elements added to {@link #textBuffer} since the last break opportunity. */
-	private int textUnitElementCount = 0;
-
-	/** Glyphs appended to {@link #text} since the last break opportunity. */
-	private int textUnitGlyphCount = 0;
 
 	private boolean justifyPage = false;
 
@@ -198,7 +184,7 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 	 * @return the letter spacing
 	 */
 	public double getLetterSpacing() {
-		return this.letterSpacing;
+		return this.assembler.getLetterSpacing();
 	}
 
 	/**
@@ -207,7 +193,7 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 	 * @param letterSpacing the letter spacing to set
 	 */
 	public void setLetterSpacing(final double letterSpacing) {
-		this.letterSpacing = letterSpacing;
+		this.assembler.setLetterSpacing(letterSpacing);
 	}
 
 	/**
@@ -374,92 +360,12 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 	 *             over as the beginning of the next line.
 	 */
 	private void endLine(final boolean last) {
-		double advance;
-		if (last) {
-			int elementCount = this.textBuffer.size();
-			if (this.text != null) {
-				++elementCount;
-			}
-			this.elements = new Element[elementCount];
-			for (int i = 0; i < this.textBuffer.size(); ++i) {
-				this.elements[i] = this.textBuffer.get(i);
-			}
-			if (this.text != null) {
-				this.text.pack();
-				this.elements[elementCount - 1] = this.text;
-				this.text = null;
-			}
-			advance = this.advance;
-			this.textBuffer.clear();
-		} else {
-			advance = 0;
-			int count = this.textBuffer.size() - this.textUnitElementCount;
-			int elementCount = count;
-			if (this.text != null) {
-				if (this.text.getGlyphCount() <= this.textUnitGlyphCount) {
-					if (this.textUnitElementCount > 0) {
-						++elementCount;
-						++count;
-					}
-				} else {
-					++elementCount;
-				}
-			}
-			this.elements = new Element[elementCount];
-			final Iterator<Element> i = this.textBuffer.iterator();
-			for (int j = 0; j < count; ++j) {
-				final Element e = i.next();
-				this.elements[j] = e;
-				advance += e.getAdvance();
-				i.remove();
-			}
-			if (this.text != null && this.text.getGlyphCount() > this.textUnitGlyphCount) {
-				final int pos = this.text.getGlyphCount() - this.textUnitGlyphCount;
-				final Element e = this.text.split(pos);
-				this.elements[elementCount - 1] = e;
-				advance += e.getAdvance();
-			}
-
-			// Justify by distributing the leftover width as extra letter
-			// spacing across all glyphs of the line. Known limitation: there
-			// is no hyphenation, so an overlong unbreakable word wraps early
-			// and the previous line may be stretched noticeably.
-			if (this.align == Alignment.JUSTIFY) {
-				int glyphCount = 0;
-				for (final Element e : this.elements) {
-					if (e instanceof Text text) {
-						glyphCount += text.getGlyphCount();
-					}
-				}
-				if (glyphCount >= 2) {
-					final double letterSpacing = (this.getMaxAdvance() - advance) / (double) (glyphCount - 1);
-					for (final Element e : this.elements) {
-						if (e instanceof TextImpl t) {
-							t.setLetterSpacing(t.getLetterSpacing() + letterSpacing);
-						}
-					}
-				}
-			}
-		}
-		this.advance -= advance;
-		// assert (advance <= this.getMaxAdvance()) : this.textUnitElementCount
-		// + "/" + this.textUnitGlyphCount;
-
-		// Calculate ascent/descent
-		double maxAscent = 0;
-		double maxDescent = 0;
-		for (final Element e : this.elements) {
-			if (e instanceof Text text) {
-				maxAscent = Math.max(maxAscent, text.getAscent());
-				maxDescent = Math.max(maxDescent, text.getDescent());
-			} else if (e instanceof Control control) {
-				maxAscent = Math.max(maxAscent, control.getAscent());
-				maxDescent = Math.max(maxDescent, control.getDescent());
-			}
-		}
-		if (this.fontSize != 0) {
-			maxDescent = this.fontSize - maxAscent;
-		}
+		// 行の組み立て(run分割・justify・計測)はLineAssemblerが担い、
+		// ここは段配置とページ送りだけを行う(2026-08-01、増分13)
+		final LineAssembler.LineBox line = this.assembler.breakLine(last,
+				!last && this.align == Alignment.JUSTIFY, this.getMaxAdvance(), this.fontSize);
+		final double maxAscent = line.ascent();
+		final double maxDescent = line.descent();
 
 		// Calculate page direction advance
 		final double lineMargin = (maxAscent + maxDescent) * (this.lineHeight - 1) / 2.0;
@@ -483,7 +389,7 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 		}
 
 		// Record
-		this.buffer.add(new LineBufferItem(this.elements, last));
+		this.buffer.add(new LineBufferItem(line.elements(), last));
 
 		// Line feed
 		this.pageOffset += pageAdvance1 + pageAdvance2;
@@ -572,31 +478,17 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 
 	@Override
 	public void startTextRun(final int charOffset, final FontStyle fontStyle, final FontMetrics fontMetrics) {
-		this.checkText();
-		this.text = new TextImpl(charOffset, fontStyle, fontMetrics);
-		this.text.setLetterSpacing(this.letterSpacing);
+		this.assembler.startTextRun(charOffset, fontStyle, fontMetrics);
 	}
 
 	@Override
 	public void glyph(final int charOffset, final char[] ch, final int coff, final byte clen, final int gid) {
-		this.advance += this.text.appendGlyph(ch, coff, clen, gid);
-		this.advance += this.letterSpacing;
-		++this.textUnitGlyphCount;
+		this.assembler.glyph(ch, coff, clen, gid);
 	}
 
 	@Override
 	public void endTextRun() {
-		assert this.text.getGlyphCount() > 0;
-	}
-
-	private void checkText() {
-		if (this.text != null) {
-			this.text.pack();
-			this.textBuffer.add(this.text);
-			++this.textUnitElementCount;
-			this.textUnitGlyphCount = 0;
-			this.text = null;
-		}
+		this.assembler.endTextRun();
 	}
 
 	@Override
@@ -605,24 +497,20 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 		switch (c.getControlChar()) {
 			case '\n' -> {
 				this.endLine(true);
-				this.textUnitElementCount = 0;
-				this.textUnitGlyphCount = 0;
+				this.assembler.markBreakOpportunity();
 			}
 
 			case '\t' -> {
 				// Tab character
 				final Tab tab = (Tab) c;
-				tab.advance = (TAB_WIDTH - (this.advance % TAB_WIDTH));
-				if (this.advance + tab.advance > this.getMaxAdvance()) {
+				tab.advance = (TAB_WIDTH - (this.assembler.advance() % TAB_WIDTH));
+				if (this.assembler.advance() + tab.advance > this.getMaxAdvance()) {
 					this.endLine(false);
 					tab.advance = TAB_WIDTH;
 				}
 			}
 		}
-		this.checkText();
-		this.textBuffer.add(control);
-		++this.textUnitElementCount;
-		this.advance += control.getAdvance();
+		this.assembler.addControl(c);
 	}
 
 	/**
@@ -635,11 +523,10 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 	 */
 	@Override
 	public void flush() {
-		if (this.advance > this.getMaxAdvance()) {
+		if (this.assembler.advance() > this.getMaxAdvance()) {
 			this.endLine(false);
 		}
-		this.textUnitElementCount = 0;
-		this.textUnitGlyphCount = 0;
+		this.assembler.markBreakOpportunity();
 	}
 
 	private void endColumn() {
