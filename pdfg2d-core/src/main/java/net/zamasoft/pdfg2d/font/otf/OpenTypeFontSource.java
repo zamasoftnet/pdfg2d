@@ -187,8 +187,62 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
+	 * 永続フォント索引からの再構築コンストラクタです(2026-08-01)。
+	 * ファイルI/Oを一切行わない——グリフ実データが必要になったとき
+	 * ({@link #getOpenTypeFont()}経由)に初めてフォントファイルを開く。
+	 *
+	 * @param file         フォントファイル(この時点では開かない)
+	 * @param index        TTC内インデックス
+	 * @param direction    組方向
+	 * @param upm          units per em
+	 * @param bbox         フォントBBox(1000upm正規化済み)
+	 * @param fontName     PostScript名
+	 * @param aliases      別名(ソート済み)
+	 * @param italic       斜体か
+	 * @param weight       ウェイト
+	 * @param panose       PANOSE分類
+	 * @param ascent       アセント(1000upm正規化済み)
+	 * @param descent      ディセント(同)
+	 * @param spaceAdvance 空白幅(同)
+	 * @param cmap         文字→GID写像(圧縮範囲)
+	 * @param uvsCmap      UVS写像、無ければnull
+	 */
+	protected OpenTypeFontSource(final File file, final int index, final Direction direction, final short upm,
+			final BBox bbox, final String fontName, final String[] aliases, final boolean italic,
+			final net.zamasoft.pdfg2d.gc.font.FontStyle.Weight weight, final Panose panose, final short ascent,
+			final short descent, final short spaceAdvance, final GenericCmapFormat cmap,
+			final UvsCmapFormat uvsCmap) {
+		this.file = file;
+		this.index = index;
+		this.direction = direction;
+		this.upm = upm;
+		this.bbox = bbox;
+		this.fontName = fontName;
+		this.aliases = aliases;
+		this.setItalic(italic);
+		this.setWeight(weight);
+		this.panose = panose;
+		this.ascent = ascent;
+		this.descent = descent;
+		this.spaceAdvance = spaceAdvance;
+		this.cmap = cmap;
+		this.uvsCmap = uvsCmap;
+		this.stemH = 0;
+		this.stemV = 0;
+	}
+
+	/**
+	 * Returns the font index within the file (TTC collections).
+	 *
+	 * @return the zero-based font index
+	 */
+	public int getIndex() {
+		return this.index;
+	}
+
+	/**
 	 * Returns the OpenType font instance.
-	 * 
+	 *
 	 * @return the OpenType font
 	 */
 	public OpenTypeFont getOpenTypeFont() {

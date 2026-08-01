@@ -35,6 +35,20 @@ public class OpenTypeEmbeddedCIDFontSource extends OpenTypeFontSource implements
 	}
 
 	/**
+	 * 永続フォント索引からの再構築です(2026-08-01、FontIndex参照)。
+	 * ファイルI/Oを行わない。
+	 */
+	public OpenTypeEmbeddedCIDFontSource(final File file, final int index, final Direction direction, final short upm,
+			final net.zamasoft.pdfg2d.font.BBox bbox, final String fontName, final String[] aliases,
+			final boolean italic, final net.zamasoft.pdfg2d.gc.font.FontStyle.Weight weight,
+			final net.zamasoft.pdfg2d.gc.font.Panose panose, final short ascent, final short descent,
+			final short spaceAdvance, final net.zamasoft.pdfg2d.font.table.GenericCmapFormat cmap,
+			final net.zamasoft.pdfg2d.font.table.UvsCmapFormat uvsCmap) {
+		super(file, index, direction, upm, bbox, fontName, aliases, italic, weight, panose, ascent, descent,
+				spaceAdvance, cmap, uvsCmap);
+	}
+
+	/**
 	 * Creates a new {@link PDFFont} instance that writes this embedded CID font
 	 * into the given PDF object reference.
 	 *

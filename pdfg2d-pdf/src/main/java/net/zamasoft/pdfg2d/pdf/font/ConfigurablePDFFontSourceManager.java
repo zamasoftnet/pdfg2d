@@ -58,12 +58,20 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 		return DefaultFontSourceManager.INSTANCE;
 	}
 
+	/**
+	 * font-dirスキャンの永続索引ファイル(通常はfonts.xml.db)。nullなら
+	 * 索引なし。2026-08-01に蘇生——引数は昔からあったが長らく無視されて
+	 * いた。
+	 */
+	private final File dbFile;
+
 	public ConfigurablePDFFontSourceManager(Source config) {
 		this(config, null);
 	}
 
 	public ConfigurablePDFFontSourceManager(Source config, File dbFile) {
 		this.config = config;
+		this.dbFile = dbFile;
 		this.configURI = this.config.getURI();
 		this.poll();
 	}
@@ -133,11 +141,15 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 		}
 
 		try {
+			final FontIndex fontIndex = this.dbFile == null ? null : new FontIndex(this.dbFile);
 			PDFFontSourceManagerConfigurationHandler handler = new PDFFontSourceManagerConfigurationHandler(
-					this.config.getURI());
+					this.config.getURI(), fontIndex);
 			try (InputStream in = new BufferedInputStream(this.config.getInputStream())) {
 				parser.setContentHandler(handler);
 				parser.parse(new InputSource(in));
+			}
+			if (fontIndex != null) {
+				fontIndex.save();
 			}
 
 			this.configURI = this.config.getURI();
