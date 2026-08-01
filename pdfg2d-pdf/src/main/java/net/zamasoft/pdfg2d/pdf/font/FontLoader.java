@@ -6,7 +6,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.reflect.Method;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -77,12 +76,11 @@ public final class FontLoader {
 		String fileName = ttfFile.getName();
 		if (fileName.endsWith(".pfa") || fileName.endsWith(".PFA") || fileName.endsWith(".pfb")
 				|| fileName.endsWith(".PFB") || fileName.endsWith(".f3b") || fileName.endsWith(".F3B")) {
-			// Load Type1 font
+			// Load Type1 font(旧実装はJDK 1.4互換の反射経由だった——
+			// Font.createFont(int, File)はJava 5からの標準API、直呼びへ。
+			// TYPE1_FONT定数の値は反射時代に渡していた1と同じ)
 			try {
-				Method createFont = java.awt.Font.class.getMethod("createFont",
-						new Class[] { Integer.TYPE, File.class });
-				java.awt.Font awtFont = (java.awt.Font) createFont.invoke(null,
-						new Object[] { NumberUtils.intValue(1), ttfFile });
+				java.awt.Font awtFont = java.awt.Font.createFont(java.awt.Font.TYPE1_FONT, ttfFile);
 				list.add(FontLoader.readSystemFont(face, type, awtFont, nameToCMap));
 				return;
 			} catch (Exception e) {
