@@ -38,7 +38,10 @@ class CIDTableParser {
 	 * @throws CMapException if the CMap file contains invalid data
 	 */
 	public void parse(Source source, IntMap toCID) throws IOException, CMapException {
-		this.in = new InputStreamReader(new BufferedInputStream(source.getInputStream()), "ISO-8859-1");
+		// BufferedReaderで1文字readのStreamDecoder往復を回避(2026-08-01、
+		// JFR実測でトークナイザの文字読みが起動時間の上位だった)
+		this.in = new java.io.BufferedReader(
+				new InputStreamReader(new BufferedInputStream(source.getInputStream()), "ISO-8859-1"));
 		try {
 			try {
 				String ptoken = null;

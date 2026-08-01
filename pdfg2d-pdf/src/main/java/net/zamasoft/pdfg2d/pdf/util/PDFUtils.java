@@ -137,6 +137,24 @@ public final class PDFUtils {
 	 * @throws UnsupportedEncodingException if the specified encoding is not supported
 	 */
 	public static String decodeName(final String s, final String encoding) throws UnsupportedEncodingException {
+		// #エスケープなしの純ASCIIはそのまま返す(2026-08-01)。フォント表
+		// パーサ(CMap/CID表/AFM)がトークン毎にここを通るため、旧実装の
+		// 「常にバイト列化→new String(bytes, encoding)」は毎回の
+		// charset検索とデコーダ生成が起動時間の主要因になっていた
+		// (JFR実測: 大文書1変換のCPUサンプルの約6割がフォント表パース)。
+		// 前提: encodingはASCII互換(MS932/UTF-8等。PDF名の実データは
+		// ほぼ全て素のASCII)
+		boolean plainAscii = true;
+		for (int i = 0; i < s.length(); ++i) {
+			final char c = s.charAt(i);
+			if (c == '#' || c >= 0x80) {
+				plainAscii = false;
+				break;
+			}
+		}
+		if (plainAscii) {
+			return s;
+		}
 		final char[] ch = s.toCharArray();
 		final ByteArrayOutputStream out = new ByteArrayOutputStream();
 		for (int i = 0; i < ch.length; ++i) {

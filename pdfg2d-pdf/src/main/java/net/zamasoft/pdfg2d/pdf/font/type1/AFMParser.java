@@ -26,7 +26,9 @@ public class AFMParser {
 
 	public AFMFontInfo parse(InputStream in) throws ParseException, IOException {
 		this.fontInfo = new AFMFontInfo();
-		this.in = new InputStreamReader(in, "ISO-8859-1");
+		// BufferedReaderで1文字readのStreamDecoder往復を回避(2026-08-01、
+		// JFR実測でトークナイザの文字読みが起動時間の上位だった)
+		this.in = new java.io.BufferedReader(new InputStreamReader(in, "ISO-8859-1"));
 		try {
 			this.ch = this.in.read();
 
