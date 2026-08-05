@@ -51,15 +51,13 @@ public class FontFile {
 			String tag = new String(tagBytes, StandardCharsets.ISO_8859_1);
 
 			if ("wOF2".equals(tag)) {
-				// **WOFF2 は伸長できないので、ここで明示的に失敗させる**
-				// (2026-08-05)。黙って else へ落とすと「単一のTTF」として
-				// 読みにいき、圧縮されたバイト列を sfnt のテーブル表として
-				// 解釈して `OffSize must be 1-4: 0` のような**無関係に見える
-				// 例外**になる。実地コーパス235件の1回の変換で18件出ていた。
-				// 伸長には Brotli が要るため対応は別途。
-				throw new IOException("WOFF2 is not supported (Brotli): " + file);
-			}
-			if ("wOFF".equals(tag)) {
+				// WOFF2(2026-08-05対応)。Brotli伸長と字形表の組み替え戻しは
+				// Woff2Decoderが行う。ここから先は普通のsfntとして扱える
+				this.file = Woff2Decoder.extract(raf, file);
+				this.woff = true;
+				this.offsets = new long[] { 0 };
+				this.fonts = new OpenTypeFont[1];
+			} else if ("wOFF".equals(tag)) {
 				// WOFF
 				this.file = extractWoff(raf, file);
 				this.woff = true;

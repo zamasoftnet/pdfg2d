@@ -1,6 +1,11 @@
 description = 'Font library'
 
-// pdfg2d-font has no external dependencies based on the POM file
+// **WOFF2 の伸長にだけ Brotli を使う**(2026-08-05)。それ以外に外部依存は無い。
+// WOFF2 は WOFF と違って zlib ではなく Brotli で圧縮されており、
+// Java 標準ライブラリに伸長器が無いため純Javaの実装を1つだけ足している。
+dependencies {
+    implementation 'org.brotli:dec:0.1.2'
+}
 
 publishing {
     publications {

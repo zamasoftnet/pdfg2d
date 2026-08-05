@@ -37,6 +37,11 @@ subprojects {
     test {
         useJUnitPlatform()
         systemProperty 'pdfg2d.testOutputDir', file("${buildDir}/generated-test-files").absolutePath
+        // WOFF2の突き合わせ検査は、外部のフォント置き場を指定できる
+        // (公開リポジトリに第三者フォントを置かずに再現するため)
+        if (System.getProperty('pdfg2d.woff2PairsDir') != null) {
+            systemProperty 'pdfg2d.woff2PairsDir', System.getProperty('pdfg2d.woff2PairsDir')
+        }
     }
 
     jacoco {
