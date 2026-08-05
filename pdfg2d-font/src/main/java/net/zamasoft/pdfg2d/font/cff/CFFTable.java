@@ -295,15 +295,26 @@ public class CFFTable implements Table {
 				if (DEBUG) {
 					System.err.println("Global Subrs INDEX count: " + count);
 				}
-				int offSize = this.readOffSize();
-				++count;
-				gso = new int[count];
-				for (int i = 0; i < count; ++i) {
-					gso[i] = this.readOffset(offSize);
-				}
-				int globalSubrsIndexOffset = (int) this.raf.getFilePointer() - 1;
-				for (int i = 0; i < count; ++i) {
-					gso[i] += globalSubrsIndexOffset;
+				// **countが0のINDEXは2バイトだけ**(CFF仕様 §5「INDEX Data」
+				// ——count==0 のとき offSize も offset 配列もデータも無い)。
+				// 2026-08-05まで無条件に offSize を読んでいたため、
+				// **大域subrを持たないCFFフォントで次の構造の1バイトを
+				// offSize と誤読**し、`OffSize must be 1-4: 0` で
+				// 「フォントが読めない」になっていた。症状はまるで別の話に
+				// 見えるが、原因はこの分岐の欠落。
+				if (count == 0) {
+					gso = new int[0];
+				} else {
+					int offSize = this.readOffSize();
+					++count;
+					gso = new int[count];
+					for (int i = 0; i < count; ++i) {
+						gso[i] = this.readOffset(offSize);
+					}
+					int globalSubrsIndexOffset = (int) this.raf.getFilePointer() - 1;
+					for (int i = 0; i < count; ++i) {
+						gso[i] += globalSubrsIndexOffset;
+					}
 				}
 			}
 
@@ -355,19 +366,24 @@ public class CFFTable implements Table {
 					if (DEBUG) {
 						System.err.println("Local Subrs INDEX count: " + count);
 					}
-					int offSize = this.readOffSize();
-					++count;
-					int[] localOffsets = new int[count];
-					for (int i = 0; i < count; ++i) {
-						localOffsets[i] = this.readOffset(offSize);
-					}
-					int localSubrsIndexOffset = (int) this.raf.getFilePointer() - 1;
-					for (int i = 0; i < count; ++i) {
-						localOffsets[i] += localSubrsIndexOffset;
-					}
-					lso = new int[charCount][];
-					for (int i = 0; i < charCount; ++i) {
-						lso[i] = localOffsets;
+					if (count == 0) {
+						// 上と同じ——空のINDEXは2バイトだけ
+						lso = null;
+					} else {
+						int offSize = this.readOffSize();
+						++count;
+						int[] localOffsets = new int[count];
+						for (int i = 0; i < count; ++i) {
+							localOffsets[i] = this.readOffset(offSize);
+						}
+						int localSubrsIndexOffset = (int) this.raf.getFilePointer() - 1;
+						for (int i = 0; i < count; ++i) {
+							localOffsets[i] += localSubrsIndexOffset;
+						}
+						lso = new int[charCount][];
+						for (int i = 0; i < charCount; ++i) {
+							lso[i] = localOffsets;
+						}
 					}
 				}
 			}

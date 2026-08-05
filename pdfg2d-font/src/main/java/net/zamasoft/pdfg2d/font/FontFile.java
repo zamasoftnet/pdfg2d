@@ -50,6 +50,15 @@ public class FontFile {
 			raf.readFully(tagBytes);
 			String tag = new String(tagBytes, StandardCharsets.ISO_8859_1);
 
+			if ("wOF2".equals(tag)) {
+				// **WOFF2 は伸長できないので、ここで明示的に失敗させる**
+				// (2026-08-05)。黙って else へ落とすと「単一のTTF」として
+				// 読みにいき、圧縮されたバイト列を sfnt のテーブル表として
+				// 解釈して `OffSize must be 1-4: 0` のような**無関係に見える
+				// 例外**になる。実地コーパス235件の1回の変換で18件出ていた。
+				// 伸長には Brotli が要るため対応は別途。
+				throw new IOException("WOFF2 is not supported (Brotli): " + file);
+			}
 			if ("wOFF".equals(tag)) {
 				// WOFF
 				this.file = extractWoff(raf, file);
@@ -151,7 +160,12 @@ public class FontFile {
 				out.writeInt(origLen);
 
 				outOffsets[i] = outOffset;
-				outOffset += origLen;
+				// **表は4バイト境界へ揃える**(2026-08-05)。sfnt は各表を
+				// 4バイト境界から始める決まりで、WOFF から組み直すときも
+				// 揃え直しと詰め物が要る(WOFF仕様 §「Decoding」)。
+				// 揃えずに詰めて書くと CFF 版(OTTO)の WOFF が
+				// `OffSize must be 1-4: 0` で読めなくなる。
+				outOffset += (origLen + 3) & ~3;
 			}
 
 			// Write table data
@@ -214,6 +228,11 @@ public class FontFile {
 				while (remainder > 0) {
 					out.writeByte(0);
 					remainder--;
+				}
+
+				// 4バイト境界までの詰め物
+				for (int pad = (4 - (origLen & 3)) & 3; pad > 0; --pad) {
+					out.writeByte(0);
 				}
 			}
 		}
