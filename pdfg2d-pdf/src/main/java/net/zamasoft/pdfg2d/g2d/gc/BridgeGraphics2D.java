@@ -371,10 +371,52 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 		this.drawString(aci, (float) x, (float) y);
 	}
 
+	/**
+	 * AWTフォントをこのライブラリのフォント系へ写します。
+	 * {@link Font#getFamily()}は使わない——AWTは実在しないフォント名
+	 * (例: OkapiBarcode既定の"Helvetica")を論理フォントへ置換し、
+	 * getFamily()が"SansSerif"等の<b>AWT論理名</b>を返す。これをそのまま
+	 * ファミリ名として解決すると一致するフォントがなく、数字ですら
+	 * 欠落グリフの豆腐になる(2026-08-07、バーコードの人間可読行で発覚)。
+	 * 要求された名前({@link Font#getName()})を尊重し、AWT論理名だけ
+	 * CSSの総称ファミリへ写す。
+	 */
+	private static String toFamilyName(final Font font) {
+		final String name = font.getName();
+		switch (name) {
+		case Font.SERIF:
+			return "serif";
+		case Font.SANS_SERIF:
+		case Font.DIALOG:
+		case Font.DIALOG_INPUT:
+			return "sans-serif";
+		case Font.MONOSPACED:
+			return "monospace";
+		default:
+			return name;
+		}
+	}
+
+	/**
+	 * AWT橋渡しテキストのフォントポリシー。
+	 * {@link TextLayoutHandler#DEFAULT_FONT_POLICY}には{@code CORE}が
+	 * 含まれず、"Helvetica"等のコア14フォントへ到達できないため、
+	 * どのプロファイルでも全グリフが欠落枠になっていた(2026-08-07、
+	 * バーコードの人間可読行で発覚)。既定の優先順位の末尾へCOREを
+	 * 最後の受け皿として足す。
+	 */
+	private static final net.zamasoft.pdfg2d.gc.font.FontPolicyList BRIDGE_FONT_POLICY = new net.zamasoft.pdfg2d.gc.font.FontPolicyList(
+			new net.zamasoft.pdfg2d.gc.font.FontPolicyList.FontPolicy[] {
+					net.zamasoft.pdfg2d.gc.font.FontPolicyList.FontPolicy.CID_KEYED,
+					net.zamasoft.pdfg2d.gc.font.FontPolicyList.FontPolicy.EMBEDDED,
+					net.zamasoft.pdfg2d.gc.font.FontPolicyList.FontPolicy.CID_IDENTITY,
+					net.zamasoft.pdfg2d.gc.font.FontPolicyList.FontPolicy.CORE });
+
 	private void drawString(final GlyphHandler gh, final AttributedCharacterIterator aci) {
 		try (final var tlf = new TextLayoutHandler(this.gc, TextBreakingRulesBundle.getRules("ja"), gh)) {
 			final var atts = this.font.getAttributes();
-			tlf.setFontFamilies(FontFamilyList.create(this.font.getFamily()));
+			tlf.setFontFamilies(FontFamilyList.create(toFamilyName(this.font)));
+			tlf.setFontPolicy(BRIDGE_FONT_POLICY);
 			final var style = this.font.getStyle();
 			tlf.setFontWeight(TextUtils.toFontWeight((Float) atts.get(TextAttribute.WEIGHT),
 					(style & Font.BOLD) != 0 ? Weight.W_600 : Weight.W_400));
