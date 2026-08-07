@@ -60,6 +60,20 @@ import net.zamasoft.pdfg2d.gc.text.util.TextUtils;
 public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	protected GC gc;
 
+	/**
+	 * {@link #create()}時に積んだGC状態のハンドル。{@link #dispose()}で閉じる。
+	 * <p>
+	 * Graphics2Dの契約ではcreate()で得た子コンテキストの状態変更(クリップ・
+	 * 変換等)はdispose()で破棄されるが、GCのクリップは交差のみで狭める方向
+	 * にしか変更できないため、create()時に{@link GC#begin()}で状態を保存し
+	 * dispose()で復元しないと子のクリップが親へ漏れる。Batik(SVG)は
+	 * クリップ付き要素ごとにcreate()→clip()→描画→dispose()を繰り返すため、
+	 * この対応がないと2つ目以降のクリップが前のクリップと交差し続けて
+	 * 描画が消える(2026-08-07、yahoo.co.jpのアイコンで発覚)。
+	 * </p>
+	 */
+	protected GC.State gcState;
+
 	protected final GraphicsConfiguration config;
 
 	protected static final AffineTransform DEFAULT_TRANSFORM = new AffineTransform();
@@ -487,6 +501,9 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	public Graphics create() {
 		try {
 			BridgeGraphics2D g = (BridgeGraphics2D) this.clone();
+			// 子の状態変更(特にクリップ)をdispose()で復元できるように
+			// GC状態を保存する(gcStateフィールドのコメント参照)
+			g.gcState = this.gc.begin();
 			return g;
 		} catch (CloneNotSupportedException e) {
 			throw new RuntimeException(e);
@@ -618,6 +635,11 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	}
 
 	public void dispose() {
+		if (this.gcState != null) {
+			// create()で保存したGC状態を復元する(クリップ・変換の巻き戻し)
+			this.gcState.close();
+			this.gcState = null;
+		}
 		if (this.gc != null) {
 			this.gc = null;
 		}
@@ -626,6 +648,8 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	protected Object clone() throws CloneNotSupportedException {
 		BridgeGraphics2D clone = (BridgeGraphics2D) super.clone();
 		clone.transform = new AffineTransform(clone.transform);
+		// GC状態ハンドルは複製しない(closeの責務は元のインスタンスにある)
+		clone.gcState = null;
 		return clone;
 	}
 }

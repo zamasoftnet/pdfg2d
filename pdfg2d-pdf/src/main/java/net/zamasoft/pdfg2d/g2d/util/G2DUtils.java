@@ -218,7 +218,10 @@ public final class G2DUtils {
 		if (image instanceof RasterImageImpl) {
 			bimage = (BufferedImage) ((RasterImageImpl) image).getImage();
 		} else {
-			bimage = new BufferedImage((int) width, (int) height, BufferedImage.TYPE_INT_ARGB);
+			// 1pt未満の画像(1px画像のpx→pt変換等)を(int)で切り捨てると0になり
+			// BufferedImageが生成できない。切り上げ+最低1pxを保証する
+			bimage = new BufferedImage(Math.max(1, (int) Math.ceil(width)), Math.max(1, (int) Math.ceil(height)),
+					BufferedImage.TYPE_INT_ARGB);
 			Graphics2D bg = (Graphics2D) bimage.getGraphics();
 			image.drawTo(new G2DGC(bg, gc.getFontManager()));
 		}
