@@ -238,11 +238,40 @@ public class PDFOutput extends FilterOutputStream {
 			'7', '8', '9', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '1', '2', '3', '4', '5', '6', '7',
 			'8', '9' };
 
+	/**
+	 * Writes a real number literal without the ±32767 magnitude clamp.
+	 *
+	 * <p>
+	 * The clamp exists for <em>coordinates</em> (PDF 1.0-era implementation
+	 * limit; degenerate layout values are safer pinned to the page
+	 * neighborhood). Transformation matrix coefficients must never be
+	 * clamped: with large scale factors the translation component of an
+	 * intermediate {@code cm} legitimately exceeds the limit and is
+	 * compensated by subsequent transforms — clamping it corrupts the
+	 * geometry (observed 2026-08-09: a 2x1 placeholder JPEG stretched
+	 * ~112x vanished because its {@code cm} translate was pinned to
+	 * -32767).
+	 * </p>
+	 *
+	 * @param number the real number
+	 * @throws IOException if an I/O error occurs
+	 */
+	public void writeRealExact(final double number) throws IOException {
+		this.spaceBefore();
+		this.buffAllocate(24);
+		this.buffWriteReal(number, false);
+		this.buffFlush();
+	}
+
 	private void buffWriteReal(final double number) {
+		this.buffWriteReal(number, true);
+	}
+
+	private void buffWriteReal(final double number, final boolean clamp) {
 		assert !Double.isInfinite(number) : "Infinite number";
 		assert !Double.isNaN(number) : "Undefined number";
 
-		final long scaled = this.toLong(number);
+		final long scaled = clamp ? this.toLong(number) : this.toLongExact(number);
 		final long iScale = (long) this.scale;
 
 		long v = scaled;
@@ -348,6 +377,17 @@ public class PDFOutput extends FilterOutputStream {
 		} else if (number < -32767) {
 			number = -32767;
 		} else if (Math.abs(number) < this.epsilon) {
+			return 0;
+		}
+		return (long) (number * this.scale + (number >= 0 ? 0.5 : -0.5));
+	}
+
+	/**
+	 * {@link #toLong(double)} without the magnitude clamp (see
+	 * {@link #writeRealExact(double)}).
+	 */
+	private long toLongExact(double number) {
+		if (Math.abs(number) < this.epsilon) {
 			return 0;
 		}
 		return (long) (number * this.scale + (number >= 0 ? 0.5 : -0.5));

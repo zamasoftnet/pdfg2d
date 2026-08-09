@@ -70,6 +70,19 @@ public class PDFOutputTest {
 	}
 
 	@Test
+	public void testRealExactSkipsTheClamp() throws Exception {
+		// Transformation matrix coefficients must never be clamped: with large
+		// scale factors the translation of an intermediate cm legitimately
+		// exceeds 32767 and is compensated by subsequent transforms. Clamping
+		// it corrupts the geometry (a 2x1 placeholder JPEG stretched ~112x
+		// vanished off-page, kanaloco.jp 2026-08-09).
+		final var o = create();
+		o.writeRealExact(1e6);
+		o.writeRealExact(-1e6);
+		assertEquals("1000000 -1000000", result());
+	}
+
+	@Test
 	public void testRealHonorsConfiguredPrecision() throws Exception {
 		final var o = create();
 		o.setPrecision(3);

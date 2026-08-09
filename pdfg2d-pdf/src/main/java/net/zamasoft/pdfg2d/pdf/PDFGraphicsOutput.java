@@ -181,12 +181,15 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 		iat.preConcatenate(tpdf);
 		iat.concatenate(tpdf);
 
-		this.writeReal(iat.getScaleX());
-		this.writeReal(iat.getShearY());
-		this.writeReal(iat.getShearX());
-		this.writeReal(iat.getScaleY());
-		this.writeReal(iat.getTranslateX());
-		this.writeReal(iat.getTranslateY());
+		// 行列係数はクランプしない(座標用の±32767制限を行列に当てると
+		// 大きな拡大率の中間cmの平行移動が壊れ、幾何全体が崩れる——
+		// writeRealExactのjavadoc参照)
+		this.writeRealExact(iat.getScaleX());
+		this.writeRealExact(iat.getShearY());
+		this.writeRealExact(iat.getShearX());
+		this.writeRealExact(iat.getScaleY());
+		this.writeRealExact(iat.getTranslateX());
+		this.writeRealExact(iat.getTranslateY());
 	}
 
 	/**
