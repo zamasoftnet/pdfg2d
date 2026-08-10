@@ -7,7 +7,12 @@ dependencies {
     implementation 'org.apache.xmlgraphics:batik-bridge:1.19'
     implementation 'org.apache.xmlgraphics:batik-anim:1.19'
     implementation 'xml-apis:xml-apis:1.4.01'
-    implementation 'fr.sertelon.media:jpeg-cmyk:1.1.0'
+    // fr.sertelon.media:jpeg-cmyk は撤去(2026-08-10)。CMYK JPEGは
+    // imageio-jpeg(TwelveMonkeys)が正しく扱う。sertelonのリーダは
+    // JDKの内部API(com.sun.imageio)へ--add-exports無しにアクセスして
+    // IllegalAccessErrorで変換全体を落とすうえ、ImageFlow/
+    // RasterImageLoaderの選好ロジックがTwelveMonkeysより先に
+    // これを選んでしまう(asahicom.jpのYCCK JPEGで実測)
     // Emoji fonts resource - users need this JAR at runtime for emoji support
     runtimeOnly project(':pdfg2d-svg-emoji')
 }

@@ -218,6 +218,7 @@ class ImageFlow {
 
 		if (imageIn != null) {
 			JPEGImageReader cir = null;
+			ImageReader jdkJpeg = null;
 			final var iri = ImageIO.getImageReaders(imageIn);
 			while (iri.hasNext()) {
 				final var reader = iri.next();
@@ -230,6 +231,14 @@ class ImageFlow {
 							cir = jr;
 							continue;
 						}
+						if (reader.getClass().getName().startsWith("com.sun.imageio.plugins.jpeg.")) {
+							// JDK標準のJPEGリーダはCMYK(4成分)を読めないため
+							// 後回しにする。ImageIOレジストリの登録順は環境で
+							// 変わる(デーモンではJDKが先に並ぶことを実測)ので、
+							// 順序に依存せずTwelveMonkeys優先を保証する(2026-08-10)
+							jdkJpeg = reader;
+							continue;
+						}
 						ir = reader;
 						break;
 					}
@@ -240,10 +249,13 @@ class ImageFlow {
 				imageIn.seek(0);
 			}
 			if (ir == null) {
-				if (cir == null) {
+				if (cir != null) {
+					ir = cir;
+				} else if (jdkJpeg != null) {
+					ir = jdkJpeg;
+				} else {
 					throw new IOException("No readable images found in the stream.");
 				}
-				ir = cir;
 			} else if (cir != null) {
 				cir.dispose();
 			}
