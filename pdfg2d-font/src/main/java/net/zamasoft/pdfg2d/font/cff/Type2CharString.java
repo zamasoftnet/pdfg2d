@@ -562,6 +562,12 @@ public class Type2CharString {
 						}
 							break;
 						case HFLEX: {
+							// dx1 dx2 dy2 dx3 dx4 dx5 dx6
+							// 5点目・6点目は**開始時のy**へ戻る(仕様: 最後の曲線の
+							// 終点は最初の曲線の始点と同じy)。2026-08-16修正:
+							// 旧実装はdy2を足したままのyを使っており、浅い曲線が
+							// ずれていた
+							final int hflexStartY = cy;
 							float x1 = cx += this.operandStack.get(0);
 							float y1 = cy;
 							float x2 = cx += this.operandStack.get(1);
@@ -571,7 +577,7 @@ public class Type2CharString {
 							float x4 = cx += this.operandStack.get(4);
 							float y4 = cy;
 							float x5 = cx += this.operandStack.get(5);
-							float y5 = cy;
+							float y5 = cy = hflexStartY;
 							float x6 = cx += this.operandStack.get(6);
 							float y6 = cy;
 							path.curveTo(x1, y1, x2, y2, x3, y3);
@@ -590,6 +596,10 @@ public class Type2CharString {
 						}
 							break;
 						case HFLEX1: {
+							// dx1 dy1 dx2 dy2 dx3 dx4 dx5 dy5 dx6
+							// 最終点のyは**開始時のy**へ戻る(2026-08-16修正:
+							// 旧実装はdy1+dy2+dy5を足したままのyを使っていた)
+							final int hflex1StartY = cy;
 							float x1 = cx += this.operandStack.get(0);
 							float y1 = cy += -this.operandStack.get(1);
 							float x2 = cx += this.operandStack.get(2);
@@ -601,7 +611,7 @@ public class Type2CharString {
 							float x5 = cx += this.operandStack.get(6);
 							float y5 = cy += -this.operandStack.get(7);
 							float x6 = cx += this.operandStack.get(8);
-							float y6 = cy;
+							float y6 = cy = hflex1StartY;
 							path.curveTo(x1, y1, x2, y2, x3, y3);
 							if (DEBUG) {
 								System.err
@@ -618,6 +628,17 @@ public class Type2CharString {
 						}
 							break;
 						case FLEX1: {
+							// dx1 dy1 dx2 dy2 dx3 dy3 dx4 dy4 dx5 dy5 d6
+							// 最終点は、移動量の大きい軸にだけd6を足し、もう一方は
+							// **開始位置へ戻る**(2026-08-16修正: 旧実装はd6をxとy
+							// 両方へ足した上、この分岐自体が無かった)
+							final int flex1StartX = cx, flex1StartY = cy;
+							final int flex1Dx = this.operandStack.get(0) + this.operandStack.get(2)
+									+ this.operandStack.get(4) + this.operandStack.get(6)
+									+ this.operandStack.get(8);
+							final int flex1Dy = this.operandStack.get(1) + this.operandStack.get(3)
+									+ this.operandStack.get(5) + this.operandStack.get(7)
+									+ this.operandStack.get(9);
 							float x1 = cx += this.operandStack.get(0);
 							float y1 = cy += -this.operandStack.get(1);
 							float x2 = cx += this.operandStack.get(2);
@@ -628,8 +649,14 @@ public class Type2CharString {
 							float y4 = cy += -this.operandStack.get(7);
 							float x5 = cx += this.operandStack.get(8);
 							float y5 = cy += -this.operandStack.get(9);
-							float x6 = cx += this.operandStack.get(10);
-							float y6 = cy += -this.operandStack.get(10);
+							final float x6, y6;
+							if (Math.abs(flex1Dx) > Math.abs(flex1Dy)) {
+								x6 = cx += this.operandStack.get(10);
+								y6 = cy = flex1StartY;
+							} else {
+								x6 = cx = flex1StartX;
+								y6 = cy += -this.operandStack.get(10);
+							}
 							path.curveTo(x1, y1, x2, y2, x3, y3);
 							if (DEBUG) {
 								System.err

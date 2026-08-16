@@ -65,147 +65,87 @@ public class TrueTypeGlyphList implements GlyphList {
 		}
 		final short upm = this.head.getUnitsPerEm();
 		final GeneralPath path = new GeneralPath();
-		int count = 0, endIndex = 0;
-		float[] x = new float[5], y = new float[5];
-		boolean[] onCurve = new boolean[5];
-		int scount = 0;
-		final float[] sx = new float[2], sy = new float[2];
-		final boolean[] sonCurve = new boolean[2];
-		boolean first = true;
+		final float scale = 1000f / upm;
+		final int pointCount = gd.getPointCount();
+		final int contourCount = gd.getContourCount();
 
-		for (int i = 0; i < gd.getPointCount(); i++) {
-			if (count < 0) {
-				count = 0;
+		// 輪郭ごとに、点列を巡回しながら2次ベジェへ変換する
+		// (2026-08-15修正: 旧実装は「先頭2点を末尾へ継ぎ足す」方式で輪郭を
+		// 閉じようとしていたが、残り1点になった反復で未初期化の隣接点を読み、
+		// **始点へ戻る最後の曲線を落として直線で閉じていた**。〇や( の
+		// 滑らかな側面が弦に化ける実書籍の欠陥として発覚。TrueTypeの
+		// 標準的な巡回アルゴリズムへ置き換える)
+		int start = 0;
+		for (int c = 0; c < contourCount; ++c) {
+			final int end = gd.getEndPtOfContours(c);
+			if (end < start || end >= pointCount) {
+				break;
 			}
-			if (count >= x.length) {
-				final float[] nx = new float[count + 5];
-				System.arraycopy(x, 0, nx, 0, x.length);
-				x = nx;
-				final float[] ny = new float[count + 5];
-				System.arraycopy(y, 0, ny, 0, y.length);
-				y = ny;
-				final boolean[] nc = new boolean[count + 5];
-				System.arraycopy(onCurve, 0, nc, 0, onCurve.length);
-				onCurve = nc;
+			final int n = end - start + 1;
+			if (n <= 0) {
+				start = end + 1;
+				continue;
 			}
 
-			x[count] = gd.getXCoordinate(i) * 1000f / upm;
-			y[count] = -(gd.getYCoordinate(i) * 1000f / upm);
-			onCurve[count] = (gd.getFlags(i) & GlyfDescript.onCurve) != 0;
-			if (scount <= 1) {
-				sx[scount] = x[count];
-				sy[scount] = y[count];
-				sonCurve[scount] = onCurve[count];
-				++scount;
-			}
-			++count;
+			// 開始点を決める。先頭が曲線上ならそれ、そうでなければ末尾、
+			// 双方とも制御点なら両者の中点(TrueTypeの規約)
+			final float firstX = gd.getXCoordinate(start) * scale;
+			final float firstY = -(gd.getYCoordinate(start) * scale);
+			final boolean firstOn = (gd.getFlags(start) & GlyfDescript.onCurve) != 0;
+			final float lastX = gd.getXCoordinate(end) * scale;
+			final float lastY = -(gd.getYCoordinate(end) * scale);
+			final boolean lastOn = (gd.getFlags(end) & GlyfDescript.onCurve) != 0;
 
-			// End of contour
-			final boolean end = gd.getEndPtOfContours(endIndex) == i;
-			if (end) {
-				if (count + scount > x.length) {
-					// resize arrays if needed before appending start points
-					final float[] nx = new float[count + scount];
-					System.arraycopy(x, 0, nx, 0, count);
-					x = nx;
-					final float[] ny = new float[count + scount];
-					System.arraycopy(y, 0, ny, 0, count);
-					y = ny;
-					final boolean[] nc = new boolean[count + scount];
-					System.arraycopy(onCurve, 0, nc, 0, count);
-					onCurve = nc;
-				}
-				for (int j = 0; j < scount; ++j) {
-					x[count + j] = sx[j];
-					y[count + j] = sy[j];
-					onCurve[count + j] = sonCurve[j];
-				}
+			final float startX, startY;
+			final int firstIndex;
+			if (firstOn) {
+				startX = firstX;
+				startY = firstY;
+				firstIndex = 1;
+			} else if (lastOn) {
+				startX = lastX;
+				startY = lastY;
+				firstIndex = 0;
+			} else {
+				startX = midValue(lastX, firstX);
+				startY = midValue(lastY, firstY);
+				firstIndex = 0;
 			}
+			path.moveTo(startX, startY);
 
-			// Re-implementing original logic precisely but with bounds checks
-			if (end) {
-				for (int j = 0; j < scount; ++j) {
-					if (count + j >= x.length) {
-						// resize
-						final float[] nx = new float[count + scount + 5];
-						System.arraycopy(x, 0, nx, 0, count);
-						x = nx;
-						final float[] ny = new float[count + scount + 5];
-						System.arraycopy(y, 0, ny, 0, count);
-						y = ny;
-						final boolean[] nc = new boolean[count + scount + 5];
-						System.arraycopy(onCurve, 0, nc, 0, count);
-						onCurve = nc;
-					}
-					x[count + j] = sx[j];
-					y[count + j] = sy[j];
-					onCurve[count + j] = sonCurve[j];
-				}
-				scount = 0; // consumed
-			}
-
-			do {
-				if (!end && count < 2) {
-					break;
-				}
-				// 2 points
-				if (onCurve[0] && onCurve[1]) {
-					if (first) {
-						path.moveTo(x[0], y[0]);
-						first = false;
-					}
-					path.lineTo(x[1], y[1]);
-				} else if (!onCurve[0] && !onCurve[1]) {
-					if (first) {
-						path.moveTo(midValue(x[0], x[1]), midValue(y[0], y[1]));
-						first = false;
+			// 制御点を溜めながら、開始点の次から輪郭を1周する
+			boolean hasControl = false;
+			float controlX = 0, controlY = 0;
+			final int steps = firstOn ? n - 1 : n;
+			for (int k = 0; k < steps; ++k) {
+				final int i = start + (firstIndex + k) % n;
+				final float px = gd.getXCoordinate(i) * scale;
+				final float py = -(gd.getYCoordinate(i) * scale);
+				final boolean on = (gd.getFlags(i) & GlyfDescript.onCurve) != 0;
+				if (on) {
+					if (hasControl) {
+						path.quadTo(controlX, controlY, px, py);
+						hasControl = false;
 					} else {
-						path.quadTo(x[0], y[0], midValue(x[0], x[1]), midValue(y[0], y[1]));
-					}
-				} else if (!onCurve[0] && onCurve[1]) {
-					if (first) {
-						path.moveTo(x[1], y[1]);
-						first = false;
-					} else {
-						path.quadTo(x[0], y[0], x[1], y[1]);
+						path.lineTo(px, py);
 					}
 				} else {
-					if (!end && count < 3) {
-						break;
+					if (hasControl) {
+						// 連続する制御点の間には曲線上の点が省略されている
+						path.quadTo(controlX, controlY, midValue(controlX, px), midValue(controlY, py));
 					}
-					// 3 points
-					if (first) {
-						path.moveTo(x[0], y[0]);
-						first = false;
-					}
-					if (onCurve[0] && !onCurve[1] && onCurve[2]) {
-						path.quadTo(x[1], y[1], x[2], y[2]);
-					} else if (onCurve[0] && !onCurve[1] && !onCurve[2]) {
-						path.quadTo(x[1], y[1], midValue(x[1], x[2]), midValue(y[1], y[2]));
-					} else {
-						// All onCurve? or other combinations (not possible if valid TTF?)
-						// Fallback or ignore for robustness
-					}
-					count -= 2;
-					// 輪郭の末尾でcountは負になり得る(その場合はシフト不要)
-					final int shift3 = Math.max(count, 0);
-					System.arraycopy(x, 2, x, 0, shift3);
-					System.arraycopy(y, 2, y, 0, shift3);
-					System.arraycopy(onCurve, 2, onCurve, 0, shift3);
-					continue;
+					controlX = px;
+					controlY = py;
+					hasControl = true;
 				}
-				--count;
-				final int shift2 = Math.max(count, 0);
-				System.arraycopy(x, 1, x, 0, shift2);
-				System.arraycopy(y, 1, y, 0, shift2);
-				System.arraycopy(onCurve, 1, onCurve, 0, shift2);
-			} while (end && count > 0);
-
-			if (end) {
-				++endIndex;
-				path.closePath();
-				first = true;
 			}
+			// 開始点へ戻って閉じる。制御点が残っていれば最後の曲線を必ず描く
+			if (hasControl) {
+				path.quadTo(controlX, controlY, startX, startY);
+			}
+			path.closePath();
+
+			start = end + 1;
 		}
 
 		glyph = new Glyph(path, null);
