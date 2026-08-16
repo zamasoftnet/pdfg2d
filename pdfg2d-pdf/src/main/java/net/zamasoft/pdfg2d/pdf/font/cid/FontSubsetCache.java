@@ -35,22 +35,24 @@ final class FontSubsetCache {
 	}
 
 	/**
-	 * Identity of one subset: the width arrays and the CID-to-Unicode mapping
-	 * fully determine which glyphs the subset contains and in which order.
+	 * Identity of one subset: the width arrays and caller-supplied CID mapping
+	 * signature fully determine which glyphs the subset contains and in which
+	 * order. Legacy callers use Unicode values; shared OpenType subsets use
+	 * source-GID/outline-variant tuples.
 	 */
 	static final class Key {
 		private final short[] w;
 		private final short[] w2;
-		private final int[] unicodes;
+		private final int[] mapping;
 		private final int hash;
 
-		Key(final short[] w, final short[] w2, final int[] unicodes) {
+		Key(final short[] w, final short[] w2, final int[] mapping) {
 			this.w = w;
 			this.w2 = w2;
-			this.unicodes = unicodes;
+			this.mapping = mapping;
 			var h = Arrays.hashCode(w);
 			h = h * 31 + Arrays.hashCode(w2);
-			h = h * 31 + Arrays.hashCode(unicodes);
+			h = h * 31 + Arrays.hashCode(mapping);
 			this.hash = h;
 		}
 
@@ -67,7 +69,7 @@ final class FontSubsetCache {
 		@Override
 		public boolean equals(final Object o) {
 			return o instanceof Key other && Arrays.equals(this.w, other.w) && Arrays.equals(this.w2, other.w2)
-					&& Arrays.equals(this.unicodes, other.unicodes);
+					&& Arrays.equals(this.mapping, other.mapping);
 		}
 	}
 

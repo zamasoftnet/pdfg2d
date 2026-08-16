@@ -1,6 +1,7 @@
 package net.zamasoft.pdfg2d.pdf.impl;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.Transparency;
@@ -56,6 +57,36 @@ class ImageFlowCmykJpegTest {
         assertTrue(pdfSource.contains("/DCTDecode"), "The CMYK JPEG should be embedded as a JPEG image stream");
         assertTrue(CMYK_DECODE.matcher(pdfSource).find(),
                 "Inverted CMYK JPEG samples should have a decode array");
+    }
+
+    @Test
+    void testRgbJpegCanBeLoadedFromSource() throws Exception {
+        final var jpegFile = TestOutputFiles.outputFile(getClass(), "rgb.jpg");
+        final var image = new BufferedImage(8, 8, BufferedImage.TYPE_INT_RGB);
+        for (var y = 0; y < image.getHeight(); ++y) {
+            for (var x = 0; x < image.getWidth(); ++x) {
+                image.setRGB(x, y, ((x * 31) << 16) | ((y * 31) << 8) | ((x + y) * 15));
+            }
+        }
+        assertTrue(ImageIO.write(image, "jpeg", jpegFile));
+        image.flush();
+
+        final var out = new ByteArrayOutputStream();
+        final var builder = new StreamFragmentedOutput(out);
+        final var pdf = new PDFWriterImpl(builder, PDFParams.createDefault());
+        try (final var gc = new PDFGC(pdf.nextPage(20, 20))) {
+            gc.drawImage(pdf.loadImage(new FileSource(jpegFile)));
+        }
+        pdf.close();
+        builder.close();
+
+        final var pdfSource = out.toString(StandardCharsets.ISO_8859_1);
+        assertTrue(pdfSource.contains("/ColorSpace /DeviceRGB"),
+                "An RGB JPEG loaded from Source should be embedded as DeviceRGB");
+        assertFalse(pdfSource.contains("/ColorSpace /DeviceCMYK"),
+                "An RGB JPEG must not be mislabeled as DeviceCMYK");
+        assertTrue(pdfSource.contains("/DCTDecode"), "The RGB JPEG should be embedded as a JPEG image stream");
+        assertFalse(CMYK_DECODE.matcher(pdfSource).find(), "An RGB JPEG must not have a CMYK decode array");
     }
 
     private static void writeCmykJpeg(final File file) throws IOException {

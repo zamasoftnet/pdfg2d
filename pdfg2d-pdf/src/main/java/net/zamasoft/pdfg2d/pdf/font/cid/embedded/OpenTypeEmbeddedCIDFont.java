@@ -19,7 +19,6 @@ import net.zamasoft.pdfg2d.pdf.font.cid.CIDUtils;
 import net.zamasoft.pdfg2d.pdf.font.util.PDFFontUtils;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;
 import net.zamasoft.pdfg2d.util.IntList;
-import net.zamasoft.pdfg2d.util.ShortList;
 
 /**
  * A PDF CID font instance that is built from an OpenType font file and
@@ -37,15 +36,10 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 
 	protected final String name;
 
-	protected final ShortList widths = new ShortList(Short.MIN_VALUE), heights = new ShortList(Short.MIN_VALUE);
+	private final OpenTypeEmbeddedCIDFontSubset subset;
 
-	protected IntList fgidToGid = new IntList(-1);
-
-	protected IntList gidToFgid = new IntList(-1);
-
-	protected IntList gidToCid = new IntList();
-
-	protected int glyphCount = 1;
+	/** Direction-specific CID-to-Unicode map; gaps belong to the other wrapper. */
+	private IntList gidToCid = new IntList(-1);
 
 	/**
 	 * Constructs a new embedded CID font instance.
@@ -54,12 +48,13 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	 * @param name    the internal PDF resource name for this font
 	 * @param fontRef the indirect object reference for the font dictionary
 	 */
-	protected OpenTypeEmbeddedCIDFont(OpenTypeEmbeddedCIDFontSource source, String name, ObjectRef fontRef) {
+	protected OpenTypeEmbeddedCIDFont(final OpenTypeEmbeddedCIDFontSource source, final String name,
+			final ObjectRef fontRef, final OpenTypeEmbeddedCIDFontSubset subset) {
 		super(source);
 		this.fontRef = fontRef;
 		this.name = name;
-		this.widths.set(0, (short) this.getHAdvance(0));
-		this.heights.set(0, (short) this.getVAdvance(0));
+		this.subset = subset;
+		this.subset.initialize(this.getHAdvance(0), this.getVAdvance(0), this.isVertical());
 	}
 
 	public String getName() {
@@ -83,19 +78,18 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		return this.addGID(c, fgid);
 	}
 
-	private int addGID(int c, int fgid) {
+	int addGID(final int c, int fgid) {
 		if (fgid == 0) {
 			return 0;
 		}
-		fgid = this.substituteVertical(fgid);
-		int gid = this.fgidToGid.get(fgid);
-		if (gid == -1) {
-			gid = this.glyphCount++;
-			this.fgidToGid.set(fgid, gid);
-			this.gidToFgid.set(gid, fgid);
+		final int directVertical = this.substituteVertical(fgid);
+		fgid = this.substituteVertical(c, fgid);
+		final boolean emDashFallback = c == 0x2014 && directVertical != fgid;
+		final int semanticVariant = emDashFallback ? 0x2014 : 0;
+		final int gid = this.subset.register(fgid, this.verticalShapeFlags(c), semanticVariant,
+				this.getHAdvance(fgid), this.getVAdvance(fgid), this.isVertical());
+		if (this.gidToCid.get(gid) < 0) {
 			this.gidToCid.set(gid, c);
-			this.widths.set(gid, this.getHAdvance(fgid));
-			this.heights.set(gid, this.getVAdvance(fgid));
 		}
 		return gid;
 	}
@@ -118,7 +112,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		// character into font glyph ids, look up the ligature, and register its
 		// glyph in the subset. The ligature is keyed to the joining character
 		// for a best-effort ToUnicode mapping.
-		int firstFgid = this.gidToFgid.get(gid);
+		int firstFgid = this.subset.sourceGid(gid);
 		if (firstFgid < 0) {
 			return -1;
 		}
@@ -126,7 +120,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		if (secondFgid == 0) {
 			return -1;
 		}
-		secondFgid = this.substituteVertical(secondFgid);
+		secondFgid = this.substituteVertical(cid, secondFgid);
 		int ligFgid = this.gsubLigature(firstFgid, secondFgid);
 		if (ligFgid <= 0) {
 			return -1;
@@ -136,13 +130,13 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 
 	@Override
 	public boolean isColorGlyph(int gid) {
-		int fgid = this.gidToFgid.get(gid);
+		int fgid = this.subset.sourceGid(gid);
 		return fgid >= 0 && this.hasColorLayers(fgid);
 	}
 
 	@Override
 	public void drawColorGlyph(GC gc, int gid, java.awt.geom.AffineTransform at) {
-		int fgid = this.gidToFgid.get(gid);
+		int fgid = this.subset.sourceGid(gid);
 		if (fgid >= 0) {
 			this.drawColorLayers(gc, fgid, at);
 		}
@@ -151,28 +145,34 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	@Override
 	public short getAdvanceAdjustment(int gid, net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
 		// Translate the subset glyph id back to a font glyph id for GPOS.
-		int fgid = this.gidToFgid.get(gid);
+		int fgid = this.subset.sourceGid(gid);
 		return fgid >= 0 ? super.getAdvanceAdjustment(fgid, features) : 0;
 	}
 
 	@Override
 	public short getPlacementAdjustment(int gid, net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
 		// Translate the subset glyph id back to a font glyph id for GPOS.
-		int fgid = this.gidToFgid.get(gid);
+		int fgid = this.subset.sourceGid(gid);
 		return fgid >= 0 ? super.getPlacementAdjustment(fgid, features) : 0;
 	}
 
 	@Override
 	public short getKerning(int sgid, int gid) {
 		// Translate the subset glyph ids back to font glyph ids for GPOS.
-		int f1 = this.gidToFgid.get(sgid);
-		int f2 = this.gidToFgid.get(gid);
+		int f1 = this.subset.sourceGid(sgid);
+		int f2 = this.subset.sourceGid(gid);
 		if (f1 >= 0 && f2 >= 0) {
 			short kern = this.gposKerning(f1, f2);
 			if (kern != 0) {
 				return kern;
 			}
 		}
+		final short dash = this.verticalDashKerning(sgid, gid);
+		if (dash != 0) {
+			return dash;
+		}
+		// Preserve the long-standing subset-GID fallback. Some existing metrics
+		// depend on it when the translated font-GID lookup has no pair entry.
 		return super.getKerning(sgid, gid);
 	}
 
@@ -181,7 +181,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	}
 
 	public Shape getShapeByGID(int gid) {
-		int fgid = this.gidToFgid.get(gid);
+		int fgid = this.subset.sourceGid(gid);
 		if (fgid == -1) {
 			return null;
 		}
@@ -193,24 +193,26 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		if (shape == null) {
 			return null;
 		}
-		shape = this.adjustShape(shape, gid);
+		shape = this.adjustShape(shape, this.subset.shapeFlags(gid), this.subset.height(gid));
 		return shape;
 	}
 
 	public short getAdvance(int gid) {
 		if (this.isVertical()) {
-			return this.heights.get(gid);
+			return this.subset.height(gid);
 		}
-		return this.widths.get(gid);
+		return this.subset.width(gid);
 	}
 
 	public short getWidth(int gid) {
-		return this.widths.get(gid);
+		return this.subset.width(gid);
 	}
 
 	public void drawTo(GC gc, Text text) throws IOException, GraphicsException {
 		if (gc instanceof PDFGC) {
-			PDFFontUtils.drawCIDTo(((PDFGC) gc).getPDFGraphicsOutput(), text, !this.vSubsts.isEmpty());
+			final var direction = ((OpenTypeEmbeddedCIDFontSource) this.getFontSource()).getDirection();
+			PDFFontUtils.drawCIDTo(((PDFGC) gc).getPDFGraphicsOutput(), text,
+					direction == net.zamasoft.pdfg2d.gc.font.FontStyle.Direction.TB);
 		} else {
 			FontUtils.drawText(gc, this, text);
 		}
@@ -218,16 +220,15 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 
 	public void writeTo(PDFFragmentOutput out, XRef xref) throws IOException {
 		OpenTypeEmbeddedCIDFontSource source = (OpenTypeEmbeddedCIDFontSource) this.getFontSource();
-		final int[] unicodea = this.gidToCid.toArray();
-		final short[] w = this.widths.toArray();
-		final short[] w2;
-		if (!this.vSubsts.isEmpty()) {
-			w2 = this.heights.toArray();
-		} else {
-			w2 = null;
+		this.subset.prepare(xref, this.getPSName());
+		final boolean vertical = source.getDirection() == net.zamasoft.pdfg2d.gc.font.FontStyle.Direction.TB;
+		CIDUtils.writeEmbeddedFontType0(out, xref, this.fontRef, this.subset.descendantRef(),
+				this.subset.subsetName(), vertical, this.gidToCid.toArray());
+		if (!this.subset.isWritten()) {
+			CIDUtils.writeEmbeddedFontProgram(out, xref, source, this, this.subset.descendantRef(),
+					this.subset.subsetName(), this.subset.widths(), this.subset.heights(), this.subset.signature());
+			this.subset.markWritten();
 		}
-
-		CIDUtils.writeEmbeddedFont(out, xref, source, this, this.fontRef, w, w2, unicodea);
 		this.gidToCid = null;
 	}
 
@@ -237,11 +238,11 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	}
 
 	public int getGlyphCount() {
-		return this.glyphCount;
+		return this.subset.glyphCount();
 	}
 
 	public int getCharCount() {
-		return this.glyphCount;
+		return this.subset.glyphCount();
 	}
 
 	public String getOrdering() {
@@ -274,5 +275,3 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		return metaFont.getFontName();
 	}
 }
-
-

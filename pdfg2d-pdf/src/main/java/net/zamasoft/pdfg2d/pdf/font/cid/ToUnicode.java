@@ -174,4 +174,45 @@ public class ToUnicode implements Serializable {
 		}
 		return new ToUnicode((ToUnicode.Unicode[]) list.toArray(new ToUnicode.Unicode[list.size()]));
 	}
+
+	/**
+	 * Builds a ToUnicode map whose negative entries are genuinely unmapped.
+	 * This is used by direction-specific Type0 wrappers that share a descendant
+	 * CID font: a CID allocated by the other direction must not acquire an
+	 * inferred Unicode value in this wrapper.
+	 *
+	 * @param unicodes CID-to-Unicode values, with negative entries for gaps
+	 * @return the sparse ToUnicode map
+	 */
+	public static ToUnicode buildFromSparseChars(final int[] unicodes) {
+		final List<ToUnicode.Unicode> list = new ArrayList<>();
+		final int[] run = new int[256];
+		int startCid = -1;
+		int length = 0;
+		for (int cid = 0; cid < unicodes.length; ++cid) {
+			final int unicode = unicodes[cid];
+			if (unicode < 0 || (startCid >= 0 && cid % 256 == 0)) {
+				if (startCid >= 0) {
+					final int[] values = new int[length];
+					System.arraycopy(run, 0, values, 0, length);
+					list.add(new ToUnicode.Unicode(startCid, startCid + length - 1, values));
+					startCid = -1;
+					length = 0;
+				}
+				if (unicode < 0) {
+					continue;
+				}
+			}
+			if (startCid < 0) {
+				startCid = cid;
+			}
+			run[length++] = unicode;
+		}
+		if (startCid >= 0) {
+			final int[] values = new int[length];
+			System.arraycopy(run, 0, values, 0, length);
+			list.add(new ToUnicode.Unicode(startCid, startCid + length - 1, values));
+		}
+		return new ToUnicode(list.toArray(new ToUnicode.Unicode[0]));
+	}
 }

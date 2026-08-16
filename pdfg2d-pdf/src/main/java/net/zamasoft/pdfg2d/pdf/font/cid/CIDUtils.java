@@ -138,9 +138,9 @@ public final class CIDUtils {
 		out.writeInt(warray.getDefaultWidth());
 		out.lineBreak();
 		final var widths = warray.getWidths();
+		out.writeName("W");
+		out.startArray();
 		if (widths.length > 0) {
-			out.writeName("W");
-			out.startArray();
 			out.lineBreak();
 			for (final var w : widths) {
 				final var shorts = w.widths();
@@ -170,8 +170,8 @@ public final class CIDUtils {
 				}
 				out.lineBreak();
 			}
-			out.endArray();
 		}
+		out.endArray();
 	}
 
 	/**
@@ -190,9 +190,9 @@ public final class CIDUtils {
 		out.endArray();
 		out.lineBreak();
 		final var widths = warray.getWidths();
+		out.writeName("W2");
+		out.startArray();
 		if (widths.length > 0) {
-			out.writeName("W2");
-			out.startArray();
 			out.lineBreak();
 			for (final var w : widths) {
 				final var shorts = w.widths();
@@ -230,8 +230,8 @@ public final class CIDUtils {
 				}
 				out.lineBreak();
 			}
-			out.endArray();
 		}
+		out.endArray();
 	}
 
 	/**
@@ -371,7 +371,15 @@ public final class CIDUtils {
 	}
 
 	private static void writeIdentityToUnicode(PDFOutput pout, int[] unicodeArray) throws IOException {
-		ToUnicode toUnicode = ToUnicode.buildFromChars(unicodeArray);
+		boolean sparse = false;
+		for (final int unicode : unicodeArray) {
+			if (unicode < 0) {
+				sparse = true;
+				break;
+			}
+		}
+		ToUnicode toUnicode = sparse ? ToUnicode.buildFromSparseChars(unicodeArray)
+				: ToUnicode.buildFromChars(unicodeArray);
 
 		pout.writeName("CIDInit");
 		pout.writeName("ProcSet");
@@ -473,38 +481,23 @@ public final class CIDUtils {
 		pout.close();
 	}
 
-	/**
-	 * Writes an embedded font.
-	 * 
-	 * @param out
-	 * @param xref
-	 * @param source
-	 * @param font
-	 * @param fontRef
-	 * @param w
-	 * @param w2
-	 * @param unicodeArray mapping from CID to Unicode
-	 * @throws IOException
-	 */
-	public static void writeEmbeddedFont(PDFFragmentOutput out, XRef xref, CIDFontSource source, PDFEmbeddedFont font,
-			ObjectRef fontRef, short[] w, short[] w2, int[] unicodeArray) throws IOException {
-		// Embedded font subset tag, derived from the subset content so that
-		// identical subsets get identical tags (deterministic output and a
-		// prerequisite for reusing cached subset programs across documents).
-		final FontSubsetCache.Key subsetKey = new FontSubsetCache.Key(w, w2, unicodeArray);
-		String subsetName;
-		{
-			int h = subsetKey.contentHash();
-			char a = (char) ('A' + (h & 0xF));
-			char b = (char) ('A' + ((h >> 4) & 0xF));
-			char c = (char) ('A' + ((h >> 8) & 0xF));
-			char d = (char) ('A' + ((h >> 12) & 0xF));
-			char e = (char) ('A' + ((h >> 16) & 0xF));
-			char f = (char) ('A' + ((h >> 20) & 0xF));
-			subsetName = "" + a + b + c + d + e + f + '+' + font.getPSName();
-		}
+	/** Returns a deterministic name for one embedded physical subset. */
+	public static String createEmbeddedSubsetName(final short[] w, final short[] w2, final int[] glyphSignature,
+			final String psName) {
+		final int h = new FontSubsetCache.Key(w, w2, glyphSignature).contentHash();
+		final char a = (char) ('A' + (h & 0xF));
+		final char b = (char) ('A' + ((h >> 4) & 0xF));
+		final char c = (char) ('A' + ((h >> 8) & 0xF));
+		final char d = (char) ('A' + ((h >> 12) & 0xF));
+		final char e = (char) ('A' + ((h >> 16) & 0xF));
+		final char f = (char) ('A' + ((h >> 20) & 0xF));
+		return "" + a + b + c + d + e + f + '+' + psName;
+	}
 
-		// Main font
+	/** Writes the direction-specific Type0 wrapper and its sparse ToUnicode map. */
+	public static void writeEmbeddedFontType0(final PDFFragmentOutput out, final XRef xref,
+			final ObjectRef fontRef, final ObjectRef descendantRef, final String subsetName, final boolean vertical,
+			final int[] unicodeArray) throws IOException {
 		out.startObject(fontRef);
 		out.startHash();
 		out.writeName("Type");
@@ -518,12 +511,11 @@ public final class CIDUtils {
 		out.lineBreak();
 		out.writeName("DescendantFonts");
 		out.startArray();
-		ObjectRef xfontRef = xref.nextObjectRef();
-		out.writeObjectRef(xfontRef);
+		out.writeObjectRef(descendantRef);
 		out.endArray();
 		out.lineBreak();
 		out.writeName("Encoding");
-		out.writeName((w2 != null) ? ENCODING_V : ENCODING_H);
+		out.writeName(vertical ? ENCODING_V : ENCODING_H);
 
 		// ToUnicode
 		ObjectRef toUnicodeRef = xref.nextObjectRef();
@@ -538,9 +530,28 @@ public final class CIDUtils {
 		pout.setPrecision(out.getPrecision());
 		CIDUtils.writeIdentityToUnicode(pout, unicodeArray);
 		out.endObject();
+	}
+
+	/** Writes an embedded font using one private descendant and program. */
+	public static void writeEmbeddedFont(final PDFFragmentOutput out, final XRef xref, final CIDFontSource source,
+			final PDFEmbeddedFont font, final ObjectRef fontRef, final short[] w, final short[] w2,
+			final int[] unicodeArray) throws IOException {
+		final ObjectRef descendantRef = xref.nextObjectRef();
+		final String subsetName = createEmbeddedSubsetName(w, w2, unicodeArray, font.getPSName());
+		writeEmbeddedFontType0(out, xref, fontRef, descendantRef, subsetName, w2 != null, unicodeArray);
+		writeEmbeddedFontProgram(out, xref, source, font, descendantRef, subsetName, w, w2, unicodeArray);
+	}
+
+	/** Writes the descendant CIDFont, descriptor, CIDSet, and FontFile3 once. */
+	public static void writeEmbeddedFontProgram(final PDFFragmentOutput out, final XRef xref,
+			final CIDFontSource source, final PDFEmbeddedFont font, final ObjectRef descendantRef,
+			final String subsetName, final short[] w, final short[] w2, final int[] glyphSignature)
+			throws IOException {
+		final BBox subsetBBox = CFFGenerator.calculateSubsetBBox(font);
+		final FontSubsetCache.Key subsetKey = new FontSubsetCache.Key(w, w2, glyphSignature);
 
 		// Descendant font
-		out.startObject(xfontRef);
+		out.startObject(descendantRef);
 		out.startHash();
 		out.writeName("Type");
 		out.writeName("Font");
@@ -589,7 +600,7 @@ public final class CIDUtils {
 		out.lineBreak();
 		writeFlagsAndPanose(out, source);
 		out.writeName("FontBBox");
-		BBox bbox = source.getBBox();
+		BBox bbox = subsetBBox;
 		out.startArray();
 		out.writeInt(bbox.llx());
 		out.writeInt(bbox.lly());
@@ -630,13 +641,14 @@ public final class CIDUtils {
 		out.startObject(cidSetRef);
 		out.startHash();
 		try (OutputStream sout = out.startStreamFromHash(PDFFragmentOutput.Mode.BINARY)) {
-			int bytes = (int) Math.ceil(unicodeArray.length / 8.0);
+			final int glyphCount = font.getGlyphCount();
+			int bytes = (int) Math.ceil(glyphCount / 8.0);
 			for (int i = 0; i < bytes; ++i) {
 				int start = i * 8;
 				int end = start + 8;
 				int b = 0;
 				for (int j = start; j < end; ++j) {
-					if (j < unicodeArray.length) {
+					if (j < glyphCount) {
 						b |= (1 << (end - j - 1));
 					}
 				}
@@ -663,6 +675,7 @@ public final class CIDUtils {
 				CFFGenerator cff = new CFFGenerator();
 				cff.setSubsetName(subsetName);
 				cff.setEmbedableFont(font);
+				cff.setBBox(subsetBBox);
 				cff.writeTo(buff);
 				program = buff.toByteArray();
 				FontSubsetCache.put(source, subsetKey, program);

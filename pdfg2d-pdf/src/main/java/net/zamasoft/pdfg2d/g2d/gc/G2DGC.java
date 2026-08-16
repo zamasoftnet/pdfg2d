@@ -8,7 +8,7 @@ import java.awt.Shape;
 import java.awt.Stroke;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.NoninvertibleTransformException;
-import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -92,6 +92,31 @@ public class G2DGC implements GC {
 			this.fillAlpha = gc.fillAlpha;
 			this.strokeAt = gc.strokeAt;
 			this.textMode = gc.textMode;
+		}
+
+		/**
+		 * Copies a state while translating its device space. The user-space clip and
+		 * paints remain unchanged; only the user-to-device transform gains the raster
+		 * origin shift used by an off-screen group image.
+		 */
+		private GraphicsState(final GraphicsState state, final AffineTransform deviceShift) {
+			this.clip = state.clip;
+			this.transform = new AffineTransform(deviceShift);
+			this.transform.concatenate(state.transform);
+			this.stroke = state.stroke;
+			this.strokePaint = state.strokePaint;
+			this.fillPaint = state.fillPaint;
+			this.strokeColor = state.strokeColor;
+			this.awtFillPaint = state.awtFillPaint;
+			this.fillAt = state.fillAt;
+			this.strokeAt = state.strokeAt;
+			this.fillAlpha = state.fillAlpha;
+			this.textMode = state.textMode;
+			this.composite = state.composite;
+		}
+
+		private GraphicsState shifted(final AffineTransform deviceShift) {
+			return new GraphicsState(this, deviceShift);
 		}
 
 		/**
@@ -454,11 +479,6 @@ public class G2DGC implements GC {
 		G2dGroupImageGC(Graphics2D g2d, FontManager fm, BufferedImage image, AffineTransform at) {
 			super(g2d, fm);
 			this.image = image;
-			try {
-				at = at == null ? null : at.createInverse();
-			} catch (NoninvertibleTransformException e) {
-				at = null;
-			}
 			this.at = at;
 		}
 
@@ -471,23 +491,43 @@ public class G2DGC implements GC {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
 	public GroupImageGC createGroupImage(double width, double height) throws GraphicsException {
-		final Point2D size = new Point2D.Double(width, height);
 		final AffineTransform at = this.g.getTransform();
-		if (at != null) {
-			at.transform(size, size);
+		final Rectangle2D bounds = at.createTransformedShape(new Rectangle2D.Double(0, 0, width, height))
+				.getBounds2D();
+		final double minX = Math.floor(bounds.getMinX());
+		final double minY = Math.floor(bounds.getMinY());
+		final double maxX = Math.ceil(bounds.getMaxX());
+		final double maxY = Math.ceil(bounds.getMaxY());
+		final double rasterWidth = maxX - minX;
+		final double rasterHeight = maxY - minY;
+		if (!(rasterWidth > 0) || !(rasterHeight > 0) || rasterWidth > Integer.MAX_VALUE
+				|| rasterHeight > Integer.MAX_VALUE) {
+			throw new GraphicsException("Invalid transformed group image size: " + rasterWidth + "x" + rasterHeight
+					+ " (source=" + width + "x" + height + ", transform=" + at + ")");
 		}
 
-		final int w = (int) size.getX();
-		final int h = (int) size.getY();
+		final int w = (int) rasterWidth;
+		final int h = (int) rasterHeight;
 		final BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 		final Graphics2D g2d = (Graphics2D) image.getGraphics();
 		g2d.setRenderingHints(this.g.getRenderingHints());
-		final G2dGroupImageGC gc = new G2dGroupImageGC(g2d, this.getFontManager(), image, at);
-		final GraphicsState state = new GraphicsState(this);
+
+		final AffineTransform deviceShift = AffineTransform.getTranslateInstance(-minX, -minY);
+		final AffineTransform imageToUser;
+		try {
+			imageToUser = at.createInverse();
+			imageToUser.translate(minX, minY);
+		} catch (NoninvertibleTransformException e) {
+			throw new GraphicsException("Cannot place a group image under a non-invertible transform: " + at, e);
+		}
+		final G2dGroupImageGC gc = new G2dGroupImageGC(g2d, this.getFontManager(), image, imageToUser);
+		final GraphicsState state = new GraphicsState(this).shifted(deviceShift);
 		state.restore(gc);
-		gc.stack = (ArrayList<GraphicsState>) this.stack.clone();
+		gc.stack = new ArrayList<>(this.stack.size());
+		for (final GraphicsState saved : this.stack) {
+			gc.stack.add(saved.shifted(deviceShift));
+		}
 		return gc;
 	}
 }

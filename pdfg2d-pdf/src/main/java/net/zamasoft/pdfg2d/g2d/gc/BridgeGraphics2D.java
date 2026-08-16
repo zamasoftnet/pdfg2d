@@ -40,6 +40,7 @@ import net.zamasoft.pdfg2d.g2d.image.RasterImageImpl;
 import net.zamasoft.pdfg2d.g2d.util.G2DUtils;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.font.FontFamilyList;
+import net.zamasoft.pdfg2d.gc.font.FontPolicyList;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Style;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Weight;
 import net.zamasoft.pdfg2d.gc.text.GlyphHandler;
@@ -95,6 +96,9 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	protected RenderingHints hints = new RenderingHints(null);
 
 	protected Font font = new Font("serif", Font.PLAIN, 12);
+
+	/** Java2D由来の文字にも呼出側のPDFフォント方針を適用する。 */
+	protected FontPolicyList fontPolicy = BRIDGE_FONT_POLICY;
 
 	public BridgeGraphics2D(final GC gc, final GraphicsConfiguration config) {
 		this.gc = gc;
@@ -341,6 +345,17 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 
 	}
 
+	public FontPolicyList getFontPolicy() {
+		return this.fontPolicy;
+	}
+
+	public void setFontPolicy(final FontPolicyList fontPolicy) {
+		if (fontPolicy == null) {
+			throw new NullPointerException("fontPolicy");
+		}
+		this.fontPolicy = fontPolicy;
+	}
+
 	class MyFontMetrics extends FontMetrics {
 		private static final long serialVersionUID = 1L;
 
@@ -416,7 +431,7 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 		try (final var tlf = new TextLayoutHandler(this.gc, TextBreakingRulesBundle.getRules("ja"), gh)) {
 			final var atts = this.font.getAttributes();
 			tlf.setFontFamilies(FontFamilyList.create(toFamilyName(this.font)));
-			tlf.setFontPolicy(BRIDGE_FONT_POLICY);
+			tlf.setFontPolicy(this.fontPolicy);
 			final var style = this.font.getStyle();
 			tlf.setFontWeight(TextUtils.toFontWeight((Float) atts.get(TextAttribute.WEIGHT),
 					(style & Font.BOLD) != 0 ? Weight.W_600 : Weight.W_400));

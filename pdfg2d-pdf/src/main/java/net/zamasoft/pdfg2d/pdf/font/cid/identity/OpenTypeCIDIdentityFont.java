@@ -51,7 +51,12 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 	public int toGID(int c) {
 		OpenTypeCIDIdentityFontSource source = (OpenTypeCIDIdentityFontSource) this.getFontSource();
 		int gid = source.getCmapFormat().mapCharCode(c);
-		gid = this.substituteVertical(gid);
+		gid = this.substituteVertical(c, gid);
+		// Kerning is queried during layout, before drawTo() records the glyphs used
+		// by the page.  Keep the reverse mapping available at shaping time as well.
+		if (gid != 0) {
+			this.unicodes.set(gid, c);
+		}
 		return gid;
 	}
 
@@ -116,11 +121,12 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 	}
 
 	public short getKerning(int scid, int cid) {
-		return 0;
+		// Identity CID fonts historically do not apply general GPOS kerning here;
+		// keep that contract and add only the vertical dash continuity fix.
+		return this.verticalDashKerning(scid, cid);
 	}
 
 	public int getLigature(int gid, int cid) {
 		return -1;
 	}
 }
-

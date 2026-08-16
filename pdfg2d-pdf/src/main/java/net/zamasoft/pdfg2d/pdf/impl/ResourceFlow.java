@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.BiConsumer;
 
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 
@@ -28,6 +29,7 @@ class ResourceFlow {
 	private final Map<String, PDFFragmentOutputImpl> typeToFlow = new TreeMap<>();
 	private final List<PDFFragmentOutputImpl> flowList = new ArrayList<>();
 	private final Map<String, ObjectRef> idToObjectRef = new HashMap<>();
+	private final BiConsumer<String, String> resourceUse;
 
 	/**
 	 * Constructs a new ResourceFlow, immediately writing the opening hash and
@@ -37,7 +39,9 @@ class ResourceFlow {
 	 * @param flow the fragment output into which the resource dictionary is written
 	 * @throws IOException if an I/O error occurs while writing the initial entries
 	 */
-	public ResourceFlow(final PDFFragmentOutputImpl flow) throws IOException {
+	public ResourceFlow(final PDFFragmentOutputImpl flow, final BiConsumer<String, String> resourceUse)
+			throws IOException {
+		this.resourceUse = resourceUse;
 		flow.startHash();
 		flow.writeName("ProcSet");
 		flow.startArray();
@@ -98,6 +102,7 @@ class ResourceFlow {
 		flow.writeName(name);
 		flow.writeObjectRef(objectRef);
 		this.idToObjectRef.put(name, objectRef);
+		this.resourceUse.accept(type, name);
 	}
 
 	/**

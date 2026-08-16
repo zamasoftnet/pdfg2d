@@ -733,7 +733,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 		final var resourceFlow = this.mainFlow.forkFragment();
 		resourceFlow.startObject(this.pageResourceRef);
-		this.pageResourceFlow = new ResourceFlow(resourceFlow);
+		this.pageResourceFlow = new ResourceFlow(resourceFlow, this::useResource);
 		resourceFlow.endObject();
 	}
 
@@ -779,6 +779,12 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	@Override
 	public Font useFont(final FontSource source) throws IOException {
 		return this.fonts.useFont(source);
+	}
+
+	private void useResource(final String type, final String name) {
+		if ("Font".equals(type)) {
+			this.fonts.useResource(name);
+		}
 	}
 
 	@Override
@@ -881,7 +887,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 
 		objectsFlow.writeName("Resources");
-		final var newResourceFlow = new ResourceFlow(objectsFlow);
+		final var newResourceFlow = new ResourceFlow(objectsFlow, this::useResource);
 		objectsFlow.lineBreak();
 
 		// Convert coordinate system from PDF default (bottom-left) to user default
@@ -952,7 +958,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		objectsFlow.lineBreak();
 
 		objectsFlow.writeName("Resources");
-		final var newResourceFlow = new ResourceFlow(objectsFlow);
+		final var newResourceFlow = new ResourceFlow(objectsFlow, this::useResource);
 		objectsFlow.lineBreak();
 
 		objectsFlow.writeName("TilingType");

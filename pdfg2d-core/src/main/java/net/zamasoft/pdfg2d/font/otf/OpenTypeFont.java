@@ -152,6 +152,29 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	}
 
 	/**
+	 * 必須縦字形を適用し、フォントがEM DASH(U+2014)の縦字形を持たない
+	 * 場合だけHORIZONTAL BAR(U+2015)の縦字形を代用します。
+	 *
+	 * <p>Unicode Vertical_Orientationで両方とも縦組み時に回転対象ですが、
+	 * 日本語フォントの一部はU+2015だけをvert/vrt2へ収録しています。
+	 * PDFのCIDテキストは輪郭へ後処理の回転を掛けられないため、subset登録前の
+	 * グリフ選択で補完します。ToUnicodeには元のU+2014を保持します。</p>
+	 */
+	protected final int substituteVertical(final int codePoint, final int gid) {
+		final int vertical = this.substituteVertical(gid);
+		if (!this.isVertical() || codePoint != 0x2014 || vertical != gid) {
+			return vertical;
+		}
+		final var source = (OpenTypeFontSource) this.getFontSource();
+		final int bar = source.getCmapFormat().mapCharCode(0x2015);
+		if (bar == 0) {
+			return vertical;
+		}
+		final int verticalBar = this.substituteVertical(bar);
+		return verticalBar != bar ? verticalBar : vertical;
+	}
+
+	/**
 	 * Returns whether this font is configured for vertical writing.
 	 *
 	 * @return {@code true} if vertical tables are present
@@ -169,11 +192,45 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	 * @return the (possibly modified) glyph outline
 	 */
 	protected final Shape adjustShape(Shape shape, final int gid) {
+		return this.adjustShape(shape, gid, this.verticalShapeFlags(this.toChar(gid)));
+	}
+
+	/** Bit flag for the optional vertical-origin translation. */
+	protected static final int VERTICAL_SHAPE_ADJUST = 1;
+
+	/** Bit flag for glyphs whose outline is manually rotated in vertical text. */
+	protected static final int VERTICAL_SHAPE_ROTATE = 2;
+
+	/**
+	 * Returns the outline transformation flags needed for one source character.
+	 * Keeping this value with an embedded subset CID makes shared horizontal and
+	 * vertical font programs independent of whichever Type0 wrapper is written
+	 * first.
+	 */
+	protected final int verticalShapeFlags(final int cid) {
 		if (!this.isVertical()) {
+			return 0;
+		}
+		int flags = ADJUST_VERTICAL ? VERTICAL_SHAPE_ADJUST : 0;
+		if (cid == 0xFF0D || cid == 0xFF1C || cid == 0xFF1E || cid == 0x2212 || cid == 0x226A
+				|| cid == 0x226B) {
+			flags |= VERTICAL_SHAPE_ROTATE;
+		}
+		return flags;
+	}
+
+	/** Applies an explicitly recorded vertical outline transformation. */
+	protected final Shape adjustShape(Shape shape, final int sourceGid, final int flags) {
+		return this.adjustShape(shape, flags, this.getVAdvance(sourceGid));
+	}
+
+	/** Applies recorded flags with the vertical metric held by a shared subset. */
+	protected final Shape adjustShape(Shape shape, final int flags, final short verticalAdvance) {
+		if (flags == 0) {
 			return shape;
 		}
-		if (ADJUST_VERTICAL) {
-			final double advance = this.getAdvance(gid);
+		if ((flags & VERTICAL_SHAPE_ADJUST) != 0) {
+			final double advance = verticalAdvance;
 			final var bound = shape.getBounds2D();
 			final double bottom = bound.getY() + bound.getHeight() + DEFAULT_VERTICAL_ORIGIN;
 			if (bottom > advance) {
@@ -183,10 +240,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 				shape = path;
 			}
 		}
-		final int cid = this.toChar(gid);
-		// Check for specific characters to rotate: fullwidth hyphen, less-than,
-		// greater-than, minus, double less-than, double greater-than
-		if (cid == 0xFF0D || cid == 0xFF1C || cid == 0xFF1E || cid == 0x2212 || cid == 0x226A || cid == 0x226B) {
+		if ((flags & VERTICAL_SHAPE_ROTATE) != 0) {
 			final var path = new GeneralPath(shape);
 			final var bound = shape.getBounds2D();
 			path.transform(AffineTransform.getRotateInstance(Math.PI / 2.0, bound.getCenterX(), bound.getCenterY()));
@@ -232,7 +286,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	public int toGID(final int c) {
 		final var source = (OpenTypeFontSource) this.getFontSource();
 		int gid = source.getCmapFormat().mapCharCode(c);
-		return this.substituteVertical(gid);
+		return this.substituteVertical(c, gid);
 	}
 
 	@Override
@@ -243,7 +297,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		// エンジン必須のvertはCSSからは無効化させない(印刷エンジンとしての
 		// 意図的仕様差——consult-codex-2026-07-31-font-features.txt §3.7)
 		gid = this.substituteFeatures(gid, features);
-		return this.substituteVertical(gid);
+		return this.substituteVertical(c, gid);
 	}
 
 	/**
@@ -423,7 +477,39 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		// by CSS text-spacing-trim (foliojet4
 		// consult-codex-2026-07-31-text-spacing.txt T1a). The layout layer
 		// reproduces the same pair table via per-glyph advance adjustments.
-		return this.gposKerning(sgid, gid);
+		final short gpos = this.gposKerning(sgid, gid);
+		return gpos != 0 ? gpos : this.verticalDashKerning(sgid, gid);
+	}
+
+	/**
+	 * 縦組みで連続するEM DASH/HORIZONTAL BARの字面間の空きを詰めます。
+	 * 固定値ではなく、実際の縦字形の輪郭端と縦advanceから求めるため、
+	 * フォントごとのサイドベアリング差に追従します。
+	 */
+	protected final short verticalDashKerning(final int firstGid, final int secondGid) {
+		if (!this.isVertical() || !isDash(this.toChar(firstGid)) || !isDash(this.toChar(secondGid))) {
+			return 0;
+		}
+		final Shape first = this.getShapeByGID(firstGid);
+		final Shape second = this.getShapeByGID(secondGid);
+		if (first == null || second == null) {
+			return 0;
+		}
+		final var source = (OpenTypeFontSource) this.getFontSource();
+		final double scale = (double) FontSource.DEFAULT_UNITS_PER_EM / source.getUnitsPerEm();
+		final var a = first.getBounds2D();
+		final var b = second.getBounds2D();
+		// 2字目の原点は1字目の縦advance後。字面が離れる量だけをkerning
+		// (呼出側がadvanceから減算する正値)として返す。
+		final double gap = this.getVAdvance(firstGid) + b.getMinY() * scale - a.getMaxY() * scale;
+		if (!(gap > 0)) {
+			return 0;
+		}
+		return (short) Math.min(Short.MAX_VALUE, Math.round(gap));
+	}
+
+	private static boolean isDash(final int codePoint) {
+		return codePoint == 0x2014 || codePoint == 0x2015;
 	}
 
 	@Override
@@ -571,4 +657,3 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		return net.zamasoft.pdfg2d.util.LongIntLookup.fromUnsorted(keys, values, n);
 	}
 }
-

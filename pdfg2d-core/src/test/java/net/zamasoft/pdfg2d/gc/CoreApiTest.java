@@ -347,18 +347,22 @@ class CoreApiTest {
         assertEquals('\t', tab.getControlChar());
         assertEquals(3, tab.getCharOffset());
         assertEquals(0.0, tab.getAdvance());
-        assertEquals(9.0, tab.getAscent());
-        assertEquals(3.0, tab.getDescent());
+        assertEquals(7.0, tab.getAscent());
+        assertEquals(2.0, tab.getDescent());
         assertEquals("\\t", tab.toString());
 
         assertEquals('\n', lineBreak.getControlChar());
         assertEquals(4, lineBreak.getCharOffset());
         assertEquals(0.0, lineBreak.getAdvance());
+        assertEquals(7.0, lineBreak.getAscent());
+        assertEquals(2.0, lineBreak.getDescent());
         assertEquals("\\n", lineBreak.toString());
 
         assertEquals(' ', whiteSpace.getControlChar());
         assertEquals(5, whiteSpace.getCharOffset());
         assertEquals(4.0, whiteSpace.getAdvance());
+        assertEquals(7.0, whiteSpace.getAscent());
+        assertEquals(2.0, whiteSpace.getDescent());
         whiteSpace.setWordSpacing(2.5);
         assertEquals(6.5, whiteSpace.getAdvance());
         whiteSpace.collapse();

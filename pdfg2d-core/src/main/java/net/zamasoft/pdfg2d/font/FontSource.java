@@ -117,6 +117,19 @@ public interface FontSource extends Serializable {
 	public short getSpaceAdvance();
 
 	/**
+	 * Returns the OpenType OS/2 {@code fsType} embedding permission flags.
+	 *
+	 * <p>Font sources without an OS/2 table return {@code 0}. Consumers that
+	 * redistribute a generated font must still obey the font's license; this
+	 * value only exposes the machine-readable embedding restrictions.</p>
+	 *
+	 * @return the unsigned 16-bit flags stored in a {@code short}
+	 */
+	public default short getEmbeddingLicenseFlags() {
+		return 0;
+	}
+
+	/**
 	 * Creates a font instance from this source.
 	 * 
 	 * @return the created font

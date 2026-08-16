@@ -73,6 +73,7 @@ public class FontIndexTest {
 			assertEquals(a.getAscent(), b.getAscent());
 			assertEquals(a.getDescent(), b.getDescent());
 			assertEquals(a.getSpaceAdvance(), b.getSpaceAdvance());
+			assertEquals(a.getEmbeddingLicenseFlags(), b.getEmbeddingLicenseFlags());
 			assertEquals(a.getDirection(), b.getDirection());
 			assertEquals(a.getIndex(), b.getIndex());
 			// 文字→GID写像: BMP全域+補助面の代表を突き合わせ

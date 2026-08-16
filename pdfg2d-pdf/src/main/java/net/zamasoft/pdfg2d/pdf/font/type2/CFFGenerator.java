@@ -25,6 +25,8 @@ public class CFFGenerator {
 
 	protected PDFEmbeddedFont font;
 
+	protected BBox bbox;
+
 	private static final boolean DEBUG = false;
 
 	/**
@@ -47,6 +49,76 @@ public class CFFGenerator {
 	}
 
 	/**
+	 * Sets the bounding box written to the CFF Top DICT. When omitted, the
+	 * bounding box is calculated from the glyphs in the embedded subset.
+	 *
+	 * @param bbox the subset bounding box in glyph-space units
+	 */
+	public void setBBox(BBox bbox) {
+		this.bbox = bbox;
+	}
+
+	/**
+	 * Calculates a bounding box for the glyphs actually present in an embedded
+	 * subset. OpenType and AWT glyph outlines use the Java2D convention where Y
+	 * increases downwards; CFF charstrings invert Y while they are written, so the
+	 * returned box applies the same conversion.
+	 *
+	 * <p>
+	 * Empty glyphs such as spaces do not affect the box. If an outline cannot be
+	 * inspected, the source font box is returned so that the generated CFF never
+	 * clips an unknown glyph.
+	 * </p>
+	 *
+	 * @param font the embedded subset font
+	 * @return a box enclosing the subset glyph outlines
+	 */
+	public static BBox calculateSubsetBBox(PDFEmbeddedFont font) {
+		double minX = Double.POSITIVE_INFINITY;
+		double minY = Double.POSITIVE_INFINITY;
+		double maxX = Double.NEGATIVE_INFINITY;
+		double maxY = Double.NEGATIVE_INFINITY;
+		boolean found = false;
+
+		for (int gid = 0; gid < font.getGlyphCount(); ++gid) {
+			final Shape shape = font.getShape(gid);
+			if (shape == null) {
+				if (font.getCharString(gid) != null) {
+					return font.getBBox();
+				}
+				continue;
+			}
+			final var bounds = shape.getBounds2D();
+			if (bounds.isEmpty()) {
+				continue;
+			}
+			final double x1 = bounds.getMinX();
+			final double y1 = -bounds.getMaxY();
+			final double x2 = bounds.getMaxX();
+			final double y2 = -bounds.getMinY();
+			if (!Double.isFinite(x1) || !Double.isFinite(y1) || !Double.isFinite(x2)
+					|| !Double.isFinite(y2)) {
+				return font.getBBox();
+			}
+			minX = Math.min(minX, x1);
+			minY = Math.min(minY, y1);
+			maxX = Math.max(maxX, x2);
+			maxY = Math.max(maxY, y2);
+			found = true;
+		}
+
+		if (!found) {
+			return font.getBBox();
+		}
+		return new BBox(toShort(Math.floor(minX)), toShort(Math.floor(minY)), toShort(Math.ceil(maxX)),
+				toShort(Math.ceil(maxY)));
+	}
+
+	private static short toShort(double value) {
+		return (short) Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, value));
+	}
+
+	/**
 	 * Writes the complete CFF binary data to the given output stream.
 	 *
 	 * @param out the output stream to receive the CFF data
@@ -55,7 +127,7 @@ public class CFFGenerator {
 	public void writeTo(OutputStream out) throws IOException {
 		@SuppressWarnings("resource")
 		final CFFOutputStream cout = new CFFOutputStream(out);
-		BBox bbox = this.font.getBBox();
+		BBox bbox = this.bbox != null ? this.bbox : calculateSubsetBBox(this.font);
 		short defaultWidth = this.font.getWidth(0);
 
 		// Header

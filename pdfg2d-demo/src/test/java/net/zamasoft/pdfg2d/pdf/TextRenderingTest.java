@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 
 import net.zamasoft.pdfg2d.pdf.utils.TextInspector;
 import net.zamasoft.pdfg2d.g2d.gc.BridgeGraphics2D;
+import net.zamasoft.pdfg2d.gc.font.FontPolicyList;
+import net.zamasoft.pdfg2d.gc.font.FontPolicyList.FontPolicy;
 import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGC;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
@@ -60,6 +62,31 @@ public class TextRenderingTest {
             // Check Y position
             final var y = targetInfos.get(0).y;
             assertEquals(100.0f, y, 5.0f, "Text Y position should be roughly 100");
+        }
+    }
+
+    @Test
+    public void testCallerCanRequestOutlinedBridgeText() throws Exception {
+        final var tempFile = TestOutputFiles.outputFile(getClass(), "test-text-outlines.pdf");
+
+        try (final var out = new FileOutputStream(tempFile)) {
+            final var builder = new StreamFragmentedOutput(out);
+            final var pdf = new PDFWriterImpl(builder, PDFParams.createDefault());
+            try (final var gc = new PDFGC(pdf.nextPage(400, 400))) {
+                final var g = new BridgeGraphics2D(gc);
+                g.setFontPolicy(new FontPolicyList(new FontPolicy[] { FontPolicy.OUTLINES }));
+                g.setFont(new Font("Serif", Font.PLAIN, 12));
+                g.drawString("Outlined", 50, 100);
+            }
+            pdf.close();
+            builder.close();
+        }
+
+        try (final var document = Loader.loadPDF(tempFile)) {
+            final var inspector = new TextInspector();
+            assertEquals("", inspector.getText(document).trim(), "outlined Java2D text must not be extractable");
+            assertFalse(document.getPage(0).getResources().getFontNames().iterator().hasNext(),
+                    "outlined Java2D text must not leave a page font resource");
         }
     }
 }

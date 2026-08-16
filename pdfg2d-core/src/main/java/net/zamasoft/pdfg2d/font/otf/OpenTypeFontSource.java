@@ -366,6 +366,12 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	@Override
+	public short getEmbeddingLicenseFlags() {
+		final var os2 = (Os2Table) this.getOpenTypeFont().getTable(Table.OS_2);
+		return os2 == null ? 0 : os2.getLicenseType();
+	}
+
+	@Override
 	public short getAscent() {
 		return this.ascent;
 	}

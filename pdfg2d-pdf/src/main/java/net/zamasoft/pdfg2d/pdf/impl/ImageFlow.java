@@ -85,6 +85,68 @@ class ImageFlow {
 	private static final short DEVICE_RGB = 2;
 	private static final short DEVICE_CMYK = 3;
 
+	private static boolean isJpegStartOfFrame(final int marker) {
+		return (marker >= 0xC0 && marker <= 0xC3) || (marker >= 0xC5 && marker <= 0xC7)
+				|| (marker >= 0xC9 && marker <= 0xCB) || (marker >= 0xCD && marker <= 0xCF);
+	}
+
+	/**
+	 * Returns the component count recorded in a JPEG frame header without decoding
+	 * the image. ImageIO readers may expose a converted RGB image type for a CMYK
+	 * source (or, conversely, a JPEG-capable reader class may handle both RGB and
+	 * CMYK), so the source header is the authoritative value for raw embedding.
+	 */
+	private static int jpegComponentCount(final ImageInputStream in) throws IOException {
+		final long originalPosition = in.getStreamPosition();
+		try {
+			in.seek(0);
+			if (in.readUnsignedShort() != 0xFFD8) {
+				return -1;
+			}
+			for (;;) {
+				int prefix;
+				do {
+					prefix = in.read();
+					if (prefix == -1) {
+						return -1;
+					}
+				} while (prefix != 0xFF);
+
+				int marker;
+				do {
+					marker = in.read();
+					if (marker == -1) {
+						return -1;
+					}
+				} while (marker == 0xFF);
+
+				if (marker == 0xD9 || marker == 0xDA) {
+					return -1;
+				}
+				if (marker == 0x01 || marker == 0xD8 || (marker >= 0xD0 && marker <= 0xD7)) {
+					continue;
+				}
+
+				final int length = in.readUnsignedShort();
+				if (length < 2) {
+					return -1;
+				}
+				if (isJpegStartOfFrame(marker)) {
+					if (length < 8) {
+						return -1;
+					}
+					in.readUnsignedByte(); // sample precision
+					in.readUnsignedShort(); // height
+					in.readUnsignedShort(); // width
+					return in.readUnsignedByte();
+				}
+				in.seek(in.getStreamPosition() + length - 2L);
+			}
+		} finally {
+			in.seek(originalPosition);
+		}
+	}
+
 	/**
 	 * Constructs a new ImageFlow.
 	 *
@@ -293,6 +355,9 @@ class ImageFlow {
 					}
 				}
 			}
+			final int sourceJpegComponents = imageType == PDFParams.ImageCompression.JPEG
+					? jpegComponentCount(imageIn)
+					: -1;
 
 			boolean iccErrorHuck = false;
 			boolean iccGray = false;
@@ -442,10 +507,12 @@ class ImageFlow {
 						this.objectsFlow.breakBefore();
 
 						final short deviceColor;
-						if (iccErrorHuck && iccGray) {
+						if (sourceJpegComponents == 1 || (iccErrorHuck && iccGray)) {
 							deviceColor = DEVICE_GRAY;
-						} else if (ir instanceof JPEGImageReader) {
+						} else if (sourceJpegComponents == 4) {
 							deviceColor = DEVICE_CMYK;
+						} else if (sourceJpegComponents == 3) {
+							deviceColor = DEVICE_RGB;
 						} else {
 							final Iterator<?> itr = ir.getImageTypes(0);
 							final ImageTypeSpecifier its = (ImageTypeSpecifier) itr.next();

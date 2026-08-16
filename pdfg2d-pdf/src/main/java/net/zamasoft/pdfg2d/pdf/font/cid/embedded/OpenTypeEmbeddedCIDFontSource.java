@@ -59,7 +59,23 @@ public class OpenTypeEmbeddedCIDFontSource extends OpenTypeFontSource implements
 	 * @return a new {@link OpenTypeEmbeddedCIDFont} instance
 	 */
 	public PDFFont createFont(String name, ObjectRef fontRef) {
-		return new OpenTypeEmbeddedCIDFont(this, name, fontRef);
+		return this.createFont(name, fontRef, this.createSubset());
+	}
+
+	/** Creates a direction-neutral subset ledger for this physical font. */
+	public OpenTypeEmbeddedCIDFontSubset createSubset() {
+		return new OpenTypeEmbeddedCIDFontSubset();
+	}
+
+	/** Creates one direction-specific Type0 wrapper over a shared subset. */
+	public PDFFont createFont(final String name, final ObjectRef fontRef,
+			final OpenTypeEmbeddedCIDFontSubset subset) {
+		return new OpenTypeEmbeddedCIDFont(this, name, fontRef, subset);
+	}
+
+	/** Returns the backing file used as part of the physical-font identity. */
+	public File getFile() {
+		return this.file;
 	}
 
 	/**

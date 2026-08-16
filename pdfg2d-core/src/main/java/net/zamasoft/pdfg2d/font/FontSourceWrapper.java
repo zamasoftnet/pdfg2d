@@ -93,6 +93,11 @@ public class FontSourceWrapper implements FontSource {
 	}
 
 	@Override
+	public short getEmbeddingLicenseFlags() {
+		return this.source.getEmbeddingLicenseFlags();
+	}
+
+	@Override
 	public boolean isItalic() {
 		return this.source.isItalic();
 	}
