@@ -738,10 +738,11 @@ public record PDFParams(
 	 * @return new PDFParams instance
 	 */
 	public PDFParams withTagged(TaggedParams tagged) {
-		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+		return new PDFParams(
+				fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
-				tagged);
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
 	}
 
 	/**
@@ -754,10 +755,11 @@ public record PDFParams(
 	 * @return new PDFParams instance
 	 */
 	public PDFParams withDeflateLevel(int deflateLevel) {
-		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+		return new PDFParams(
+				fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
-				tagged, deflateLevel);
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
 	}
 
 	/**
@@ -772,10 +774,11 @@ public record PDFParams(
 	 * @return new PDFParams instance
 	 */
 	public PDFParams withObjectStreams(boolean objectStreams) {
-		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+		return new PDFParams(
+				fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
-				tagged, deflateLevel, objectStreams);
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
 	}
 
 	/**
