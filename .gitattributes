@@ -1,1 +1,28 @@
+# 既定はテキストとして扱い、LFで保存する。
 * text eol=lf
+
+# バイナリは絶対に行末変換にかけない。
+#
+# `* text eol=lf` は拡張子を見ないので、フォントや画像の中に現れる
+# CRLF(0D 0A)のバイト対まで LF へ潰してしまう。実際にそれが起きていて、
+# ipaexm.ttf は 1,851 バイト、test.otf は 2,263 バイト短い壊れた状態で
+# 保存されていた(2026-08-17に修復)。
+#
+# 新しい種類のバイナリを足すときは、必ずここへ書くこと。
+*.ttf   binary
+*.otf   binary
+*.ttc   binary
+*.woff  binary
+*.woff2 binary
+*.svgz  binary
+*.jar   binary
+*.zip   binary
+*.gz    binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.icc   binary
+*.afm   text eol=lf
