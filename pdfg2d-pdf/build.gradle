@@ -6,6 +6,9 @@ dependencies {
     implementation 'net.zamasoft:zstream-io:1.0.0-SNAPSHOT'
     implementation project(':pdfg2d-font')
     implementation 'com.twelvemonkeys.imageio:imageio-jpeg:3.13.1'
+    // WebP入力(2026-08-18)。実Webの画像はwebpが主流になっており、未対応だと
+    // 代替テキストへ退行して版面が崩れる(bbc-news/bbc-japanで実測)
+    implementation 'com.twelvemonkeys.imageio:imageio-webp:3.13.1'
     implementation 'com.drewnoakes:metadata-extractor:2.20.0'
 }
 
