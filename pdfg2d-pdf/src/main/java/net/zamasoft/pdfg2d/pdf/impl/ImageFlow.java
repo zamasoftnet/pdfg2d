@@ -416,7 +416,16 @@ class ImageFlow {
 				// Re-load image if we only had the reader
 				if (ir != null) {
 					imageIn.seek(0);
-					image = G2DUtils.loadImage(ir, imageIn);
+					// loadImageはreaderの所有権を引き取り、自分のfinallyで
+					// disposeする。ここでnullにしないと本メソッドのfinallyが
+					// 二重disposeし、TwelveMonkeysのJPEGリーダが
+					// IllegalStateException(use after dispose)を投げて——
+					// 画像データを書き終えた後なのに——読込全体が失敗扱いに
+					// なり画像が脱落していた(PDF/X等の再圧縮経路で全JPEGが
+					// 消える。2026-08-18、書籍の扉写真で実測)
+					final ImageReader owned = ir;
+					ir = null;
+					image = G2DUtils.loadImage(owned, imageIn);
 				}
 				if (resize) {
 					final var type = image.getType();
@@ -906,7 +915,12 @@ class ImageFlow {
 			throw e;
 		} finally {
 			if (ir != null) {
-				ir.dispose();
+				try {
+					ir.dispose();
+				} catch (final RuntimeException e) {
+					// disposeの失敗で(すでに完了した)画像出力を壊さない
+					LOG.log(Level.FINE, "ImageReader.dispose failed", e);
+				}
 			}
 		}
 		++this.imageNumber;

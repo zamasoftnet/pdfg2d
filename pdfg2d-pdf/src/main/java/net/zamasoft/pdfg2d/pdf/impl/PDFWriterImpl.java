@@ -393,7 +393,20 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	private final ObjectRef rootPageRef;
 
 	public PDFWriterImpl(final FragmentedOutput builder, final PDFParams params) throws IOException {
-		this.params = (params != null) ? params : PDFParams.createDefault();
+		var resolvedParams = (params != null) ? params : PDFParams.createDefault();
+		// PDF/X-4以降はICC-managed RGBを許す——RGBプロファイル未指定の
+		// PRESERVEには既定のsRGBプロファイルを補う(2026-08-18)。これが
+		// 無いとeffectiveColorMode()がCMYKへ倒れ、素朴なRGB→CMYK変換で
+		// 全体が暗くなるうえ、出力インテントも検証用のProbe CMYKスタブに
+		// なっていた(書籍の表紙で実測。X-1aは仕様上CMYKのままが正)
+		if (resolvedParams.version() != null && resolvedParams.version().isPdfX()
+				&& resolvedParams.version() != PDFParams.Version.V_PDFX1A
+				&& resolvedParams.colorMode() == PDFParams.ColorMode.PRESERVE
+				&& resolvedParams.rgbProfile() == null) {
+			resolvedParams = resolvedParams
+					.withRGBProfile(loadResource("sRGB_IEC61966-2-1_no_black_scaling.icc"));
+		}
+		this.params = resolvedParams;
 		this.builder = builder.supportsPositionInfo() ? builder : new PositionTrackingOutput(builder);
 
 		// 妥当性検証は1バイトも書く前に済ませる(2026-08-01——従来は
