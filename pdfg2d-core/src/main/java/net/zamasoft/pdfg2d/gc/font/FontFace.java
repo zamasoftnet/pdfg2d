@@ -23,6 +23,13 @@ public class FontFace {
 	public Panose panose = null;
 	public String cmap = null, vcmap = null;
 
+	/**
+	 * 可変フォントの軸座標です(font-variation-settingsディスクリプタ、
+	 * 2026-08-20)。nullなら既定値。指定があれば静的インスタンス化
+	 * ({@code VariableFontInstancer})の座標に使われる。
+	 */
+	public java.util.Map<String, Double> variationSettings = null;
+
 	@Override
 	public String toString() {
 		return "src=" + this.src + "/local=" + this.local + "/index=" + this.index + "/fontFamily=" + this.fontFamily

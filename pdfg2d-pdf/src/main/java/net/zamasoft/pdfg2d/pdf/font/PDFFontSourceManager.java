@@ -129,20 +129,40 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 			try {
 				final net.zamasoft.pdfg2d.font.FontFile ff = new net.zamasoft.pdfg2d.font.FontFile(file);
 				final File sfnt = ff.getSfntFile();
-				if (net.zamasoft.pdfg2d.font.VariableFontInstancer.isVariable(sfnt)
-						&& net.zamasoft.pdfg2d.font.VariableFontInstancer.axisTags(sfnt).contains("wght")) {
-					if (face.fontWeight != net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.W_400) {
+				if (net.zamasoft.pdfg2d.font.VariableFontInstancer.isVariable(sfnt)) {
+					final java.util.List<String> axisTags = net.zamasoft.pdfg2d.font.VariableFontInstancer
+							.axisTags(sfnt);
+					// font-variation-settingsディスクリプタの座標を基礎に置く
+					// (2026-08-20)。wghtが明示されていればウェイト掃引はしない
+					final java.util.Map<String, Double> baseAxes = face.variationSettings == null
+							? java.util.Map.of()
+							: face.variationSettings;
+					if (baseAxes.containsKey("wght") || !axisTags.contains("wght")) {
+						if (!baseAxes.isEmpty()) {
+							final Double wght = baseAxes.get("wght");
+							final net.zamasoft.pdfg2d.gc.font.FontStyle.Weight weight = wght == null
+									? face.fontWeight
+									: net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.valueOf(
+											"W_" + Math.max(1, Math.min(9, Math.round(wght / 100.0))) * 100);
+							fontEntries.add(new Object[] {
+									net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt, baseAxes),
+									weight });
+						}
+						// baseAxes空かつwght軸なし: インスタンス化不要(既定へ)
+					} else if (face.fontWeight != net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.W_400) {
 						// ディスクリプタでウェイト明示——その1本だけを固定
+						final java.util.Map<String, Double> axes = new java.util.LinkedHashMap<>(baseAxes);
+						axes.put("wght", (double) face.fontWeight.w);
 						fontEntries.add(new Object[] {
-								net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt,
-										java.util.Map.of("wght", (double) face.fontWeight.w)),
+								net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt, axes),
 								face.fontWeight });
 					} else {
 						// 未指定(既定400)——CSSのウェイト段階9本を展開
 						for (int w = 100; w <= 900; w += 100) {
+							final java.util.Map<String, Double> axes = new java.util.LinkedHashMap<>(baseAxes);
+							axes.put("wght", (double) w);
 							fontEntries.add(new Object[] {
-									net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt,
-											java.util.Map.of("wght", (double) w)),
+									net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt, axes),
 									net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.valueOf("W_" + w) });
 						}
 					}
