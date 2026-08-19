@@ -44,6 +44,8 @@ import net.zamasoft.pdfg2d.util.NumberUtils;
  * @since 1.0
  */
 public class PDFFontSourceManager implements FontSourceManager, Closeable {
+
+	private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger(PDFFontSourceManager.class.getName());
 	protected Map<String, Object> nameToFonts = new HashMap<String, Object>();
 
 	protected Map<String, FontFamilyList> genericToFamily = new HashMap<String, FontFamilyList>();
@@ -116,20 +118,75 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 					this.uriToFile.put(face.src.getURI(), file);
 				}
 			}
-			final var fontFile = file;
-			try (final var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-				final var embedded = executor.submit(() -> {
-					final var sources = new ArrayList<FontSource>();
-					FontLoader.readTTF(sources, face, FontLoader.Type.EMBEDDED, fontFile, face.index, null);
-					return sources;
-				});
-				final var cidIdentity = executor.submit(() -> {
-					final var sources = new ArrayList<FontSource>();
-					FontLoader.readTTF(sources, face, FontLoader.Type.CID_IDENTITY, fontFile, face.index, null);
-					return sources;
-				});
-				list.addAll(await(embedded));
-				list.addAll(await(cidIdentity));
+			// **可変フォント(fvar+glyf)は代表ウェイトを静的インスタンス化して
+			// 並べる**(2026-08-20)。Google Fonts配信の既定が可変になり、
+			// 従来は既定インスタンス(Regularとは限らない)1本しか使えず
+			// font-weightの中間値が全て潰れていた。wght軸をCSSのウェイト
+			// 段階(100〜900)で固定した9本を生成し、それぞれのOS/2
+			// usWeightClassで通常のウェイト選択に乗せる。他の軸は既定値
+			// 各エントリ = (フォントファイル, そのファイルに与えるウェイト)
+			final java.util.List<Object[]> fontEntries = new ArrayList<>();
+			try {
+				final net.zamasoft.pdfg2d.font.FontFile ff = new net.zamasoft.pdfg2d.font.FontFile(file);
+				final File sfnt = ff.getSfntFile();
+				if (net.zamasoft.pdfg2d.font.VariableFontInstancer.isVariable(sfnt)
+						&& net.zamasoft.pdfg2d.font.VariableFontInstancer.axisTags(sfnt).contains("wght")) {
+					if (face.fontWeight != net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.W_400) {
+						// ディスクリプタでウェイト明示——その1本だけを固定
+						fontEntries.add(new Object[] {
+								net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt,
+										java.util.Map.of("wght", (double) face.fontWeight.w)),
+								face.fontWeight });
+					} else {
+						// 未指定(既定400)——CSSのウェイト段階9本を展開
+						for (int w = 100; w <= 900; w += 100) {
+							fontEntries.add(new Object[] {
+									net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt,
+											java.util.Map.of("wght", (double) w)),
+									net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.valueOf("W_" + w) });
+						}
+					}
+				}
+			} catch (final Exception e) {
+				LOG.log(java.util.logging.Level.WARNING, "variable font instantiation failed; using default instance",
+						e);
+				fontEntries.clear();
+			}
+			if (fontEntries.isEmpty()) {
+				fontEntries.add(new Object[] { file, face.fontWeight });
+			}
+			for (final Object[] entry : fontEntries) {
+				final File fontFile = (File) entry[0];
+				final FontFace wface;
+				if (entry[1] == face.fontWeight) {
+					wface = face;
+				} else {
+					wface = new FontFace();
+					wface.src = face.src;
+					wface.index = face.index;
+					wface.local = face.local;
+					wface.fontFamily = face.fontFamily;
+					wface.fontWeight = (net.zamasoft.pdfg2d.gc.font.FontStyle.Weight) entry[1];
+					wface.fontStyle = face.fontStyle;
+					wface.unicodeRange = face.unicodeRange;
+					wface.panose = face.panose;
+					wface.cmap = face.cmap;
+					wface.vcmap = face.vcmap;
+				}
+				try (final var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+					final var embedded = executor.submit(() -> {
+						final var sources = new ArrayList<FontSource>();
+						FontLoader.readTTF(sources, wface, FontLoader.Type.EMBEDDED, fontFile, wface.index, null);
+						return sources;
+					});
+					final var cidIdentity = executor.submit(() -> {
+						final var sources = new ArrayList<FontSource>();
+						FontLoader.readTTF(sources, wface, FontLoader.Type.CID_IDENTITY, fontFile, wface.index, null);
+						return sources;
+					});
+					list.addAll(await(embedded));
+					list.addAll(await(cidIdentity));
+				}
 			}
 		}
 

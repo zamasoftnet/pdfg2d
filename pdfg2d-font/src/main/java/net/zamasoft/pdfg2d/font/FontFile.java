@@ -37,6 +37,15 @@ public class FontFile {
 	private final OpenTypeFont[] fonts;
 	private final long[] offsets;
 	private final File file;
+
+	/**
+	 * 解凍済みの sfnt ファイルを返します(WOFF/WOFF2 は一時ファイル、
+	 * 生の TTF/TTC はそのまま。2026-08-20、可変フォントの静的
+	 * インスタンス化が sfnt バイト列を必要とするため公開)。
+	 */
+	public File getSfntFile() {
+		return this.file;
+	}
 	private final boolean woff;
 
 	/**
