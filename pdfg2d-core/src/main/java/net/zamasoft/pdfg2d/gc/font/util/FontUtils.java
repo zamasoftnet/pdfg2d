@@ -104,7 +104,7 @@ public final class FontUtils {
 		final var verticalFont = direction == Direction.TB && font.getFontSource().getDirection() == direction;
 		AffineTransform oblique = null;
 		final var style = fontStyle.getStyle();
-		if (style != Style.NORMAL && !font.getFontSource().isItalic()) {
+		if (style != Style.NORMAL && !font.getFontSource().isItalic() && fontStyle.getSynthesisStyle()) {
 			// Simulate italic manually
 			if (verticalFont) {
 				oblique = AffineTransform.getShearInstance(0, 0.25);
@@ -207,7 +207,8 @@ public final class FontUtils {
 			final var weight = fontStyle.getWeight();
 			double xlineWidth = 0;
 			Paint xstrokePaint = null;
-			if (textMode == TextMode.FILL && weight.w >= 500 && font.getFontSource().getWeight().w < 500) {
+			if (textMode == TextMode.FILL && weight.w >= 500 && font.getFontSource().getWeight().w < 500
+					&& fontStyle.getSynthesisWeight()) {
 				// Simulate BOLD manually
 				switch (weight) {
 					case W_500 -> enlargement = fontSize / 28.0;
@@ -231,7 +232,7 @@ public final class FontUtils {
 			final var verticalFont = direction == Direction.TB && font.getFontSource().getDirection() == direction;
 			AffineTransform oblique = null;
 			final var style = fontStyle.getStyle();
-			if (style != Style.NORMAL && !font.getFontSource().isItalic()) {
+			if (style != Style.NORMAL && !font.getFontSource().isItalic() && fontStyle.getSynthesisStyle()) {
 				// Simulate italic manually
 				if (verticalFont) {
 					oblique = AffineTransform.getShearInstance(0, 0.25);

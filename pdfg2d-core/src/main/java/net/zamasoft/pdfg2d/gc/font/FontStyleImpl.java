@@ -15,12 +15,20 @@ public record FontStyleImpl(
 		Weight weight,
 		Direction direction,
 		FontPolicyList policy,
-		FontFeatureSet features) implements FontStyle, Serializable {
+		FontFeatureSet features,
+		boolean synthesisWeight,
+		boolean synthesisStyle) implements FontStyle, Serializable {
 
 	public FontStyleImpl {
 		if (features == null) {
 			features = FontFeatureSet.EMPTY;
 		}
+	}
+
+	/** Synthesis-permitting form (CSS font-synthesis initial value). */
+	public FontStyleImpl(final FontFamilyList families, final double size, final Style style, final Weight weight,
+			final Direction direction, final FontPolicyList policy, final FontFeatureSet features) {
+		this(families, size, style, weight, direction, policy, features, true, true);
 	}
 
 	/** Feature-less form: every OpenType feature is left unspecified. */
@@ -62,6 +70,16 @@ public record FontStyleImpl(
 	@Override
 	public FontFeatureSet getFeatures() {
 		return this.features;
+	}
+
+	@Override
+	public boolean getSynthesisWeight() {
+		return this.synthesisWeight;
+	}
+
+	@Override
+	public boolean getSynthesisStyle() {
+		return this.synthesisStyle;
 	}
 
 	@Override

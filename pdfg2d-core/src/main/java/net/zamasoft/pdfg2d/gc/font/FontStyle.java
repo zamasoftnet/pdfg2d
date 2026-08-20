@@ -89,4 +89,28 @@ public interface FontStyle {
 	public default FontFeatureSet getFeatures() {
 		return FontFeatureSet.EMPTY;
 	}
+
+	/**
+	 * Returns whether a bold face may be synthesized by stroking the outline
+	 * when no sufficiently bold font is available (CSS
+	 * {@code font-synthesis-weight}). Defaults to {@code true}.
+	 *
+	 * @return {@code true} if synthetic bold is allowed
+	 * @since 1.3
+	 */
+	public default boolean getSynthesisWeight() {
+		return true;
+	}
+
+	/**
+	 * Returns whether an italic/oblique face may be synthesized by shearing
+	 * when no italic font is available (CSS {@code font-synthesis-style}).
+	 * Defaults to {@code true}.
+	 *
+	 * @return {@code true} if synthetic italic is allowed
+	 * @since 1.3
+	 */
+	public default boolean getSynthesisStyle() {
+		return true;
+	}
 }

@@ -138,7 +138,8 @@ final class PDFTextRenderer {
 
 			double enlargement;
 			final var weight = fontStyle.getWeight();
-			if (gc.textMode == TextMode.FILL && weight.w >= 500 && source.getWeight().w < 500) {
+			if (gc.textMode == TextMode.FILL && weight.w >= 500 && source.getWeight().w < 500
+					&& fontStyle.getSynthesisWeight()) {
 				// Simulate bold manually
 				enlargement = switch (weight) {
 					case W_500 -> size / 28.0;
@@ -204,7 +205,7 @@ final class PDFTextRenderer {
 
 			// Italic
 			final var style = fontStyle.getStyle();
-			if (style != Style.NORMAL && !source.isItalic()) {
+			if (style != Style.NORMAL && !source.isItalic() && fontStyle.getSynthesisStyle()) {
 				// Simulate italic manually
 				if (verticalFont) {
 					// Vertical italic
