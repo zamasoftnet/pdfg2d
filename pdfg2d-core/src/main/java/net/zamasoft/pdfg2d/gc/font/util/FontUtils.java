@@ -207,6 +207,9 @@ public final class FontUtils {
 			final var weight = fontStyle.getWeight();
 			double xlineWidth = 0;
 			Paint xstrokePaint = null;
+			GC.LineJoin xlineJoin = null;
+			double[] xlinePattern = null;
+			float xstrokeAlpha = 1;
 			if (textMode == TextMode.FILL && weight.w >= 500 && font.getFontSource().getWeight().w < 500
 					&& fontStyle.getSynthesisWeight()) {
 				// Simulate BOLD manually
@@ -220,10 +223,22 @@ public final class FontUtils {
 				}
 				if (enlargement > 0) {
 					textMode = TextMode.FILL_STROKE;
+					// Save the state BEFORE overwriting (the stroke paint used
+					// to be captured after setStrokePaint and was lost).
 					xlineWidth = gc.getLineWidth();
-					gc.setLineWidth(enlargement);
-					gc.setStrokePaint(gc.getFillPaint());
 					xstrokePaint = gc.getStrokePaint();
+					xlineJoin = gc.getLineJoin();
+					xlinePattern = gc.getLinePattern();
+					xstrokeAlpha = gc.getStrokeAlpha();
+					gc.setLineWidth(enlargement);
+					// A round join makes fill+stroke equal a uniform dilation
+					// (Minkowski sum); the default miter join can spike at
+					// sharp corners. A solid pattern guards against an
+					// inherited dash pattern.
+					gc.setLineJoin(GC.LineJoin.ROUND);
+					gc.setLinePattern(GC.STROKE_SOLID);
+					gc.setStrokePaint(gc.getFillPaint());
+					gc.setStrokeAlpha(gc.getFillAlpha());
 				}
 			} else {
 				enlargement = 0;
@@ -340,7 +355,10 @@ public final class FontUtils {
 
 			if (enlargement > 0) {
 				gc.setLineWidth(xlineWidth);
+				gc.setLineJoin(xlineJoin);
+				gc.setLinePattern(xlinePattern);
 				gc.setStrokePaint(xstrokePaint);
+				gc.setStrokeAlpha(xstrokeAlpha);
 			}
 		}
 	}

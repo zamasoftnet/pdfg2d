@@ -10,11 +10,11 @@ import net.zamasoft.pdfg2d.font.FontMetricsImpl;
 import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.ImageFont;
 import net.zamasoft.pdfg2d.font.ShapedFont;
+import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.font.FontStyle;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Style;
 import net.zamasoft.pdfg2d.gc.font.util.FontUtils;
-import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.text.Text;
 import net.zamasoft.pdfg2d.pdf.font.PDFFont;
@@ -137,6 +137,11 @@ final class PDFTextRenderer {
 			var drawY = y;
 
 			double enlargement;
+			double xlineWidth = 0;
+			GC.LineJoin xlineJoin = null;
+			double[] xlinePattern = null;
+			Paint xstrokePaint = null;
+			float xstrokeAlpha = 1;
 			final var weight = fontStyle.getWeight();
 			if (gc.textMode == TextMode.FILL && weight.w >= 500 && source.getWeight().w < 500
 					&& fontStyle.getSynthesisWeight()) {
@@ -149,20 +154,25 @@ final class PDFTextRenderer {
 					case W_900 -> size / 12.0;
 					default -> throw new IllegalStateException("Unexpected weight: " + weight);
 				};
-				if (enlargement > 0 && gc.fillPaint.getPaintType() == Paint.Type.COLOR && gc.fillAlpha == 1) {
-					gc.q();
-					localContext = true;
-					gc.out.writeReal(enlargement);
-					gc.out.writeOperator("w");
-					gc.out.writeInt(TextMode.FILL_STROKE.code);
-					gc.out.writeOperator("Tr");
-					if (!gc.fillPaint.equals(gc.strokePaint)) {
-						if (gc.xstrokePaint != null && gc.xstrokePaint.getPaintType() != Paint.Type.COLOR) {
-							gc.out.writeName("DeviceRGB");
-							gc.out.writeOperator("CS");
-						}
-						gc.out.writeStrokeColor((Color) gc.fillPaint);
-					}
+				if (enlargement > 0) {
+					// Route the stroke state through the regular applyStates
+					// machinery so that gradient/pattern fills (Pattern CS +
+					// SCN) and translucent fills (ExtGState CA) are handled
+					// exactly like ordinary stroked shapes, instead of
+					// bailing out of the bold simulation as before. A round
+					// join makes fill+stroke equal a uniform dilation; a
+					// solid pattern guards against an inherited dash.
+					xlineWidth = gc.getLineWidth();
+					xlineJoin = gc.getLineJoin();
+					xlinePattern = gc.getLinePattern();
+					xstrokePaint = gc.getStrokePaint();
+					xstrokeAlpha = gc.getStrokeAlpha();
+					gc.setLineWidth(enlargement);
+					gc.setLineJoin(GC.LineJoin.ROUND);
+					gc.setLinePattern(GC.STROKE_SOLID);
+					gc.setStrokePaint(gc.getFillPaint());
+					gc.setStrokeAlpha(gc.getFillAlpha());
+					gc.applyStates();
 				}
 			} else {
 				enlargement = 0;
@@ -202,6 +212,14 @@ final class PDFTextRenderer {
 
 			// Begin text
 			gc.out.writeOperator("BT");
+			if (enlargement > 0) {
+				// The rendering mode is written inside the text object:
+				// written outside BT..ET some rasterizers (PDFBox) do not
+				// pick it up, and the old q/Q pair that used to mask that
+				// is gone.
+				gc.out.writeInt(TextMode.FILL_STROKE.code);
+				gc.out.writeOperator("Tr");
+			}
 
 			// Italic
 			final var style = fontStyle.getStyle();
@@ -253,20 +271,25 @@ final class PDFTextRenderer {
 			// Draw
 			font.drawTo(gc, text);
 
+			if (enlargement > 0) {
+				// End bold simulation (inside the text object, see above).
+				// The text mode shadow (xtextMode) still says FILL, so
+				// restore the operator to match; the stroke state is
+				// restored logically and the next applyStates call re-syncs
+				// the PDF state by diff.
+				gc.out.writeInt(TextMode.FILL.code);
+				gc.out.writeOperator("Tr");
+			}
+
 			// End text
 			gc.out.writeOperator("ET");
 
-			if (enlargement > 0 && gc.fillPaint.getPaintType() == Paint.Type.COLOR && gc.fillAlpha == 1) {
-				// End bold simulation
-				gc.out.writeInt(TextMode.FILL.code);
-				gc.out.writeOperator("Tr");
-				if (!gc.fillPaint.equals(gc.strokePaint)) {
-					if (gc.xfillPaint != null && gc.xfillPaint.getPaintType() != Paint.Type.COLOR) {
-						gc.out.writeName("DeviceRGB");
-						gc.out.writeOperator("CS");
-					}
-					gc.out.writeStrokeColor((Color) gc.strokePaint);
-				}
+			if (enlargement > 0) {
+				gc.setLineWidth(xlineWidth);
+				gc.setLineJoin(xlineJoin);
+				gc.setLinePattern(xlinePattern);
+				gc.setStrokePaint(xstrokePaint);
+				gc.setStrokeAlpha(xstrokeAlpha);
 			}
 
 			if (localContext) {
