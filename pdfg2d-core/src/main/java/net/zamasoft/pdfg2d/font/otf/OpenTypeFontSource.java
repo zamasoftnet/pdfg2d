@@ -130,7 +130,7 @@ public class OpenTypeFontSource extends AbstractFontSource {
 		this.aliases = aliases.toArray(new String[0]);
 
 		if (fontName == null) {
-			throw new NullPointerException();
+			throw new IOException("Font has no PostScript name: " + file);
 		}
 		this.fontName = fontName;
 
@@ -433,6 +433,17 @@ public class OpenTypeFontSource extends AbstractFontSource {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * 縦組のmixed用除外を掛けず、基礎cmapに字形があるかを返す。
+	 * text-orientation: uprightのフォント選択だけが使う。
+	 */
+	public boolean canDisplayUpright(final int c) {
+		if (this.cmap.mapCharCode(c) != 0) {
+			return true;
+		}
+		return this.uvsCmap != null && this.uvsCmap.isVarSelector(c);
 	}
 
 	@Override

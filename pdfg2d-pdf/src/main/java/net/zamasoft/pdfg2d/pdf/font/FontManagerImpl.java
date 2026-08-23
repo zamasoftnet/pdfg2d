@@ -120,7 +120,8 @@ public class FontManagerImpl implements FontManager, Closeable {
 			fms[j++] = new FontMetricsImpl(this.fontStore, fonts2[i], fontStyle);
 		}
 
-		if (fontStyle.getDirection() == Direction.TB) {
+		if (fontStyle.getDirection() == Direction.TB
+				&& fontStyle.getTextOrientation() != FontStyle.TextOrientation.SIDEWAYS) {
 			fms[fms.length - 2] = new FontMetricsImpl(this.fontStore, SpaceCIDFontSource.INSTANCES_TB, fontStyle);
 			fms[fms.length - 1] = new FontMetricsImpl(this.fontStore, MissingCIDFontSource.INSTANCES_TB, fontStyle);
 		} else {

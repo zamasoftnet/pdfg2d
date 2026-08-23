@@ -11,6 +11,18 @@ import net.zamasoft.pdfg2d.gc.text.breaking.TextBreakingRules;
  * @since 1.0
  */
 public class JapaneseBreakingRules implements TextBreakingRules {
+	/**
+	 * JLREQ Appendix A cl-01.  Unicode's punctuation category is not sufficient:
+	 * quotation marks such as U+2018 and U+00AB are {@code Pi}, not {@code Ps}.
+	 */
+	private static final String JLREQ_OPENING_BRACKETS = "‘“（〔［｛〈《「『【⦅〘〖«〝";
+
+	/**
+	 * JLREQ Appendix A cl-02.  U+2019, U+201D and U+00BB are {@code Pf}, not
+	 * {@code Pe}, so list the class explicitly for line-start prohibition.
+	 */
+	private static final String JLREQ_CLOSING_BRACKETS = "’”）〕］｝〉》」』】⦆〙〗»〟";
+
 	private static final CharacterSet ASCII = new BitSetCharacterSet(
 			"#$%&*+-/0123456789=@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\^_abcdefghijklmnopqrstuvwxyz|~");
 
@@ -51,6 +63,18 @@ public class JapaneseBreakingRules implements TextBreakingRules {
 	 */
 	protected CharacterSet requiresBefore(final char c) {
 		// Line-start prohibition
+		// JLREQ cl-08 treats 〳〵 and 〴〵 as two-character units. These
+		// characters are Unicode Lm, but applying the generic Lm rule would
+		// incorrectly bind 〵 to every preceding character.
+		if (c == '〵') {
+			return cc -> cc == '〳' || cc == '〴';
+		}
+		if (c == '〳' || c == '〴') {
+			return CharacterSet.NOTHING;
+		}
+		if (JLREQ_CLOSING_BRACKETS.indexOf(c) != -1) {
+			return CharacterSet.ALL;
+		}
 		if (GYOTO_KINSOKU.indexOf(c) != -1) {
 			return CharacterSet.ALL;
 		}
@@ -76,6 +100,9 @@ public class JapaneseBreakingRules implements TextBreakingRules {
 	 * @return the character set required after the character
 	 */
 	protected CharacterSet requiresAfter(final char c) {
+		if (JLREQ_OPENING_BRACKETS.indexOf(c) != -1) {
+			return CharacterSet.ALL;
+		}
 		final int type = Character.getType(c);
 
 		if (c <= 0xFF || LATIN_OR_DIGIT.contains(c)) {

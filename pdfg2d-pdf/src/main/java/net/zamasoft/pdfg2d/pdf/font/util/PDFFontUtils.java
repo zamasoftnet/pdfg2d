@@ -158,8 +158,10 @@ public class PDFFontUtils {
 			gc.transform(AffineTransform.getTranslateInstance(0,
 					((bbox.lly() + bbox.ury()) * fontSize / FontSource.DEFAULT_UNITS_PER_EM) / 2f));
 		}
+		if (xadvances != null && xadvances.get(0) != 0) {
+			gc.transform(AffineTransform.getTranslateInstance(xadvances.get(0), 0));
+		}
 		// Horizontal writing
-		int pgid = 0;
 		for (int i = 0, k = 0; i < glyphCount; ++i) {
 			int gid = glyphIds[i];
 			byte gclen = clens[i];
@@ -192,15 +194,14 @@ public class PDFFontUtils {
 						e);
 			}
 			double dx = fm.getAdvance(gid) + letterSpacing;
-			if (i > 0) {
-				dx -= fm.getKerning(pgid, gid);
-			}
-			if (xadvances != null) {
-				dx += xadvances.get(i);
+			if (i + 1 < glyphCount) {
+				dx -= fm.getKerning(gid, glyphIds[i + 1]);
+				if (xadvances != null) {
+					dx += xadvances.get(i + 1);
+				}
 			}
 			gc.transform(AffineTransform.getTranslateInstance(dx, 0));
 			k += gclen;
-			pgid = gid;
 		}
 	}
 }

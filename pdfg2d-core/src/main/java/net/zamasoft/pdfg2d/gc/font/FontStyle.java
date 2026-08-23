@@ -22,6 +22,20 @@ public interface FontStyle {
 	}
 
 	/**
+	 * 縦組中の字形方向。横組では参照されない。
+	 */
+	public enum TextOrientation {
+		MIXED, UPRIGHT, SIDEWAYS
+	}
+
+	/**
+	 * 縦組中の字形方向を返す。既存実装は従来挙動(mixed)を保つ。
+	 */
+	public default TextOrientation getTextOrientation() {
+		return TextOrientation.MIXED;
+	}
+
+	/**
 	 * Returns the font weight.
 	 * 
 	 * @return the font weight

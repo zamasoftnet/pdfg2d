@@ -19,17 +19,14 @@ import net.zamasoft.pdfg2d.pdf.PDFGraphicsOutput;
 
 /**
  * グリフ位置進行のbackend別方針を固定する特性テストです(2026-08-01、
- * foliojet 85点計画・増分1)。
+ * 2026-08-23更新)。
  *
  * <p>
- * 現状、先頭グリフの{@code xadvance[0]}の扱いはbackendで異なる:
- * {@link TextImpl#getAdvance()}(計測)とPDF CID経路
- * ({@link PDFFontUtils#drawCIDTo})は[0]を適用し、アウトライン経路
- * (FontUtils.addTextPath——ペン前進がi&gt;0のため)とSVG経路は無視する
- * (そちらはSVG系visual goldenが固定)。ルビの均等配置は先頭の半アキを
- * [0]に置くため、この差は観測可能である。共有カーソルへの統一
- * (増分2以降)は、この差を明示的なpolicyとして持ち越すこと——
- * このテストが現仕様の錨になる。
+ * {@code xadvance[i]}はグリフiの直前に適用する。計測、PDF CID、AWT fallback、
+ * アウトライン、SVGの各経路でこの意味を揃える。ルビの均等配置や
+ * style-run境界の和文約物詰めは先頭補正を使うため、{@code [0]}を無視したり
+ * 次のグリフへ送ったりしてはならない。アウトライン経路は
+ * {@code FontUtilsLeadingXAdvanceTest}、統合経路はfoliojetのvisual goldenで固定する。
  * </p>
  */
 public class GlyphPlacementParityTest {

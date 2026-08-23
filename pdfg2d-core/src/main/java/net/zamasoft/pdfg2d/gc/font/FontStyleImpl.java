@@ -17,12 +17,24 @@ public record FontStyleImpl(
 		FontPolicyList policy,
 		FontFeatureSet features,
 		boolean synthesisWeight,
-		boolean synthesisStyle) implements FontStyle, Serializable {
+		boolean synthesisStyle,
+		TextOrientation textOrientation) implements FontStyle, Serializable {
 
 	public FontStyleImpl {
 		if (features == null) {
 			features = FontFeatureSet.EMPTY;
 		}
+		if (textOrientation == null) {
+			textOrientation = TextOrientation.MIXED;
+		}
+	}
+
+	/** text-orientation導入前と同じmixedを使う互換コンストラクタ。 */
+	public FontStyleImpl(final FontFamilyList families, final double size, final Style style, final Weight weight,
+			final Direction direction, final FontPolicyList policy, final FontFeatureSet features,
+			final boolean synthesisWeight, final boolean synthesisStyle) {
+		this(families, size, style, weight, direction, policy, features, synthesisWeight, synthesisStyle,
+				TextOrientation.MIXED);
 	}
 
 	/** Synthesis-permitting form (CSS font-synthesis initial value). */
@@ -83,9 +95,15 @@ public record FontStyleImpl(
 	}
 
 	@Override
+	public TextOrientation getTextOrientation() {
+		return this.textOrientation;
+	}
+
+	@Override
 	public String toString() {
 		return "FontStyleImpl[families=" + this.families + ", size=" + this.size + ", style=" + this.style
-				+ ", weight=" + this.weight + ", direction=" + this.direction + ", policy=" + this.policy
+				+ ", weight=" + this.weight + ", direction=" + this.direction + ", textOrientation="
+				+ this.textOrientation + ", policy=" + this.policy
 				+ ", features=" + this.features + "]";
 	}
 }

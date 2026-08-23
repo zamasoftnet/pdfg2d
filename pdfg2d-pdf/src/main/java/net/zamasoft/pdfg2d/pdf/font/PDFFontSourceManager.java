@@ -55,18 +55,18 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 	protected Collection<FontSource> allFonts = new ArrayList<FontSource>();
 
 	/**
-	 * フォント選択はfamily/weight/style/direction/policyだけを読む(size・
+	 * フォント選択はfamily/weight/style/direction/text-orientation/policyだけを読む(size・
 	 * OpenType featureは整形の話で選択に関与しない)ため、キャッシュキーは
 	 * その5成分に限定する——FontStyle全体をキーにするとfeature集合や
 	 * サイズ違いだけの大量のstyleで無駄に分裂する(2026-07-31、
 	 * consult-codex-2026-07-31-font-features.txt §3.8)。
 	 */
 	protected record SelectionKey(net.zamasoft.pdfg2d.gc.font.FontFamilyList family, FontStyle.Weight weight,
-			FontStyle.Style style, FontStyle.Direction direction,
+			FontStyle.Style style, FontStyle.Direction direction, FontStyle.TextOrientation textOrientation,
 			net.zamasoft.pdfg2d.gc.font.FontPolicyList policy) {
 		static SelectionKey of(final FontStyle fontStyle) {
 			return new SelectionKey(fontStyle.getFamily(), fontStyle.getWeight(), fontStyle.getStyle(),
-					fontStyle.getDirection(), fontStyle.getPolicy());
+					fontStyle.getDirection(), fontStyle.getTextOrientation(), fontStyle.getPolicy());
 		}
 	}
 
@@ -424,11 +424,22 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 					order = 1;
 				}
 
-				// Exclude vertical fonts in horizontal writing mode
+				// text-orientationに応じて縦/横font sourceを選ぶ。mixedは
+				// 両方を候補に残し、各sourceのcanDisplayで字種別に分かれる。
 				Direction direction = fontStyle.getDirection();
 				Direction fsDirection = font.getDirection();
 				if (direction != Direction.TB && fsDirection == Direction.TB) {
 					continue;
+				}
+				if (direction == Direction.TB) {
+					if (fontStyle.getTextOrientation() == FontStyle.TextOrientation.UPRIGHT
+							&& fsDirection != Direction.TB) {
+						continue;
+					}
+					if (fontStyle.getTextOrientation() == FontStyle.TextOrientation.SIDEWAYS
+							&& fsDirection == Direction.TB) {
+						continue;
+					}
 				}
 
 				// Prioritize exact family name matches

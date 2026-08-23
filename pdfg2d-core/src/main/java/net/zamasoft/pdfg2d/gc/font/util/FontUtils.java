@@ -58,6 +58,7 @@ public final class FontUtils {
 	public static boolean equals(final FontStyle a, final FontStyle b) {
 		return a.getFamily().equals(b.getFamily()) && a.getSize() == b.getSize() && a.getStyle() == b.getStyle()
 				&& a.getWeight() == b.getWeight() && a.getDirection() == b.getDirection()
+				&& a.getTextOrientation() == b.getTextOrientation()
 				&& a.getPolicy().equals(b.getPolicy()) && a.getFeatures().equals(b.getFeatures());
 	}
 
@@ -74,6 +75,7 @@ public final class FontUtils {
 		h = 31 * h + fontStyle.getStyle().ordinal();
 		h = 31 * h + fontStyle.getWeight().w;
 		h = 31 * h + fontStyle.getDirection().ordinal();
+		h = 31 * h + fontStyle.getTextOrientation().ordinal();
 		h = 31 * h + fontStyle.getPolicy().hashCode();
 		h = 31 * h + fontStyle.getFeatures().hashCode();
 		return h;
@@ -120,7 +122,9 @@ public final class FontUtils {
 			int pgid = 0;
 			for (int i = 0; i < glyphCount; ++i) {
 				final var gid = glyphIds[i];
-				if (i > 0) {
+				if (i == 0 && xadvances != null && xadvances.get(0) != 0) {
+					at.preConcatenate(AffineTransform.getTranslateInstance(0, xadvances.get(0)));
+				} else if (i > 0) {
 					double dy = fm.getAdvance(pgid) + letterSpacing;
 					dy -= fm.getKerning(pgid, gid);
 					if (xadvances != null) {
@@ -148,7 +152,9 @@ public final class FontUtils {
 			int pgid = 0;
 			for (int i = 0; i < glyphCount; ++i) {
 				final int gid = glyphIds[i];
-				if (i > 0) {
+				if (i == 0 && xadvances != null && xadvances.get(0) != 0) {
+					at.preConcatenate(AffineTransform.getTranslateInstance(xadvances.get(0), 0));
+				} else if (i > 0) {
 					double dx = fm.getAdvance(pgid) + letterSpacing;
 					if (i > 0) {
 						dx -= fm.getKerning(pgid, gid);
@@ -265,7 +271,9 @@ public final class FontUtils {
 				for (int i = 0; i < glyphCount; ++i) {
 					var at2 = at;
 					final var gid = glyphIds[i];
-					if (i > 0) {
+					if (i == 0 && xadvances != null && xadvances.get(0) != 0) {
+						gc.transform(AffineTransform.getTranslateInstance(0, xadvances.get(0)));
+					} else if (i > 0) {
 						double dy = fm.getAdvance(pgid) + letterSpacing;
 						dy -= fm.getKerning(pgid, gid);
 						if (xadvances != null) {
@@ -306,7 +314,9 @@ public final class FontUtils {
 				int pgid = 0;
 				for (int i = 0; i < glyphCount; ++i) {
 					final int gid = glyphIds[i];
-					if (i > 0) {
+					if (i == 0 && xadvances != null && xadvances.get(0) != 0) {
+						gc.transform(AffineTransform.getTranslateInstance(xadvances.get(0), 0));
+					} else if (i > 0) {
 						double dx = fm.getAdvance(pgid) + letterSpacing;
 						if (i > 0) {
 							dx -= fm.getKerning(pgid, gid);

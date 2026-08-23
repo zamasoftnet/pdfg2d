@@ -25,6 +25,10 @@ public class FontMetricsImpl implements FontMetrics {
 	/** The style's OpenType feature settings (advance adjustments, etc.). */
 	protected final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features;
 
+	protected final FontStyle.Direction direction;
+
+	protected final FontStyle.TextOrientation textOrientation;
+
 	protected Font font = null;
 
 	/**
@@ -38,6 +42,8 @@ public class FontMetricsImpl implements FontMetrics {
 		this.fontStore = fontStore;
 		this.source = fontSource;
 		this.features = fontStyle.getFeatures();
+		this.direction = fontStyle.getDirection();
+		this.textOrientation = fontStyle.getTextOrientation();
 		this.size = fontStyle.getSize();
 		this.xheight = this.size * this.source.getXHeight() / FontSource.DEFAULT_UNITS_PER_EM;
 
@@ -181,6 +187,12 @@ public class FontMetricsImpl implements FontMetrics {
 	 * @return {@code true} if the character can be displayed
 	 */
 	public boolean canDisplay(final int c) {
+		if (this.direction == FontStyle.Direction.TB
+				&& this.textOrientation == FontStyle.TextOrientation.UPRIGHT
+				&& this.source.getDirection() == FontStyle.Direction.TB
+				&& this.source instanceof net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource otf) {
+			return otf.canDisplayUpright(c);
+		}
 		return this.getFontSource().canDisplay(c);
 	}
 
