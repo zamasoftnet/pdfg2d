@@ -238,6 +238,38 @@ public interface GC {
 	 * @return the current blend mode; {@code NORMAL} for backends that do not
 	 *         track it.
 	 */
+	/**
+	 * 出力先が厳密に描ける描画機能(2026-08-29)。
+	 *
+	 * <p>
+	 * PDFにはぼかし・円錐シェーディング・要素単位のフィルタ合成が無く、
+	 * 利用側(FolioJet)はそれらを同心塗りや扇形で近似する。Java2Dやブラウザが
+	 * 描くSVGなら厳密にできるので、利用側はまずこれで問い合わせ、できるなら
+	 * 厳密経路({@link #supports(Capability)}がtrueの機能用のAPI)へ、
+	 * できなければ近似へ進み、近似したことを利用者へ知らせる。
+	 * 既定は全てfalse(=近似)。
+	 * </p>
+	 */
+	public enum Capability {
+		/** ガウスぼかし(box-shadow/text-shadowのblur、filter:blur())。 */
+		GAUSSIAN_BLUR,
+		/** 円錐グラデーション(conic-gradient)のPaint。 */
+		CONIC_GRADIENT,
+		/** 周期を無限に繰り返すグラデーション(repeating-*)。 */
+		REPEATING_GRADIENT,
+		/** 要素全体を1つの層にしてから色行列・ぼかし等を掛けるフィルタ合成。 */
+		GROUP_FILTER,
+		/** 描いた内容のシルエットからの落とし影(filter:drop-shadow())。 */
+		DROP_SHADOW,
+		/** 要素全体を1つの層としてブレンドする(mix-blend-mode/isolation)。 */
+		BLEND_GROUP
+	}
+
+	/** 出力先が{@code capability}を厳密に描けるなら true。既定は false。 */
+	public default boolean supports(final Capability capability) {
+		return false;
+	}
+
 	public default net.zamasoft.pdfg2d.gc.paint.BlendMode getBlendMode() {
 		return net.zamasoft.pdfg2d.gc.paint.BlendMode.NORMAL;
 	}
