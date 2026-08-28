@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.Shape;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
@@ -26,14 +27,17 @@ import net.zamasoft.pdfg2d.gc.font.FontStyle;
 import net.zamasoft.pdfg2d.gc.font.FontStyleImpl;
 import net.zamasoft.pdfg2d.gc.font.UnicodeRange;
 import net.zamasoft.pdfg2d.gc.font.UnicodeRangeList;
+import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.paint.CMYKColor;
 import net.zamasoft.pdfg2d.gc.paint.Color;
+import net.zamasoft.pdfg2d.gc.paint.ConicGradient;
 import net.zamasoft.pdfg2d.gc.paint.GrayColor;
 import net.zamasoft.pdfg2d.gc.paint.LinearGradient;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
 import net.zamasoft.pdfg2d.gc.paint.RadialGradient;
 import net.zamasoft.pdfg2d.gc.paint.RGBColor;
+import net.zamasoft.pdfg2d.gc.paint.SpreadMethod;
 import net.zamasoft.pdfg2d.gc.text.CharacterHandler;
 import net.zamasoft.pdfg2d.gc.text.TextControl;
 import net.zamasoft.pdfg2d.gc.text.TextImpl;
@@ -103,6 +107,87 @@ class CoreApiTest {
         assertEquals(1.0, replay.getLineWidth());
         assertArrayEquals(GC.STROKE_SOLID, replay.getLinePattern(),
                 "The end command should restore the original graphics state");
+    }
+
+    @Test
+    void testGroupEffectsAndConicGradientRecords() {
+        assertTrue(GroupEffects.NONE.isIdentity());
+        assertFalse(new GroupEffects(null, 2, null, 1).isIdentity());
+        assertFalse(new GroupEffects(null, 0, null, 0.5).isIdentity());
+        assertFalse(new GroupEffects(null, 0, new GroupEffects.DropShadow(1, 1, 0, RGBColor.create(0, 0, 0)), 1)
+                .isIdentity());
+        assertFalse(new GroupEffects(new float[20], 0, null, 1).isIdentity());
+        assertThrows(IllegalArgumentException.class, () -> new GroupEffects(new float[19], 0, null, 1));
+
+        final var colors = new Color[] { RGBColor.create(1, 0, 0), RGBColor.create(0, 0, 1) };
+        final var conic = new ConicGradient(1, 2, 0.5, new double[] { 0, 1 }, colors, new AffineTransform());
+        assertEquals(Paint.Type.CONIC_GRADIENT, conic.getPaintType());
+        assertEquals(SpreadMethod.PAD, conic.spread(), "the short constructor pads");
+        assertEquals(SpreadMethod.PAD,
+                new ConicGradient(1, 2, 0.5, new double[] { 0, 1 }, colors, new AffineTransform(), null).spread());
+        assertEquals(SpreadMethod.REPEAT, new ConicGradient(1, 2, 0.5, new double[] { 0, 1 }, colors,
+                new AffineTransform(), SpreadMethod.REPEAT).spread());
+        assertThrows(NullPointerException.class,
+                () -> new ConicGradient(0, 0, 0, null, colors, new AffineTransform()));
+        assertThrows(NullPointerException.class,
+                () -> new ConicGradient(0, 0, 0, new double[] { 0, 1 }, null, new AffineTransform()));
+        assertThrows(NullPointerException.class,
+                () -> new ConicGradient(0, 0, 0, new double[] { 0, 1 }, colors, null));
+
+        assertEquals(SpreadMethod.PAD, new LinearGradient(0, 0, 1, 1, new double[] { 0, 1 }, colors,
+                new AffineTransform()).spread());
+        for (final var capability : GC.Capability.values()) {
+            assertFalse(new NoOpGC(null).supports(capability), "NoOpGC approximates everything");
+            assertFalse(new RecorderGC(null).supports(capability), "RecorderGC approximates everything");
+        }
+    }
+
+    @Test
+    void testRecorderGcReplaysExactEffectCalls() {
+        final var recorder = new RecorderGC(null);
+        final var shape = new Rectangle2D.Double(0, 0, 10, 10);
+        final var effects = new GroupEffects(null, 3, null, 1);
+        final var image = new NoOpGC.NoOpImage(4, 4);
+        recorder.fillBlurred(shape, 2.5);
+        recorder.drawImage(image, effects);
+        recorder.drawImage(image, GroupEffects.NONE);
+
+        final var page = recorder.getPage();
+        assertEquals(3, page.commands().size());
+        assertEquals(new RecorderGC.FillBlurred(shape, 2.5), page.commands().get(0));
+        assertEquals(new RecorderGC.DrawImageEffects(image, effects), page.commands().get(1));
+
+        // 対応する再生先には厳密な呼び出しがそのまま届く
+        final var calls = new ArrayList<String>();
+        final var exact = new NoOpGC(null) {
+            @Override
+            public void fillBlurred(final Shape s, final double sigma) {
+                calls.add("fillBlurred:" + sigma);
+            }
+
+            @Override
+            public void drawImage(final Image im, final GroupEffects e) {
+                calls.add("drawImage:" + e.blurSigma());
+            }
+        };
+        page.drawTo(exact);
+        assertEquals(List.of("fillBlurred:2.5", "drawImage:3.0", "drawImage:0.0"), calls);
+
+        // 対応しない再生先では既定の fill / drawImage へ落ちる
+        calls.clear();
+        final var fallback = new NoOpGC(null) {
+            @Override
+            public void fill(final Shape s) {
+                calls.add("fill");
+            }
+
+            @Override
+            public void drawImage(final Image im) {
+                calls.add("drawImage");
+            }
+        };
+        page.drawTo(fallback);
+        assertEquals(List.of("fill", "drawImage", "drawImage"), calls);
     }
 
     @Test

@@ -7,7 +7,7 @@ package net.zamasoft.pdfg2d.gc.paint;
  * Added 2026-08-29 as an additive graphics state attribute: {@link net.zamasoft.pdfg2d.gc.GC#setBlendMode}
  * has a no-op default so every existing backend keeps compiling and behaving as before. Only backends that
  * can express the mode natively (PDF ExtGState {@code /BM}, SVG {@code mix-blend-mode}) honour it; the
- * Java2D backend ignores it because {@code java.awt.AlphaComposite} has no separable blend modes.
+ * Java2D backend composes the modes itself with a custom {@code java.awt.Composite} (2026-08-29).
  * </p>
  */
 public enum BlendMode {

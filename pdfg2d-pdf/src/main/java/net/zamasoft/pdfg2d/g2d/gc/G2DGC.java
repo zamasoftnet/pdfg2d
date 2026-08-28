@@ -4,10 +4,14 @@ import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Composite;
 import java.awt.Graphics2D;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsDevice;
+import java.awt.Rectangle;
 import java.awt.Shape;
 import java.awt.Stroke;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.NoninvertibleTransformException;
+import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -17,12 +21,15 @@ import net.zamasoft.pdfg2d.font.Font;
 import net.zamasoft.pdfg2d.font.FontMetricsImpl;
 import net.zamasoft.pdfg2d.g2d.image.RasterImageImpl;
 import net.zamasoft.pdfg2d.g2d.util.G2DUtils;
+import net.zamasoft.pdfg2d.g2d.util.RasterEffects;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
+import net.zamasoft.pdfg2d.gc.GroupEffects;
 import net.zamasoft.pdfg2d.gc.font.FontManager;
 import net.zamasoft.pdfg2d.gc.image.GroupImageGC;
 import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.image.util.TransformedImage;
+import net.zamasoft.pdfg2d.gc.paint.BlendMode;
 import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.pdfg2d.gc.paint.ConicGradient;
 import net.zamasoft.pdfg2d.gc.paint.LinearGradient;
@@ -68,7 +75,9 @@ public class G2DGC implements GC {
 
 		public final AffineTransform fillAt, strokeAt;
 
-		public final float fillAlpha;
+		public final float fillAlpha, strokeAlpha;
+
+		public final BlendMode blendMode;
 
 		public final TextMode textMode;
 
@@ -91,6 +100,8 @@ public class G2DGC implements GC {
 			this.awtFillPaint = gc.awtFillPaint;
 			this.fillAt = gc.fillAt;
 			this.fillAlpha = gc.fillAlpha;
+			this.strokeAlpha = gc.strokeAlpha;
+			this.blendMode = gc.blendMode;
 			this.strokeAt = gc.strokeAt;
 			this.textMode = gc.textMode;
 		}
@@ -112,6 +123,8 @@ public class G2DGC implements GC {
 			this.fillAt = state.fillAt;
 			this.strokeAt = state.strokeAt;
 			this.fillAlpha = state.fillAlpha;
+			this.strokeAlpha = state.strokeAlpha;
+			this.blendMode = state.blendMode;
 			this.textMode = state.textMode;
 			this.composite = state.composite;
 		}
@@ -137,6 +150,8 @@ public class G2DGC implements GC {
 			gc.awtFillPaint = this.awtFillPaint;
 			gc.fillAt = this.fillAt;
 			gc.fillAlpha = this.fillAlpha;
+			gc.strokeAlpha = this.strokeAlpha;
+			gc.blendMode = this.blendMode;
 			gc.strokeAt = this.strokeAt;
 			gc.textMode = this.textMode;
 		}
@@ -154,7 +169,10 @@ public class G2DGC implements GC {
 
 	protected AffineTransform fillAt, strokeAt;
 
-	protected float fillAlpha = 1;
+	protected float fillAlpha = 1, strokeAlpha = 1;
+
+	/** ブレンドモード(2026-08-29)。NORMAL 以外は {@link BlendComposite} で画素合成する。 */
+	protected BlendMode blendMode = BlendMode.NORMAL;
 
 	protected TextMode textMode = TextMode.FILL;
 
@@ -192,6 +210,15 @@ public class G2DGC implements GC {
 	 */
 	public Graphics2D getGraphics2D() {
 		return this.g;
+	}
+
+	/**
+	 * Java2D はラスタなので、ぼかし・円錐グラデーション・繰り返し・層フィルタ・
+	 * 落とし影・ブレンドのすべてを厳密に描ける(2026-08-29)。
+	 */
+	@Override
+	public boolean supports(final Capability capability) {
+		return capability != null;
 	}
 
 	/**
@@ -320,8 +347,7 @@ public class G2DGC implements GC {
 				at = null;
 			}
 			case ConicGradient conicGradient -> {
-				// TODO(2026-08-29) 厳密な円錐Paintへ置換する。暫定は先頭色。
-				awtPaint = G2DUtils.toAwtColor(conicGradient.colors()[0]);
+				awtPaint = G2DUtils.toAwtPaint(conicGradient);
 				at = null;
 			}
 		}
@@ -354,16 +380,24 @@ public class G2DGC implements GC {
 	}
 
 	public void setStrokeAlpha(float alpha) {
-		if (alpha == 1) {
-			this.g.setPaintMode();
-			return;
-		}
-		AlphaComposite comp = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha);
-		this.g.setComposite(comp);
+		this.strokeAlpha = alpha;
+		this.g.setComposite(BlendComposite.getInstance(this.blendMode, alpha));
 	}
 
 	public float getStrokeAlpha() {
-		return ((AlphaComposite) this.g.getComposite()).getAlpha();
+		return this.strokeAlpha;
+	}
+
+	@Override
+	public void setBlendMode(final BlendMode mode) {
+		this.blendMode = mode == null ? BlendMode.NORMAL : mode;
+		// 線・文字は g の合成モードで描かれる。塗り・画像は都度 fillAlpha で組み立てる
+		this.g.setComposite(BlendComposite.getInstance(this.blendMode, this.strokeAlpha));
+	}
+
+	@Override
+	public BlendMode getBlendMode() {
+		return this.blendMode;
 	}
 
 	public void setFillAlpha(float alpha) {
@@ -403,13 +437,175 @@ public class G2DGC implements GC {
 		this.drewAnything = true;
 
 		Composite composite = this.g.getComposite();
-		if (this.fillAlpha == 1) {
-			this.g.setPaintMode();
-		} else {
-			this.g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, this.fillAlpha));
-		}
+		this.g.setComposite(BlendComposite.getInstance(this.blendMode, this.fillAlpha));
 		image.drawTo(this);
 		this.g.setComposite(composite);
+	}
+
+	/**
+	 * 層に効果(色行列 → ぼかし → 落とし影 → 不透明度)を掛けて描く(2026-08-29)。
+	 * 画像をデバイス空間の ARGB 層へ描いてから画素処理し、恒等変換でクリップと
+	 * ブレンドモード・fillAlpha を効かせて戻す。σ と影のずれはユーザー空間で
+	 * 受け取り、現在の変換でデバイス空間へ写す。
+	 */
+	@Override
+	public void drawImage(final Image image, final GroupEffects effects) throws GraphicsException {
+		if (effects == null || effects.isIdentity()) {
+			this.drawImage(image);
+			return;
+		}
+		this.drewAnything = true;
+		final AffineTransform at = this.g.getTransform();
+		final double blurSigma = RasterEffects.deviceSigma(at, effects.blurSigma());
+		final GroupEffects.DropShadow shadow = effects.dropShadow();
+		double shadowDx = 0, shadowDy = 0, shadowSigma = 0;
+		if (shadow != null) {
+			final Point2D d = at.deltaTransform(new Point2D.Double(shadow.dx(), shadow.dy()), null);
+			shadowDx = d.getX();
+			shadowDy = d.getY();
+			shadowSigma = RasterEffects.deviceSigma(at, shadow.sigma());
+		}
+		final int pad = RasterEffects.kernelRadius(blurSigma) + RasterEffects.kernelRadius(shadowSigma)
+				+ (int) Math.ceil(Math.max(Math.abs(shadowDx), Math.abs(shadowDy))) + 1;
+		final Rectangle2D bounds = at
+				.createTransformedShape(new Rectangle2D.Double(0, 0, image.getWidth(), image.getHeight()))
+				.getBounds2D();
+		final Rectangle region = this.deviceRegion(bounds, pad);
+		if (region == null) {
+			return;
+		}
+		if (region.width * (long) region.height > MAX_LAYER_PIXELS) {
+			// 層が大きすぎる。効果を諦めてそのまま描く
+			this.drawImage(image);
+			return;
+		}
+
+		final BufferedImage layer = new BufferedImage(region.width, region.height, BufferedImage.TYPE_INT_ARGB);
+		final Graphics2D lg = layer.createGraphics();
+		try {
+			final G2DGC sub = new G2DGC(lg, this.fm);
+			new GraphicsState(this).shifted(AffineTransform.getTranslateInstance(-region.x, -region.y)).restore(sub);
+			// 層は孤立させて描き、クリップ・不透明度・ブレンドは戻すときに掛ける
+			lg.setRenderingHints(this.g.getRenderingHints());
+			lg.setClip(null);
+			lg.setComposite(AlphaComposite.SrcOver);
+			sub.fillAlpha = 1;
+			sub.strokeAlpha = 1;
+			sub.blendMode = BlendMode.NORMAL;
+			image.drawTo(sub);
+		} finally {
+			lg.dispose();
+		}
+
+		final int w = region.width, h = region.height;
+		float[][] planes = RasterEffects.toPlanes(layer);
+		if (effects.colorMatrix() != null) {
+			RasterEffects.applyColorMatrix(planes, effects.colorMatrix());
+		}
+		RasterEffects.premultiply(planes);
+		if (blurSigma > 0) {
+			RasterEffects.gaussianBlur(planes, w, h, blurSigma);
+		}
+		if (shadow != null) {
+			final Color c = shadow.color();
+			final float[] rgba = c == null ? new float[] { 0, 0, 0, 1 }
+					: new float[] { c.getRed(), c.getGreen(), c.getBlue(), c.getAlpha() };
+			planes = RasterEffects.dropShadow(planes, w, h, shadowDx, shadowDy, shadowSigma, rgba);
+		}
+		if (effects.opacity() < 1) {
+			RasterEffects.scale(planes, (float) Math.max(0, effects.opacity()));
+		}
+		this.drawLayer(RasterEffects.toPremultipliedImage(planes, w, h), region.x, region.y);
+	}
+
+	/** 効果の層として確保する画素数の上限。超えたら効果なしへ退避する。 */
+	private static final long MAX_LAYER_PIXELS = 64L * 1024 * 1024;
+
+	/**
+	 * デバイス空間で {@code bounds} を {@code pad} 広げ、クリップとデバイスの範囲
+	 * (それぞれ pad 広げたもの)で切った整数矩形を返す。空なら null。
+	 */
+	private Rectangle deviceRegion(final Rectangle2D bounds, final int pad) {
+		Rectangle2D r = new Rectangle2D.Double(bounds.getX() - pad, bounds.getY() - pad,
+				bounds.getWidth() + 2.0 * pad, bounds.getHeight() + 2.0 * pad);
+		final Shape clip = this.g.getClip();
+		if (clip != null) {
+			final Rectangle2D cb = this.g.getTransform().createTransformedShape(clip).getBounds2D();
+			r = r.createIntersection(new Rectangle2D.Double(cb.getX() - pad, cb.getY() - pad,
+					cb.getWidth() + 2.0 * pad, cb.getHeight() + 2.0 * pad));
+		}
+		final GraphicsConfiguration conf = this.g.getDeviceConfiguration();
+		if (conf != null && conf.getDevice() != null
+				&& conf.getDevice().getType() == GraphicsDevice.TYPE_IMAGE_BUFFER) {
+			final Rectangle db = conf.getBounds();
+			r = r.createIntersection(new Rectangle2D.Double(db.getX() - pad, db.getY() - pad,
+					db.getWidth() + 2.0 * pad, db.getHeight() + 2.0 * pad));
+		}
+		if (r.isEmpty()) {
+			return null;
+		}
+		final int x0 = (int) Math.floor(r.getMinX()), y0 = (int) Math.floor(r.getMinY());
+		final int x1 = (int) Math.ceil(r.getMaxX()), y1 = (int) Math.ceil(r.getMaxY());
+		if (x1 <= x0 || y1 <= y0) {
+			return null;
+		}
+		return new Rectangle(x0, y0, x1 - x0, y1 - y0);
+	}
+
+	/** デバイス座標 (x, y) に層を恒等変換で置く。クリップ・fillAlpha・ブレンドモードを効かせる。 */
+	private void drawLayer(final BufferedImage layer, final int x, final int y) {
+		final AffineTransform saveAt = this.g.getTransform();
+		final Composite saveComposite = this.g.getComposite();
+		this.g.setTransform(new AffineTransform());
+		this.g.setComposite(BlendComposite.getInstance(this.blendMode, this.fillAlpha));
+		this.g.drawImage(layer, x, y, null);
+		this.g.setComposite(saveComposite);
+		this.g.setTransform(saveAt);
+	}
+
+	/**
+	 * 形を現在の塗りで層へ描き、ガウスぼかしを掛けて戻す(2026-08-29)。
+	 * σ はユーザー空間単位で、現在の変換でデバイス空間へ写す。
+	 */
+	@Override
+	public void fillBlurred(Shape shape, final double sigma) throws GraphicsException {
+		final AffineTransform at = this.g.getTransform();
+		final double deviceSigma = RasterEffects.deviceSigma(at, sigma);
+		if (!(deviceSigma > 0)) {
+			this.fill(shape);
+			return;
+		}
+		this.drewAnything = true;
+		final int pad = RasterEffects.kernelRadius(deviceSigma);
+		final Rectangle region = this.deviceRegion(at.createTransformedShape(shape).getBounds2D(), pad);
+		if (region == null) {
+			return;
+		}
+		if (region.width * (long) region.height > MAX_LAYER_PIXELS) {
+			this.fill(shape);
+			return;
+		}
+		final BufferedImage layer = new BufferedImage(region.width, region.height,
+				BufferedImage.TYPE_INT_ARGB_PRE);
+		final Graphics2D lg = layer.createGraphics();
+		try {
+			lg.setRenderingHints(this.g.getRenderingHints());
+			lg.translate(-region.x, -region.y);
+			lg.transform(at);
+			lg.setPaint(this.awtFillPaint);
+			if (this.fillAt != null) {
+				lg.transform(this.fillAt);
+				try {
+					shape = this.fillAt.createInverse().createTransformedShape(shape);
+				} catch (NoninvertibleTransformException e) {
+					throw new RuntimeException(e);
+				}
+			}
+			lg.fill(shape);
+		} finally {
+			lg.dispose();
+		}
+		this.drawLayer(RasterEffects.blurPremultiplied(layer, deviceSigma), region.x, region.y);
 	}
 
 	public void fill(Shape shape) {
@@ -418,11 +614,7 @@ public class G2DGC implements GC {
 		this.g.setPaint(this.awtFillPaint);
 
 		Composite composite = this.g.getComposite();
-		if (this.fillAlpha == 1) {
-			this.g.setPaintMode();
-		} else {
-			this.g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, this.fillAlpha));
-		}
+		this.g.setComposite(BlendComposite.getInstance(this.blendMode, this.fillAlpha));
 
 		if (this.fillAt != null) {
 			AffineTransform saveAt = g.getTransform();

@@ -34,12 +34,14 @@ import net.zamasoft.pdfg2d.gc.font.FontStyle;
 import net.zamasoft.pdfg2d.gc.font.util.FontUtils;
 import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.paint.Color;
+import net.zamasoft.pdfg2d.gc.paint.ConicGradient;
 import net.zamasoft.pdfg2d.gc.paint.LinearGradient;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.paint.Pattern;
 import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
 import net.zamasoft.pdfg2d.gc.paint.RGBColor;
 import net.zamasoft.pdfg2d.gc.paint.RadialGradient;
+import net.zamasoft.pdfg2d.gc.paint.SpreadMethod;
 
 /**
  * Utilities for converting between AWT and internal graphics objects.
@@ -145,9 +147,34 @@ public final class G2DUtils {
 		}
 		return new java.awt.LinearGradientPaint(new Point2D.Double(gradient.x1(), gradient.y1()),
 				new Point2D.Double(gradient.x2(), gradient.y2()), fractions, colors,
-				java.awt.MultipleGradientPaint.CycleMethod.NO_CYCLE,
+				toCycleMethod(gradient.spread()),
 				java.awt.MultipleGradientPaint.ColorSpaceType.SRGB,
 				gradient.transform() != null ? gradient.transform() : new AffineTransform());
+	}
+
+	/**
+	 * {@link SpreadMethod} を Java2D の周期指定へ写す(2026-08-29)。
+	 * PAD→NO_CYCLE、REPEAT→REPEAT、REFLECT→REFLECT。
+	 */
+	public static java.awt.MultipleGradientPaint.CycleMethod toCycleMethod(final SpreadMethod spread) {
+		if (spread == null) {
+			return java.awt.MultipleGradientPaint.CycleMethod.NO_CYCLE;
+		}
+		return switch (spread) {
+			case REPEAT -> java.awt.MultipleGradientPaint.CycleMethod.REPEAT;
+			case REFLECT -> java.awt.MultipleGradientPaint.CycleMethod.REFLECT;
+			default -> java.awt.MultipleGradientPaint.CycleMethod.NO_CYCLE;
+		};
+	}
+
+	/**
+	 * 円錐グラデーションを厳密に描く AWT Paint へ変換する(2026-08-29)。
+	 *
+	 * @param gradient 円錐グラデーション
+	 * @return AWT Paint
+	 */
+	public static java.awt.Paint toAwtPaint(final ConicGradient gradient) {
+		return new ConicGradientPaint(gradient);
 	}
 
 	/**
@@ -171,7 +198,7 @@ public final class G2DUtils {
 		// passed the coordinates swapped.
 		return new java.awt.RadialGradientPaint(new Point2D.Double(gradient.cx(), gradient.cy()),
 				(float) gradient.radius(), new Point2D.Double(gradient.fx(), gradient.fy()), fractions, colors,
-				java.awt.MultipleGradientPaint.CycleMethod.NO_CYCLE,
+				toCycleMethod(gradient.spread()),
 				java.awt.MultipleGradientPaint.ColorSpaceType.SRGB,
 				gradient.transform() != null ? gradient.transform() : new AffineTransform());
 	}

@@ -22,7 +22,7 @@ public class RecorderGC extends NoOpGC {
 	public sealed interface Command permits
 			Begin, End, SetLineWidth, SetLinePattern, SetLineCap, SetLineJoin,
 			SetTextMode, SetStrokePaint, SetFillPaint, SetStrokeAlpha, SetFillAlpha, SetBlendMode,
-			Transform, Clip, ResetState, DrawImage, Fill, Draw, FillDraw, DrawText {
+			Transform, Clip, ResetState, DrawImage, DrawImageEffects, Fill, FillBlurred, Draw, FillDraw, DrawText {
 	}
 
 	public record Begin() implements Command {
@@ -74,7 +74,15 @@ public class RecorderGC extends NoOpGC {
 	public record DrawImage(Image image) implements Command {
 	}
 
+	/** 効果付きの画像描画(2026-08-29)。再生先が対応すれば厳密に、しなければ効果なしで描かれる。 */
+	public record DrawImageEffects(Image image, GroupEffects effects) implements Command {
+	}
+
 	public record Fill(Shape shape) implements Command {
+	}
+
+	/** ぼかし塗り(2026-08-29)。再生先が対応しなければ普通の塗りになる。 */
+	public record FillBlurred(Shape shape, double sigma) implements Command {
 	}
 
 	public record Draw(Shape shape) implements Command {
@@ -195,9 +203,19 @@ public class RecorderGC extends NoOpGC {
 	}
 
 	@Override
+	public void drawImage(final Image image, final GroupEffects effects) throws GraphicsException {
+		this.contents.add(new DrawImageEffects(image, effects));
+	}
+
+	@Override
 	public void fill(final Shape shape) {
 		super.fill(shape);
 		this.contents.add(new Fill(shape));
+	}
+
+	@Override
+	public void fillBlurred(final Shape shape, final double sigma) {
+		this.contents.add(new FillBlurred(shape, sigma));
 	}
 
 	@Override
@@ -314,7 +332,9 @@ public class RecorderGC extends NoOpGC {
 					case Clip(Shape shape) -> gc.clip(shape);
 					case ResetState() -> gc.resetState();
 					case DrawImage(Image image) -> gc.drawImage(image);
+					case DrawImageEffects(Image image, GroupEffects effects) -> gc.drawImage(image, effects);
 					case Fill(Shape shape) -> gc.fill(shape);
+					case FillBlurred(Shape shape, double sigma) -> gc.fillBlurred(shape, sigma);
 					case Draw(Shape shape) -> gc.draw(shape);
 					case FillDraw(Shape shape) -> gc.fillDraw(shape);
 					case DrawText(Text text, double x, double y) -> gc.drawText(text, x, y);
