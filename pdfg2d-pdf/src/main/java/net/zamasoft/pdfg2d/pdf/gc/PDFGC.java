@@ -18,6 +18,7 @@ import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.font.FontManager;
 import net.zamasoft.pdfg2d.gc.image.GroupImageGC;
 import net.zamasoft.pdfg2d.gc.image.Image;
+import net.zamasoft.pdfg2d.gc.paint.BlendMode;
 import net.zamasoft.pdfg2d.gc.paint.CMYKColor;
 import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.pdfg2d.gc.paint.GrayColor;
@@ -155,7 +156,8 @@ public class PDFGC implements GC, Closeable {
 	private static final double ONE_THIRD = 1.0 / 3.0;
 	private static final double TWO_THIRD = 2.0 / 3.0;
 
-	private record ExtGStateKey(float strokeAlpha, float fillAlpha, byte strokeOverprint, byte fillOverprint) {
+	private record ExtGStateKey(float strokeAlpha, float fillAlpha, byte strokeOverprint, byte fillOverprint,
+			BlendMode blendMode) {
 	}
 
 	/**
@@ -174,7 +176,8 @@ public class PDFGC implements GC, Closeable {
 			float fillAlpha,
 			byte strokeOverprint,
 			byte fillOverprint,
-			AffineTransform actualTransform) {
+			AffineTransform actualTransform,
+			BlendMode blendMode) {
 
 		GraphicsState(final PDFGC gc) {
 			this(
@@ -190,7 +193,8 @@ public class PDFGC implements GC, Closeable {
 					gc.fillAlpha,
 					gc.strokeOverprint,
 					gc.fillOverprint,
-					gc.actualTransform != null ? new AffineTransform(gc.actualTransform) : null);
+					gc.actualTransform != null ? new AffineTransform(gc.actualTransform) : null,
+					gc.blendMode);
 		}
 
 		/**
@@ -211,20 +215,21 @@ public class PDFGC implements GC, Closeable {
 			gc.strokeOverprint = this.strokeOverprint;
 			gc.fillOverprint = this.fillOverprint;
 			gc.actualTransform = this.actualTransform;
+			gc.blendMode = this.blendMode;
 		}
 
 		GraphicsState withXState(final XGraphicsState xState) {
 			return new GraphicsState(
 					xState, lineWidth, lineCap, lineJoin, linePattern, strokePaint, fillPaint,
 					textMode, strokeAlpha, fillAlpha, strokeOverprint, fillOverprint,
-					actualTransform);
+					actualTransform, blendMode);
 		}
 
 		GraphicsState withoutXState() {
 			return new GraphicsState(
 					null, lineWidth, lineCap, lineJoin, linePattern, strokePaint, fillPaint,
 					textMode, strokeAlpha, fillAlpha, strokeOverprint, fillOverprint,
-					actualTransform);
+					actualTransform, blendMode);
 		}
 	}
 
@@ -244,7 +249,8 @@ public class PDFGC implements GC, Closeable {
 			byte strokeOverprint,
 			double letterSpacing,
 			TextMode textMode,
-			String smask) {
+			String smask,
+			BlendMode blendMode) {
 
 		XGraphicsState(final PDFGC gc) {
 			this(
@@ -260,7 +266,8 @@ public class PDFGC implements GC, Closeable {
 					gc.xstrokeOverprint,
 					gc.xletterSpacing,
 					gc.xtextMode,
-					gc.xsmask);
+					gc.xsmask,
+					gc.xblendMode);
 		}
 
 		/**
@@ -282,6 +289,7 @@ public class PDFGC implements GC, Closeable {
 			gc.xfillOverprint = this.fillOverprint;
 			gc.xstrokeOverprint = this.strokeOverprint;
 			gc.xsmask = this.smask;
+			gc.xblendMode = this.blendMode;
 		}
 	}
 
@@ -367,6 +375,12 @@ public class PDFGC implements GC, Closeable {
 	 * with an {@code /SMask /None} ExtGState for other paints.
 	 */
 	String xsmask = null;
+
+	/** Blend mode (2026-08-29; {@code /BM} in the shared alpha ExtGState). */
+	BlendMode blendMode = BlendMode.NORMAL;
+
+	/** Blend mode currently active in the PDF content stream. */
+	BlendMode xblendMode = BlendMode.NORMAL;
 
 	/** Document-wide cache of pattern/shading resource names (see {@link PaintResources}). */
 	final Map<Object, String> resourceCache;
@@ -689,6 +703,16 @@ public class PDFGC implements GC, Closeable {
 	@Override
 	public void setFillAlpha(final float fillAlpha) {
 		this.fillAlpha = fillAlpha;
+	}
+
+	@Override
+	public void setBlendMode(final BlendMode mode) {
+		this.blendMode = mode == null ? BlendMode.NORMAL : mode;
+	}
+
+	@Override
+	public BlendMode getBlendMode() {
+		return this.blendMode;
 	}
 
 	@Override
@@ -1206,11 +1230,16 @@ public class PDFGC implements GC, Closeable {
 		// Opacity
 		final var supportAlpha = this.pdfVersion.allowsTransparency();
 		// When transparency is supported
+		// Blend modes (2026-08-29) ride on the same ExtGState; like alpha they
+		// need the transparency model, so PDF/X-1a and PDF 1.3 emit Normal.
+		final var blendMode = supportAlpha ? this.blendMode : BlendMode.NORMAL;
 		if ((supportAlpha && (!this.out.equals(this.strokeAlpha, this.xstrokeAlpha)
 				|| !this.out.equals(this.fillAlpha, this.xfillAlpha)))
+				|| blendMode != this.xblendMode
 				|| (this.strokeOverprint != this.xstrokeOverprint || this.fillOverprint != this.xfillOverprint)) {
 			this.xstrokeAlpha = this.strokeAlpha;
 			this.xfillAlpha = this.fillAlpha;
+			this.xblendMode = blendMode;
 			this.xstrokeOverprint = this.strokeOverprint;
 			this.xfillOverprint = this.fillOverprint;
 			@SuppressWarnings("unchecked")
@@ -1223,7 +1252,8 @@ public class PDFGC implements GC, Closeable {
 					supportAlpha ? this.strokeAlpha : 1.0f,
 					supportAlpha ? this.fillAlpha : 1.0f,
 					this.strokeOverprint,
-					this.fillOverprint);
+					this.fillOverprint,
+					blendMode);
 			var name = gsCache.get(key);
 			if (name == null) {
 				try (final var gsOut = this.out.getPdfWriter().createSpecialGraphicsState()) {
@@ -1232,6 +1262,10 @@ public class PDFGC implements GC, Closeable {
 						gsOut.writeReal(this.strokeAlpha);
 						gsOut.writeName("ca");
 						gsOut.writeReal(this.fillAlpha);
+					}
+					if (blendMode != BlendMode.NORMAL) {
+						gsOut.writeName("BM");
+						gsOut.writeName(blendMode.pdfName);
 					}
 					if (this.strokeOverprint != CMYKColor.OVERPRINT_NONE) {
 						gsOut.writeName("OP");

@@ -223,6 +223,26 @@ public interface GC {
 	public void setFillAlpha(final float fillAlpha) throws GraphicsException;
 
 	/**
+	 * Sets the blend mode applied to subsequent fills, strokes, text and images
+	 * (2026-08-29, additive). The default implementation ignores the mode so
+	 * that backends without native blending keep their previous output; see
+	 * {@link net.zamasoft.pdfg2d.gc.paint.BlendMode}.
+	 *
+	 * @param mode the blend mode; {@code null} is treated as {@code NORMAL}.
+	 */
+	public default void setBlendMode(final net.zamasoft.pdfg2d.gc.paint.BlendMode mode) throws GraphicsException {
+		// no-op by default
+	}
+
+	/**
+	 * @return the current blend mode; {@code NORMAL} for backends that do not
+	 *         track it.
+	 */
+	public default net.zamasoft.pdfg2d.gc.paint.BlendMode getBlendMode() {
+		return net.zamasoft.pdfg2d.gc.paint.BlendMode.NORMAL;
+	}
+
+	/**
 	 * Sets the line width.
 	 * 
 	 * @param width the line width

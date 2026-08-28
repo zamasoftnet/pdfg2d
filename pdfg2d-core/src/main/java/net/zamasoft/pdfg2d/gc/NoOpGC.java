@@ -31,11 +31,12 @@ public class NoOpGC implements GC {
 			Paint fillPaint,
 			float fillAlpha,
 			float strokeAlpha,
-			TextMode textMode) {
+			TextMode textMode,
+			net.zamasoft.pdfg2d.gc.paint.BlendMode blendMode) {
 
 		public GraphicsState(final NoOpGC gc) {
 			this(new AffineTransform(gc.transform), gc.lineWidth, gc.linePattern, gc.lineJoin, gc.lineCap,
-					gc.strokePaint, gc.fillPaint, gc.fillAlpha, gc.strokeAlpha, gc.textMode);
+					gc.strokePaint, gc.fillPaint, gc.fillAlpha, gc.strokeAlpha, gc.textMode, gc.blendMode);
 		}
 
 		public void restore(final NoOpGC gc) {
@@ -49,6 +50,7 @@ public class NoOpGC implements GC {
 			gc.fillAlpha = this.fillAlpha;
 			gc.strokeAlpha = this.strokeAlpha;
 			gc.textMode = this.textMode;
+			gc.blendMode = this.blendMode;
 		}
 	}
 
@@ -67,6 +69,9 @@ public class NoOpGC implements GC {
 	protected Paint fillPaint;
 
 	protected float fillAlpha = 1, strokeAlpha = 1;
+
+	/** Blend mode (2026-08-29); tracked so that recorders and wrappers can replay it. */
+	protected net.zamasoft.pdfg2d.gc.paint.BlendMode blendMode = net.zamasoft.pdfg2d.gc.paint.BlendMode.NORMAL;
 
 	protected TextMode textMode = TextMode.FILL;
 
@@ -202,6 +207,16 @@ public class NoOpGC implements GC {
 	@Override
 	public float getFillAlpha() {
 		return this.fillAlpha;
+	}
+
+	@Override
+	public void setBlendMode(final net.zamasoft.pdfg2d.gc.paint.BlendMode mode) {
+		this.blendMode = mode == null ? net.zamasoft.pdfg2d.gc.paint.BlendMode.NORMAL : mode;
+	}
+
+	@Override
+	public net.zamasoft.pdfg2d.gc.paint.BlendMode getBlendMode() {
+		return this.blendMode;
 	}
 
 	@Override

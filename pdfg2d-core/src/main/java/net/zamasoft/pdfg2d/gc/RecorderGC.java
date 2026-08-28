@@ -21,7 +21,7 @@ import net.zamasoft.pdfg2d.gc.text.Text;
 public class RecorderGC extends NoOpGC {
 	public sealed interface Command permits
 			Begin, End, SetLineWidth, SetLinePattern, SetLineCap, SetLineJoin,
-			SetTextMode, SetStrokePaint, SetFillPaint, SetStrokeAlpha, SetFillAlpha,
+			SetTextMode, SetStrokePaint, SetFillPaint, SetStrokeAlpha, SetFillAlpha, SetBlendMode,
 			Transform, Clip, ResetState, DrawImage, Fill, Draw, FillDraw, DrawText {
 	}
 
@@ -56,6 +56,10 @@ public class RecorderGC extends NoOpGC {
 	}
 
 	public record SetFillAlpha(float alpha) implements Command {
+	}
+
+	/** Blend mode change (2026-08-29). */
+	public record SetBlendMode(net.zamasoft.pdfg2d.gc.paint.BlendMode mode) implements Command {
 	}
 
 	public record Transform(AffineTransform at) implements Command {
@@ -152,6 +156,12 @@ public class RecorderGC extends NoOpGC {
 	public void setFillAlpha(final float alpha) {
 		super.setFillAlpha(alpha);
 		this.contents.add(new SetFillAlpha(alpha));
+	}
+
+	@Override
+	public void setBlendMode(final net.zamasoft.pdfg2d.gc.paint.BlendMode mode) {
+		super.setBlendMode(mode);
+		this.contents.add(new SetBlendMode(this.blendMode));
 	}
 
 	@Override
@@ -299,6 +309,7 @@ public class RecorderGC extends NoOpGC {
 					case SetFillPaint(Paint paint) -> gc.setFillPaint(paint);
 					case SetStrokeAlpha(float alpha) -> gc.setStrokeAlpha(alpha);
 					case SetFillAlpha(float alpha) -> gc.setFillAlpha(alpha);
+					case SetBlendMode(net.zamasoft.pdfg2d.gc.paint.BlendMode mode) -> gc.setBlendMode(mode);
 					case Transform(AffineTransform at) -> gc.transform(at);
 					case Clip(Shape shape) -> gc.clip(shape);
 					case ResetState() -> gc.resetState();
