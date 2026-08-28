@@ -183,11 +183,13 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 
 		// 行列係数はクランプしない(座標用の±32767制限を行列に当てると
 		// 大きな拡大率の中間cmの平行移動が壊れ、幾何全体が崩れる——
-		// writeRealExactのjavadoc参照)
-		this.writeRealExact(iat.getScaleX());
-		this.writeRealExact(iat.getShearY());
-		this.writeRealExact(iat.getShearX());
-		this.writeRealExact(iat.getScaleY());
+		// writeRealExactのjavadoc参照)。scale/shear成分は座標precisionと
+		// 独立の高精度で書く——丸め誤差が座標値(ページ寸法)に乗算される
+		// (writeRealCoefficientのjavadoc参照、2026-08-27)
+		this.writeRealCoefficient(iat.getScaleX());
+		this.writeRealCoefficient(iat.getShearY());
+		this.writeRealCoefficient(iat.getShearX());
+		this.writeRealCoefficient(iat.getScaleY());
 		this.writeRealExact(iat.getTranslateX());
 		this.writeRealExact(iat.getTranslateY());
 	}

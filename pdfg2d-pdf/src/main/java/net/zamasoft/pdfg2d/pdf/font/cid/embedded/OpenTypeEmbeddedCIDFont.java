@@ -167,13 +167,12 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 				return kern;
 			}
 		}
-		final short dash = this.verticalDashKerning(sgid, gid);
-		if (dash != 0) {
-			return dash;
-		}
-		// Preserve the long-standing subset-GID fallback. Some existing metrics
-		// depend on it when the translated font-GID lookup has no pair entry.
-		return super.getKerning(sgid, gid);
+		// サブセットGIDのままsuper(フォントGIDキーのGPOS対表)を引く
+		// 旧フォールバックは禁止。サブセットの採番(使用順の小さな番号)が
+		// フォントGIDの実在ペアと偶然一致し、フォントが定義していない
+		// 字間調整が無関係な文字対に乗っていた(2026-08-27、Minion Proの
+		// 「56」「78」等でPDF実出力から確認)
+		return this.verticalDashKerning(sgid, gid);
 	}
 
 	protected int toChar(int gid) {

@@ -56,7 +56,12 @@ public final class FontIndex {
 
 	/** 形式変更時はこの値を上げる(旧版は黙って捨てられ再構築される)。 */
 	private static final int MAGIC = 0x43504649; // "CPFI"
-	private static final int VERSION = 1;
+	/**
+	 * 2: font-dir走査のitalic/weightがOS/2由来になった(2026-08-27、
+	 * FontLoader.readTTFのjavadoc参照)。旧索引はnormal/400固定の値を
+	 * 再生するため破棄して再構築する。
+	 */
+	private static final int VERSION = 2;
 
 	private static final int SUBTYPE_EMBEDDED = 0;
 	private static final int SUBTYPE_CID_IDENTITY = 1;

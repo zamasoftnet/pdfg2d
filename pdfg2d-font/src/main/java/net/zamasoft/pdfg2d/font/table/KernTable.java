@@ -55,6 +55,58 @@ public record KernTable(KernSubtable[] tables) implements Table {
 		return this.tables[i];
 	}
 
+	/**
+	 * Collects the horizontal pair kerning of this legacy {@code kern} table as
+	 * {@link PairPos} lookups — the same shape as
+	 * {@link GposTable#collectKernPairPos()}, so callers can treat both sources
+	 * uniformly. Only format 0 subtables with horizontal coverage contribute
+	 * (format 2 is a non-providing stub).
+	 *
+	 * @return the pair-positioning lookups (possibly empty)
+	 */
+	public java.util.List<PairPos> collectHorizontalPairPos() {
+		final java.util.List<PairPos> result = new java.util.ArrayList<>();
+		for (final KernSubtable st : this.tables) {
+			if (st == null || !st.isHorizontal()) {
+				continue;
+			}
+			final int n = st.getKerningPairCount();
+			if (n == 0) {
+				continue;
+			}
+			// (left<<32 | right<<16 | value) に詰めて整列し、上位48bitの
+			// 二分探索で引く(値のbitは同一ペア内の順序にしか影響しない)
+			final long[] entries = new long[n];
+			for (int i = 0; i < n; i++) {
+				final KerningPair p = st.getKerningPair(i);
+				entries[i] = ((long) (p.left() & 0xFFFF) << 32) | ((long) (p.right() & 0xFFFF) << 16)
+						| (p.value() & 0xFFFFL);
+			}
+			java.util.Arrays.sort(entries);
+			result.add(new LegacyPairPos(entries));
+		}
+		return result;
+	}
+
+	/** 整列済みエントリ配列に対する二分探索の{@link PairPos}アダプタ。 */
+	private record LegacyPairPos(long[] entries) implements PairPos {
+		@Override
+		public int getKerning(final int firstGid, final int secondGid) {
+			if (firstGid < 0 || firstGid > 0xFFFF || secondGid < 0 || secondGid > 0xFFFF) {
+				return 0;
+			}
+			final long pairKey = ((long) firstGid << 32) | ((long) secondGid << 16);
+			int lo = java.util.Arrays.binarySearch(this.entries, pairKey);
+			if (lo < 0) {
+				lo = -lo - 1;
+			}
+			if (lo < this.entries.length && (this.entries[lo] >>> 16) == (pairKey >>> 16)) {
+				return (short) this.entries[lo];
+			}
+			return 0;
+		}
+	}
+
 	/** {@inheritDoc} */
 	@Override
 	public int getType() {

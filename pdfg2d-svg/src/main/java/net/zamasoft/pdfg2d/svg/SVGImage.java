@@ -22,7 +22,17 @@ import net.zamasoft.pdfg2d.gc.image.Image;
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
-public record SVGImage(GraphicsNode node, double width, double height) implements Image {
+public record SVGImage(GraphicsNode node, double width, double height, Intrinsic intrinsic) implements Image {
+
+	/** 固有寸法ありとして構築します(従来互換)。 */
+	public SVGImage(GraphicsNode node, double width, double height) {
+		this(node, width, height, Intrinsic.SIZE);
+	}
+
+	@Override
+	public Intrinsic getIntrinsic() {
+		return this.intrinsic;
+	}
 
 	/**
 	 * Returns the GVT graphics node.

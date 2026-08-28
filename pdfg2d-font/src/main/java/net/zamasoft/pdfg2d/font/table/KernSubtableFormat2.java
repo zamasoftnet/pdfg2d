@@ -35,4 +35,10 @@ public record KernSubtableFormat2() implements KernSubtable {
 	public KerningPair getKerningPair(final int i) {
 		return null;
 	}
+
+	@Override
+	public boolean isHorizontal() {
+		// 実質未対応のスタブ(ペアを提供しない)
+		return false;
+	}
 }

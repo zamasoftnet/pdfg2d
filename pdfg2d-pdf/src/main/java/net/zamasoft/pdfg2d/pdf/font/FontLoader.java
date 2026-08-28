@@ -73,6 +73,21 @@ public final class FontLoader {
 	 */
 	public static void readTTF(List<FontSource> list, FontFace face, Type type, File ttfFile, int index,
 			Map<String, CMap> nameToCMap) throws IOException {
+		readTTF(list, face, type, ttfFile, index, nameToCMap, false);
+	}
+
+	/**
+	 * {@code styleFromFile}=trueのとき、italic/weightをfaceの既定値でなく
+	 * フォントファイル自身のOS/2(fsSelectionのitalicビット・usWeightClass)
+	 * から導出します(2026-08-27)。{@code <font-dir>}走査ではfaceに宣言が
+	 * 無いため従来は全フォントがnormal/400として登録され、同族に複数の
+	 * ウェイト・斜体があるとどれを選ぶかが登録順まかせになっていた
+	 * (Google Fonts一式を収録した内部Dockerで、Robotoの通常体が
+	 * Italicで描かれる等の実害)。@font-face経路はディスクリプタが
+	 * faceの値を定義する仕様のため従来どおりfalseで呼ぶ。
+	 */
+	public static void readTTF(List<FontSource> list, FontFace face, Type type, File ttfFile, int index,
+			Map<String, CMap> nameToCMap, boolean styleFromFile) throws IOException {
 		String fileName = ttfFile.getName();
 		if (fileName.endsWith(".pfa") || fileName.endsWith(".PFA") || fileName.endsWith(".pfb")
 				|| fileName.endsWith(".PFB") || fileName.endsWith(".f3b") || fileName.endsWith(".F3B")) {
@@ -101,8 +116,7 @@ public final class FontLoader {
 					if (face.fontFamily != null) {
 						tefont.setFontName(face.fontFamily.get(0).getName());
 					}
-					tefont.setItalic(face.fontStyle == Style.ITALIC);
-					tefont.setWeight(face.fontWeight);
+					applyStyle(tefont, face, styleFromFile);
 					if (i == 0) {
 						list.add(tefont);
 						if (tefont.getOpenTypeFont().getTable(Table.GSUB) == null) {
@@ -123,8 +137,7 @@ public final class FontLoader {
 					if (face.fontFamily != null) {
 						tifont.setFontName(face.fontFamily.get(0).getName());
 					}
-					tifont.setItalic(face.fontStyle == Style.ITALIC);
-					tifont.setWeight(face.fontWeight);
+					applyStyle(tifont, face, styleFromFile);
 					if (i == 0) {
 						list.add(tifont);
 						if (tifont.getOpenTypeFont().getTable(Table.GSUB) == null) {
@@ -358,6 +371,33 @@ public final class FontLoader {
 		SymbolicType1FontSource source = new SymbolicType1FontSource(font, toUnicodeFile);
 		LOG.fine("Core Symbol font: " + source);
 		return source;
+	}
+
+	/**
+	 * italic/weightを設定します。{@code styleFromFile}=trueならフォントの
+	 * OS/2から導出し(readTTFのjavadoc参照)、falseなら従来どおり
+	 * faceの宣言値を使います。
+	 */
+	private static void applyStyle(final net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource source, final FontFace face,
+			final boolean styleFromFile) {
+		boolean italic = face.fontStyle == Style.ITALIC;
+		Weight weight = face.fontWeight;
+		if (styleFromFile) {
+			final net.zamasoft.pdfg2d.font.table.Os2Table os2 = (net.zamasoft.pdfg2d.font.table.Os2Table) source
+					.getOpenTypeFont().getTable(Table.OS_2);
+			if (os2 != null) {
+				italic = (os2.fsSelection() & 0x01) != 0;
+				int wc = os2.usWeightClass();
+				if (wc >= 1 && wc <= 9) {
+					// 旧仕様の1〜9段階(usWeightClassのLEGACY値)
+					wc *= 100;
+				}
+				wc = (int) Math.max(100, Math.min(900, Math.round(wc / 100.0) * 100));
+				weight = Weight.valueOf("W_" + wc);
+			}
+		}
+		((AbstractFontSource) source).setItalic(italic);
+		((AbstractFontSource) source).setWeight(weight);
 	}
 
 	private static boolean parseItalic(String italic) {

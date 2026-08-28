@@ -263,6 +263,40 @@ public class PDFOutput extends FilterOutputStream {
 		this.buffFlush();
 	}
 
+	/** 行列係数の最低精度(小数桁)。{@link #writeRealCoefficient}参照。 */
+	private static final int COEFFICIENT_PRECISION = 6;
+
+	/**
+	 * Writes a transformation matrix coefficient (scale/shear) with high
+	 * precision, independent of the stream's coordinate precision.
+	 *
+	 * <p>
+	 * 係数の丸め誤差は座標値に<b>乗算</b>される。座標既定の小数2桁で
+	 * 係数を書くと(例: 0.375→0.38)、ページ反転を合成した平行移動項
+	 * (丸め前の係数×ページ寸法で計算される)と食い違い、拡大縮小された
+	 * 画像・SVGがページ寸法×誤差ぶん(A4で最大4pt超)ずれてクリップに
+	 * かかる——MDNのマスクアイコンが上に欠ける形で発覚(2026-08-27)。
+	 * 平行移動項の丸め誤差は加算されるだけ(最大0.005pt)なので従来precision
+	 * のままでよい。
+	 * </p>
+	 *
+	 * @param number the coefficient
+	 * @throws IOException if an I/O error occurs
+	 */
+	public void writeRealCoefficient(final double number) throws IOException {
+		final int savedPrecision = this.precision;
+		if (savedPrecision >= COEFFICIENT_PRECISION) {
+			this.writeRealExact(number);
+			return;
+		}
+		this.setPrecision(COEFFICIENT_PRECISION);
+		try {
+			this.writeRealExact(number);
+		} finally {
+			this.setPrecision(savedPrecision);
+		}
+	}
+
 	private void buffWriteReal(final double number) {
 		this.buffWriteReal(number, true);
 	}

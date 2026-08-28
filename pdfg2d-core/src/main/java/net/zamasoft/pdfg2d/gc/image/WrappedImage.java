@@ -26,4 +26,14 @@ public abstract class WrappedImage implements Image {
 	public Image getImage() {
 		return this.image;
 	}
+
+	/**
+	 * 固有寸法の種別は元画像へ委譲します(2026-08-27)。委譲しないと
+	 * 既定のSIZEになり、px→ptの{@code TransformedImage}で包まれた
+	 * viewBoxのみのSVGが背景描画で原寸扱いされる。
+	 */
+	@Override
+	public Intrinsic getIntrinsic() {
+		return this.image.getIntrinsic();
+	}
 }

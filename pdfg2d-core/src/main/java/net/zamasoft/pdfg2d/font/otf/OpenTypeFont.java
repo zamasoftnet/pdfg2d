@@ -102,7 +102,17 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		// once here so that shaping can apply them per pair.
 		this.ligatures = buildLigatures((GsubTable) ttfFont.getTable(Table.GSUB));
 		final var gpos = (GposTable) ttfFont.getTable(Table.GPOS);
-		final var kern = (gpos != null) ? gpos.collectKernPairPos() : List.<PairPos>of();
+		var kern = (gpos != null) ? gpos.collectKernPairPos() : List.<PairPos>of();
+		if (kern.isEmpty()) {
+			// GPOSのkern featureを持たない古いTrueTypeは、旧kernテーブル
+			// だけにペアを持つ(実例: Calibriは26,706ペアがkernのみ)。
+			// 読み捨てるとそれらのフォントだけカーニング無しになるため、
+			// 水平ペアをGPOSと同じ形で取り込む(2026-08-27)
+			final var kernTable = (net.zamasoft.pdfg2d.font.table.KernTable) ttfFont.getTable(Table.KERN);
+			if (kernTable != null) {
+				kern = kernTable.collectHorizontalPairPos();
+			}
+		}
 		this.kernPairs = kern.isEmpty() ? null : kern;
 
 		// Color glyphs (COLR/CPAL) — present only in color fonts.

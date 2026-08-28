@@ -221,11 +221,15 @@ final class FontCatalogBuilder {
 					}
 
 					for (int j = 0; j < numFonts; ++j) {
+						// ディレクトリ走査はfaceに宣言が無いため、italic/weightを
+						// ファイルのOS/2から導出する(FontLoader.readTTFのjavadoc参照)
 						if (types.indexOf("cid-identity") != -1) {
-							FontLoader.readTTF(list, face, FontLoader.Type.CID_IDENTITY, ttfFile, j, this.nameToCMap);
+							FontLoader.readTTF(list, face, FontLoader.Type.CID_IDENTITY, ttfFile, j, this.nameToCMap,
+									true);
 						}
 						if (types.indexOf("embedded") != -1) {
-							FontLoader.readTTF(list, face, FontLoader.Type.EMBEDDED, ttfFile, j, this.nameToCMap);
+							FontLoader.readTTF(list, face, FontLoader.Type.EMBEDDED, ttfFile, j, this.nameToCMap,
+									true);
 						}
 					}
 					if (this.fontIndex != null) {

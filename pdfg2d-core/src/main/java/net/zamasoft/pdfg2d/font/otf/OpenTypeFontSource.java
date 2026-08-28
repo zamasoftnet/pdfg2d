@@ -120,7 +120,11 @@ public class OpenTypeFontSource extends AbstractFontSource {
 			for (int i = 0; i < name.size(); ++i) {
 				final var record = name.get(i);
 				final short nameId = record.getNameId();
-				if (nameId == 1 || nameId == 3 || nameId == 4) {
+				// 16/17はtypographic family/subfamily(2026-08-27)。可変フォント
+				// の多くはlegacy family(1)が既定インスタンス名込み
+				// (例: Bitterのname1="Bitter Thin")で、16の"Bitter"を
+				// 拾わないと素のファミリ名で照合できない
+				if (nameId == 1 || nameId == 3 || nameId == 4 || nameId == 16) {
 					aliases.add(record.getRecordString());
 				} else if (nameId == 6) {
 					fontName = record.getRecordString();
