@@ -405,6 +405,25 @@ public interface GC {
 	public void drawImage(final Image image) throws GraphicsException;
 
 	/**
+	 * 現在の塗りで形をガウスぼかし付きで塗る(box-shadow/text-shadowのblur用)。
+	 * {@link Capability#GAUSSIAN_BLUR} に対応しない出力先では単に {@link #fill(Shape)} する。
+	 *
+	 * @param shape 塗る形
+	 * @param sigma ぼかしの標準偏差(ユーザー空間単位)
+	 */
+	public default void fillBlurred(final Shape shape, final double sigma) throws GraphicsException {
+		this.fill(shape);
+	}
+
+	/**
+	 * 画像(通常は {@link #createGroupImage} で描いた層)に効果を掛けて描く。
+	 * 対応しない出力先では効果を無視して {@link #drawImage(Image)} する。
+	 */
+	public default void drawImage(final Image image, final GroupEffects effects) throws GraphicsException {
+		this.drawImage(image);
+	}
+
+	/**
 	 * Draws text at the specified location.
 	 * 
 	 * @param text the text to draw

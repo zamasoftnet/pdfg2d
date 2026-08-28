@@ -24,6 +24,7 @@ import net.zamasoft.pdfg2d.gc.image.GroupImageGC;
 import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.image.util.TransformedImage;
 import net.zamasoft.pdfg2d.gc.paint.Color;
+import net.zamasoft.pdfg2d.gc.paint.ConicGradient;
 import net.zamasoft.pdfg2d.gc.paint.LinearGradient;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.paint.Pattern;
@@ -316,6 +317,11 @@ public class G2DGC implements GC {
 			}
 			case RadialGradient radialGradient -> {
 				awtPaint = G2DUtils.toAwtPaint(radialGradient);
+				at = null;
+			}
+			case ConicGradient conicGradient -> {
+				// TODO(2026-08-29) 厳密な円錐Paintへ置換する。暫定は先頭色。
+				awtPaint = G2DUtils.toAwtColor(conicGradient.colors()[0]);
 				at = null;
 			}
 		}

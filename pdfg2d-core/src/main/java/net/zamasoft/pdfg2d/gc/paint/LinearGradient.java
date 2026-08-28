@@ -9,7 +9,7 @@ import java.awt.geom.AffineTransform;
  * @since 1.0
  */
 public record LinearGradient(double x1, double y1, double x2, double y2, double[] fractions, Color[] colors,
-		AffineTransform transform) implements Paint {
+		AffineTransform transform, SpreadMethod spread) implements Paint {
 
 	/**
 	 * Creates a new LinearGradient.
@@ -24,6 +24,9 @@ public record LinearGradient(double x1, double y1, double x2, double y2, double[
 	 * @throws NullPointerException if colors, fractions, or transform is null
 	 */
 	public LinearGradient {
+		if (spread == null) {
+			spread = SpreadMethod.PAD;
+		}
 		if (colors == null) {
 			throw new NullPointerException("Colors cannnot be null.");
 		}
@@ -33,6 +36,12 @@ public record LinearGradient(double x1, double y1, double x2, double y2, double[
 		if (transform == null) {
 			throw new NullPointerException("Transform cannnot be null.");
 		}
+	}
+
+	/** 定義域外は端の色で埋める(PAD)。 */
+	public LinearGradient(final double x1, final double y1, final double x2, final double y2, final double[] fractions, final Color[] colors,
+			final AffineTransform transform) {
+		this(x1, y1, x2, y2, fractions, colors, transform, SpreadMethod.PAD);
 	}
 
 	@Override

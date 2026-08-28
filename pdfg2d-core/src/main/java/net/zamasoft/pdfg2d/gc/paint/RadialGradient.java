@@ -9,7 +9,7 @@ import java.awt.geom.AffineTransform;
  * @since 1.0
  */
 public record RadialGradient(double cx, double cy, double radius, double fx, double fy, double[] fractions,
-		Color[] colors, AffineTransform transform) implements Paint {
+		Color[] colors, AffineTransform transform, SpreadMethod spread) implements Paint {
 
 	/**
 	 * Creates a new RadialGradient.
@@ -24,7 +24,16 @@ public record RadialGradient(double cx, double cy, double radius, double fx, dou
 	 * @param transform the transform to apply
 	 */
 	public RadialGradient {
+		if (spread == null) {
+			spread = SpreadMethod.PAD;
+		}
 		// Default constructor
+	}
+
+	/** 定義域外は端の色で埋める(PAD)。 */
+	public RadialGradient(final double cx, final double cy, final double radius, final double fx, final double fy, final double[] fractions, final Color[] colors,
+			final AffineTransform transform) {
+		this(cx, cy, radius, fx, fy, fractions, colors, transform, SpreadMethod.PAD);
 	}
 
 	@Override
