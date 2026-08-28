@@ -38,6 +38,9 @@ public abstract class AbstractFontSource implements FontSource {
 
 	protected boolean isItalic = false;
 
+	/** 幅級(OS/2 usWidthClass 1..9)。索引復元・face宣言で上書きされる(2026-08-29)。 */
+	protected int widthClass = NORMAL_WIDTH_CLASS;
+
 	/**
 	 * Constructs a new AbstractFontSource.
 	 */
@@ -76,6 +79,21 @@ public abstract class AbstractFontSource implements FontSource {
 	@Override
 	public final Weight getWeight() {
 		return this.weight;
+	}
+
+	/**
+	 * 幅級を設定します(2026-08-29)。範囲外の値はOS/2の未定義値
+	 * (0や旧仕様の値)として通常幅に丸める。
+	 *
+	 * @param widthClass OS/2 usWidthClass
+	 */
+	public final void setWidthClass(final int widthClass) {
+		this.widthClass = widthClass >= 1 && widthClass <= 9 ? widthClass : NORMAL_WIDTH_CLASS;
+	}
+
+	@Override
+	public final int getWidthClass() {
+		return this.widthClass;
 	}
 
 	@Override

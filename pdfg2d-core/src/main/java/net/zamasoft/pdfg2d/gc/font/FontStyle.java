@@ -57,6 +57,16 @@ public interface FontStyle {
 	}
 
 	/**
+	 * 幅級(CSS {@code font-stretch}をOS/2 {@code usWidthClass}の1..9へ
+	 * 丸めた値、5=normal)を返します(2026-08-29)。既存実装は通常幅。
+	 *
+	 * @return 幅級 1..9
+	 */
+	public default int getWidthClass() {
+		return net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS;
+	}
+
+	/**
 	 * Returns the font style (e.g., normal, italic).
 	 * 
 	 * @return the font style

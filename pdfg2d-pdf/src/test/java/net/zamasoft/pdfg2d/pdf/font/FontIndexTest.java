@@ -67,6 +67,7 @@ public class FontIndexTest {
 			assertArrayEquals(a.getAliases(), b.getAliases());
 			assertEquals(a.isItalic(), b.isItalic());
 			assertEquals(a.getWeight(), b.getWeight());
+			assertEquals(a.getWidthClass(), b.getWidthClass());
 			assertEquals(a.getPanose(), b.getPanose());
 			assertEquals(a.getUnitsPerEm(), b.getUnitsPerEm());
 			assertEquals(a.getBBox(), b.getBBox());

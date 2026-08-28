@@ -47,6 +47,21 @@ public interface FontSource extends Serializable {
 	 */
 	public Weight getWeight();
 
+	/** OS/2 {@code usWidthClass}の通常幅(medium)。 */
+	public static final int NORMAL_WIDTH_CLASS = 5;
+
+	/**
+	 * 幅級(OpenType OS/2 {@code usWidthClass}、1=ultra-condensed〜
+	 * 9=ultra-expanded、5=normal)を返します(2026-08-29)。CSSの
+	 * {@code font-stretch}による書体選択に使う。OS/2表を持たない
+	 * ソース(Type1/CFF単体・AWT経由)は通常幅とみなす。
+	 *
+	 * @return 幅級 1..9
+	 */
+	public default int getWidthClass() {
+		return NORMAL_WIDTH_CLASS;
+	}
+
 	/**
 	 * The default units per em. CFF output is based on this unit count.
 	 */

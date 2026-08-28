@@ -83,6 +83,11 @@ public class FontSourceWrapper implements FontSource {
 	}
 
 	@Override
+	public int getWidthClass() {
+		return this.source.getWidthClass();
+	}
+
+	@Override
 	public short getXHeight() {
 		return this.source.getXHeight();
 	}

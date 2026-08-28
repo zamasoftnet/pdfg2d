@@ -60,8 +60,10 @@ public final class FontIndex {
 	 * 2: font-dir走査のitalic/weightがOS/2由来になった(2026-08-27、
 	 * FontLoader.readTTFのjavadoc参照)。旧索引はnormal/400固定の値を
 	 * 再生するため破棄して再構築する。
+	 * 3: 幅級(OS/2 usWidthClass)を記録(2026-08-29、font-stretchの
+	 * 書体選択)。レコードにwidthClassの1バイトを追加した。
 	 */
-	private static final int VERSION = 2;
+	private static final int VERSION = 3;
 
 	private static final int SUBTYPE_EMBEDDED = 0;
 	private static final int SUBTYPE_CID_IDENTITY = 1;
@@ -93,6 +95,8 @@ public final class FontIndex {
 		final String[] aliases;
 		final boolean italic;
 		final Weight weight;
+		/** OS/2 usWidthClass 1..9(2026-08-29)。 */
+		final int widthClass;
 		final Panose panose;
 		final short upm;
 		final BBox bbox;
@@ -101,9 +105,9 @@ public final class FontIndex {
 		final UvsCmapFormat uvsCmap;
 
 		SourceRecord(final int subtype, final Direction direction, final int ttcIndex, final String fontName,
-				final String[] aliases, final boolean italic, final Weight weight, final Panose panose,
-				final short upm, final BBox bbox, final short ascent, final short descent, final short spaceAdvance,
-				final GenericCmapFormat cmap, final UvsCmapFormat uvsCmap) {
+				final String[] aliases, final boolean italic, final Weight weight, final int widthClass,
+				final Panose panose, final short upm, final BBox bbox, final short ascent, final short descent,
+				final short spaceAdvance, final GenericCmapFormat cmap, final UvsCmapFormat uvsCmap) {
 			this.subtype = subtype;
 			this.direction = direction;
 			this.ttcIndex = ttcIndex;
@@ -111,6 +115,7 @@ public final class FontIndex {
 			this.aliases = aliases;
 			this.italic = italic;
 			this.weight = weight;
+			this.widthClass = widthClass;
 			this.panose = panose;
 			this.upm = upm;
 			this.bbox = bbox;
@@ -218,6 +223,7 @@ public final class FontIndex {
 		}
 		final boolean italic = in.readBoolean();
 		final Weight weight = Weight.values()[in.readUnsignedByte()];
+		final int widthClass = in.readUnsignedByte();
 		final byte[] p = new byte[12];
 		in.readFully(p);
 		final Panose panose = new Panose(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]);
@@ -229,8 +235,8 @@ public final class FontIndex {
 		final GenericCmapFormat cmap = cmapPool[in.readUnsignedShort()];
 		final int uvsIndex = in.readShort();
 		final UvsCmapFormat uvsCmap = uvsIndex < 0 ? null : uvsPool[uvsIndex];
-		return new SourceRecord(subtype, direction, ttcIndex, fontName, aliases, italic, weight, panose, upm, bbox,
-				ascent, descent, spaceAdvance, cmap, uvsCmap);
+		return new SourceRecord(subtype, direction, ttcIndex, fontName, aliases, italic, weight, widthClass, panose,
+				upm, bbox, ascent, descent, spaceAdvance, cmap, uvsCmap);
 	}
 
 	/**
@@ -249,7 +255,7 @@ public final class FontIndex {
 		}
 		final List<FontSource> sources = new ArrayList<>(entry.sources.size());
 		for (final SourceRecord r : entry.sources) {
-			sources.add(switch (r.subtype) {
+			final OpenTypeFontSource source = switch (r.subtype) {
 			case SUBTYPE_EMBEDDED -> new OpenTypeEmbeddedCIDFontSource(fontFile, r.ttcIndex, r.direction, r.upm,
 					r.bbox, r.fontName, r.aliases, r.italic, r.weight, r.panose, r.ascent, r.descent, r.spaceAdvance,
 					r.cmap, r.uvsCmap);
@@ -257,7 +263,10 @@ public final class FontIndex {
 					r.bbox, r.fontName, r.aliases, r.italic, r.weight, r.panose, r.ascent, r.descent, r.spaceAdvance,
 					r.cmap, r.uvsCmap);
 			default -> throw new IllegalStateException(String.valueOf(r.subtype));
-			});
+			};
+			// 幅級は復元コンストラクタの引数を増やさずsetterで戻す(2026-08-29)
+			source.setWidthClass(r.widthClass);
+			sources.add(source);
 		}
 		return sources;
 	}
@@ -290,7 +299,8 @@ public final class FontIndex {
 				return;
 			}
 			records.add(new SourceRecord(subtype, ot.getDirection(), ot.getIndex(), ot.getFontName(),
-					ot.getAliases(), ot.isItalic(), ot.getWeight(), ot.getPanose(), ot.getUnitsPerEm(), ot.getBBox(),
+					ot.getAliases(), ot.isItalic(), ot.getWeight(), ot.getWidthClass(), ot.getPanose(),
+					ot.getUnitsPerEm(), ot.getBBox(),
 					ot.getAscent(), ot.getDescent(), ot.getSpaceAdvance(), ot.getCmapFormat(),
 					ot.getUvsCmapFormat()));
 		}
@@ -412,6 +422,7 @@ public final class FontIndex {
 		}
 		out.writeBoolean(r.italic);
 		out.writeByte(r.weight.ordinal());
+		out.writeByte(r.widthClass);
 		out.writeByte(r.panose.familyClassId());
 		out.writeByte(r.panose.familySubclass());
 		out.writeByte(r.panose.familyType());

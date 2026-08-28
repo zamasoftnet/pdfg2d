@@ -19,6 +19,12 @@ public class FontFace {
 	public FontFamilyList fontFamily = null;
 	public Weight fontWeight = Weight.W_400;
 	public Style fontStyle = Style.NORMAL;
+	/**
+	 * {@code font-stretch}ディスクリプタの幅級(OS/2 usWidthClass 1..9、
+	 * 5=normal、2026-08-29)。@font-face経路ではファイルのOS/2でなく
+	 * この宣言値が書体の幅級になる(weight/styleと同じ扱い)。
+	 */
+	public int widthClass = net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS;
 	public UnicodeRangeList unicodeRange = null;
 	public Panose panose = null;
 	public String cmap = null, vcmap = null;
@@ -33,7 +39,8 @@ public class FontFace {
 	@Override
 	public String toString() {
 		return "src=" + this.src + "/local=" + this.local + "/index=" + this.index + "/fontFamily=" + this.fontFamily
-				+ "/fontWeight=" + this.fontWeight + "/fontStyle=" + this.fontStyle + "/unicodeRange="
+				+ "/fontWeight=" + this.fontWeight + "/fontStyle=" + this.fontStyle + "/widthClass=" + this.widthClass
+				+ "/unicodeRange="
 				+ this.unicodeRange + "/panose=" + this.panose + "/cmap=" + this.cmap + "/vcmap=" + this.vcmap;
 	}
 }

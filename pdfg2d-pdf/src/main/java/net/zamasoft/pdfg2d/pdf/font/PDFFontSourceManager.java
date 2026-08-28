@@ -63,10 +63,11 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 	 */
 	protected record SelectionKey(net.zamasoft.pdfg2d.gc.font.FontFamilyList family, FontStyle.Weight weight,
 			FontStyle.Style style, FontStyle.Direction direction, FontStyle.TextOrientation textOrientation,
-			net.zamasoft.pdfg2d.gc.font.FontPolicyList policy) {
+			net.zamasoft.pdfg2d.gc.font.FontPolicyList policy, int widthClass) {
 		static SelectionKey of(final FontStyle fontStyle) {
 			return new SelectionKey(fontStyle.getFamily(), fontStyle.getWeight(), fontStyle.getStyle(),
-					fontStyle.getDirection(), fontStyle.getTextOrientation(), fontStyle.getPolicy());
+					fontStyle.getDirection(), fontStyle.getTextOrientation(), fontStyle.getPolicy(),
+					fontStyle.getWidthClass());
 		}
 	}
 
@@ -188,6 +189,7 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 					wface.fontFamily = face.fontFamily;
 					wface.fontWeight = (net.zamasoft.pdfg2d.gc.font.FontStyle.Weight) entry[1];
 					wface.fontStyle = face.fontStyle;
+					wface.widthClass = face.widthClass;
 					wface.unicodeRange = face.unicodeRange;
 					wface.panose = face.panose;
 					wface.cmap = face.cmap;
@@ -470,6 +472,13 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				int delta = Math.abs(font.getWeight().w - weight.w);
 				order |= (0xF & ((1000 - delta) / 100));
 
+				// 幅級(font-stretch、2026-08-29)。italic/weightが同点の書体の
+				// 中から幅級の近いものを選ぶ。順序はcss-fonts-4 §5.2 step 1:
+				// 要求が通常幅以下なら狭い側を(近い順に)全部先に、次に広い側。
+				// 要求が通常幅より広ければその逆。5ビット(罰点0..16)
+				order <<= 5;
+				order |= 31 - widthPenalty(fontStyle.getWidthClass(), font.getWidthClass());
+
 				// Oblique has lower priority since it can use transformation
 				order <<= 4;
 				if (style == Style.OBLIQUE) {
@@ -489,6 +498,19 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				}
 			}
 		}
+	}
+
+	/**
+	 * 要求幅級{@code want}に対する書体幅級{@code have}の罰点(0=一致)。
+	 * 好ましい側(want≤5なら狭い側、want>5なら広い側)は距離そのもの
+	 * (0..8)、反対側は8+距離(9..16)で、好ましい側のどの書体も反対側
+	 * より先に選ばれる(css-fonts-4 §5.2 step 1、2026-08-29)。
+	 */
+	static int widthPenalty(final int want, final int have) {
+		final boolean preferred = want <= net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS ? have <= want
+				: have >= want;
+		final int distance = Math.abs(want - have);
+		return preferred ? distance : 8 + distance;
 	}
 
 	private static final Comparator<Object[]> FONT_COMP = new Comparator<Object[]>() {

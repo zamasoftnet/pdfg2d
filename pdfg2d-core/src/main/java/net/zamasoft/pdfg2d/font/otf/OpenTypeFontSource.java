@@ -142,6 +142,8 @@ public class OpenTypeFontSource extends AbstractFontSource {
 			final var os2 = (Os2Table) ttFont.getTable(Table.OS_2);
 			final var weight = TextUtils.decodeFontWeight((short) os2.getWeightClass());
 			this.setWeight(weight);
+			// font-stretchの書体選択用(2026-08-29)。範囲外はsetter側で通常幅へ
+			this.setWidthClass(os2.getWidthClass());
 			final short cFamilyClass = os2.getFamilyClass();
 			final var panose = os2.getPanose();
 			this.panose = new Panose(cFamilyClass, panose.code());

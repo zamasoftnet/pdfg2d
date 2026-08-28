@@ -18,7 +18,8 @@ public record FontStyleImpl(
 		FontFeatureSet features,
 		boolean synthesisWeight,
 		boolean synthesisStyle,
-		TextOrientation textOrientation) implements FontStyle, Serializable {
+		TextOrientation textOrientation,
+		int widthClass) implements FontStyle, Serializable {
 
 	public FontStyleImpl {
 		if (features == null) {
@@ -27,6 +28,17 @@ public record FontStyleImpl(
 		if (textOrientation == null) {
 			textOrientation = TextOrientation.MIXED;
 		}
+		if (widthClass < 1 || widthClass > 9) {
+			widthClass = net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS;
+		}
+	}
+
+	/** font-stretch導入前(2026-08-29)と同じ通常幅を使う互換コンストラクタ。 */
+	public FontStyleImpl(final FontFamilyList families, final double size, final Style style, final Weight weight,
+			final Direction direction, final FontPolicyList policy, final FontFeatureSet features,
+			final boolean synthesisWeight, final boolean synthesisStyle, final TextOrientation textOrientation) {
+		this(families, size, style, weight, direction, policy, features, synthesisWeight, synthesisStyle,
+				textOrientation, net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS);
 	}
 
 	/** text-orientation導入前と同じmixedを使う互換コンストラクタ。 */
@@ -100,10 +112,15 @@ public record FontStyleImpl(
 	}
 
 	@Override
+	public int getWidthClass() {
+		return this.widthClass;
+	}
+
+	@Override
 	public String toString() {
 		return "FontStyleImpl[families=" + this.families + ", size=" + this.size + ", style=" + this.style
 				+ ", weight=" + this.weight + ", direction=" + this.direction + ", textOrientation="
-				+ this.textOrientation + ", policy=" + this.policy
+				+ this.textOrientation + ", widthClass=" + this.widthClass + ", policy=" + this.policy
 				+ ", features=" + this.features + "]";
 	}
 }

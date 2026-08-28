@@ -58,7 +58,7 @@ public final class FontUtils {
 	public static boolean equals(final FontStyle a, final FontStyle b) {
 		return a.getFamily().equals(b.getFamily()) && a.getSize() == b.getSize() && a.getStyle() == b.getStyle()
 				&& a.getWeight() == b.getWeight() && a.getDirection() == b.getDirection()
-				&& a.getTextOrientation() == b.getTextOrientation()
+				&& a.getTextOrientation() == b.getTextOrientation() && a.getWidthClass() == b.getWidthClass()
 				&& a.getPolicy().equals(b.getPolicy()) && a.getFeatures().equals(b.getFeatures());
 	}
 
@@ -76,6 +76,7 @@ public final class FontUtils {
 		h = 31 * h + fontStyle.getWeight().w;
 		h = 31 * h + fontStyle.getDirection().ordinal();
 		h = 31 * h + fontStyle.getTextOrientation().ordinal();
+		h = 31 * h + fontStyle.getWidthClass();
 		h = 31 * h + fontStyle.getPolicy().hashCode();
 		h = 31 * h + fontStyle.getFeatures().hashCode();
 		return h;

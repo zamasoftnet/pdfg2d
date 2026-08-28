@@ -163,6 +163,7 @@ public final class FontLoader {
 					}
 					ckfont.setItalic(face.fontStyle == Style.ITALIC);
 					ckfont.setWeight(face.fontWeight);
+					ckfont.setWidthClass(face.widthClass);
 					list.add(ckfont);
 					if (vcmapObj == null) {
 						break;
@@ -225,6 +226,7 @@ public final class FontLoader {
 
 		((AbstractFontSource) source).setItalic(face.fontStyle == Style.ITALIC);
 		((AbstractFontSource) source).setWeight(face.fontWeight);
+		((AbstractFontSource) source).setWidthClass(face.widthClass);
 
 		LOG.fine("System font: " + source);
 		return source;
@@ -304,6 +306,7 @@ public final class FontLoader {
 
 			source.setItalic(face.fontStyle == Style.ITALIC);
 			source.setWeight(face.fontWeight);
+			source.setWidthClass(face.widthClass);
 
 			LOG.fine("CID-Keyed font: " + source);
 			result[k] = source;
@@ -374,14 +377,20 @@ public final class FontLoader {
 	}
 
 	/**
-	 * italic/weightを設定します。{@code styleFromFile}=trueならフォントの
+	 * italic/weight/幅級を設定します。{@code styleFromFile}=trueならフォントの
 	 * OS/2から導出し(readTTFのjavadoc参照)、falseなら従来どおり
-	 * faceの宣言値を使います。
+	 * faceの宣言値を使います。幅級(usWidthClass、2026-08-29)は
+	 * OpenTypeFontSourceの構築時にOS/2から読まれているので、
+	 * styleFromFileではそのまま残し、@font-face経路ではディスクリプタ
+	 * (face.widthClass)で置き換える。
 	 */
 	private static void applyStyle(final net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource source, final FontFace face,
 			final boolean styleFromFile) {
 		boolean italic = face.fontStyle == Style.ITALIC;
 		Weight weight = face.fontWeight;
+		if (!styleFromFile) {
+			((AbstractFontSource) source).setWidthClass(face.widthClass);
+		}
 		if (styleFromFile) {
 			final net.zamasoft.pdfg2d.font.table.Os2Table os2 = (net.zamasoft.pdfg2d.font.table.Os2Table) source
 					.getOpenTypeFont().getTable(Table.OS_2);
