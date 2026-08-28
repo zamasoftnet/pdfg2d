@@ -249,7 +249,7 @@ final class PaintResources {
 					throw new GraphicsException(e);
 				}
 			}
-			case COLOR -> null;
+			case COLOR, CONIC_GRADIENT -> null; // 円錐はPDFに無い(利用側がCapabilityで回避)
 		};
 	}
 

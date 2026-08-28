@@ -1173,7 +1173,7 @@ public class PDFGC implements GC, Closeable {
 					}
 					out.writeStrokeColor((Color) this.strokePaint);
 				}
-				case PATTERN, LINEAR_GRADIENT, RADIAL_GRADIENT -> {
+				case PATTERN, LINEAR_GRADIENT, RADIAL_GRADIENT, CONIC_GRADIENT -> {
 					final var name = this.getPaintName(this.strokePaint);
 					if (name != null) {
 						out.writeName("Pattern");
@@ -1196,7 +1196,7 @@ public class PDFGC implements GC, Closeable {
 					}
 					out.writeFillColor((Color) this.fillPaint);
 				}
-				case PATTERN, LINEAR_GRADIENT, RADIAL_GRADIENT -> {
+				case PATTERN, LINEAR_GRADIENT, RADIAL_GRADIENT, CONIC_GRADIENT -> {
 					final var name = this.getPaintName(this.fillPaint);
 					if (name != null) {
 						out.writeName("Pattern");
