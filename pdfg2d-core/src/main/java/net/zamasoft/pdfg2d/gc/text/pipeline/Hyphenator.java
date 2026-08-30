@@ -1,5 +1,13 @@
 package net.zamasoft.pdfg2d.gc.text.pipeline;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -10,12 +18,29 @@ import java.util.Map;
  * {@code ".ph4"}), where digits are inter-letter priorities and {@code .}
  * marks a word boundary.
  *
+ * <p>
+ * A pattern set only works as a whole: an odd value permits a break only
+ * because even values in longer patterns forbid one everywhere the break would
+ * be wrong. A subset is therefore not a partial answer but a wrong one, so
+ * {@link #english()} loads the complete published pattern file rather than a
+ * hand-picked selection.
+ * </p>
+ *
  * @author MIYABE Tatsuhiko
  * @since 1.3
  */
 public final class Hyphenator {
 
 	private final Map<String, byte[]> patterns = new HashMap<>();
+
+	/**
+	 * Words whose break points are listed explicitly. An entry overrides the
+	 * patterns entirely, and an empty array means the word is never broken.
+	 */
+	private final Map<String, int[]> exceptions = new HashMap<>();
+
+	/** Length of the longest pattern key, bounding the match window. */
+	private int maxPatternLength = 0;
 
 	/** Minimum letters to keep before the first and after the last break. */
 	private int leftMin = 2;
@@ -61,8 +86,36 @@ public final class Hyphenator {
 			}
 		}
 		final var key = letters.toString();
-		this.patterns.put(key, java.util.Arrays.copyOf(values, key.length() + 1));
+		this.patterns.put(key, Arrays.copyOf(values, key.length() + 1));
+		if (key.length() > this.maxPatternLength) {
+			this.maxPatternLength = key.length();
+		}
 	}
+
+	/**
+	 * Records a word whose breaks are given explicitly, in the
+	 * {@code \hyphenation} form ({@code "as-so-ciate"}). A word listed with no
+	 * hyphen at all is never broken.
+	 */
+	private void addException(final String spelled) {
+		final var word = new StringBuilder();
+		final var offsets = new ArrayList<Integer>();
+		for (var i = 0; i < spelled.length(); ++i) {
+			final var c = spelled.charAt(i);
+			if (c == '-') {
+				offsets.add(word.length());
+			} else {
+				word.append(c);
+			}
+		}
+		final var breaks = new int[offsets.size()];
+		for (var i = 0; i < breaks.length; ++i) {
+			breaks[i] = offsets.get(i);
+		}
+		this.exceptions.put(word.toString().toLowerCase(), breaks);
+	}
+
+	private static final int[] NO_BREAKS = new int[0];
 
 	/**
 	 * Returns the break offsets within {@code word} (indices before which a
@@ -72,14 +125,21 @@ public final class Hyphenator {
 	 * @return ascending break offsets in {@code [leftMin, len-rightMin]}
 	 */
 	public int[] hyphenate(final String word) {
-		final var lower = ("." + word.toLowerCase() + ".");
-		final var n = lower.length();
+		final var lower = word.toLowerCase();
+		final var listed = this.exceptions.get(lower);
+		if (listed != null) {
+			return listed.length == 0 ? NO_BREAKS : listed.clone();
+		}
+		final var dotted = "." + lower + ".";
+		final var n = dotted.length();
 		// Priority between original letters; index j is between word[j-1],word[j].
 		final var priorities = new int[word.length() + 1];
 		for (var i = 0; i < n; ++i) {
-			for (var j = i + 1; j <= n; ++j) {
-				final var sub = lower.substring(i, j);
-				final var values = this.patterns.get(sub);
+			// No pattern is longer than maxPatternLength, so there is nothing to
+			// gain from asking the map about a longer substring.
+			final var limit = Math.min(n, i + this.maxPatternLength);
+			for (var j = i + 1; j <= limit; ++j) {
+				final var values = this.patterns.get(dotted.substring(i, j));
 				if (values == null) {
 					continue;
 				}
@@ -95,7 +155,7 @@ public final class Hyphenator {
 				}
 			}
 		}
-		final var breaks = new java.util.ArrayList<Integer>();
+		final var breaks = new ArrayList<Integer>();
 		for (var off = this.leftMin; off <= word.length() - this.rightMin; ++off) {
 			if ((priorities[off] & 1) != 0) {
 				breaks.add(off);
@@ -109,39 +169,107 @@ public final class Hyphenator {
 	}
 
 	/**
-	 * A small built-in English pattern set (a subset of hyphen-en). Enough to
-	 * hyphenate common words; production use should load a full pattern file.
+	 * Reads a hyphenator from a TeX pattern file: the tokens inside
+	 * {@code \patterns{...}} become patterns and those inside
+	 * {@code \hyphenation{...}} become explicit exceptions. Everything from
+	 * {@code %} to the end of a line is a comment.
+	 */
+	static Hyphenator readTex(final InputStream in) throws IOException {
+		final var hyphenator = new Hyphenator();
+		// 0 = outside any group, 1 = inside \patterns, 2 = inside \hyphenation.
+		var group = 0;
+		try (var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.US_ASCII))) {
+			String line;
+			while ((line = reader.readLine()) != null) {
+				final var comment = line.indexOf('%');
+				if (comment >= 0) {
+					line = line.substring(0, comment);
+				}
+				line = line.trim();
+				if (line.isEmpty()) {
+					continue;
+				}
+				if (line.startsWith("\\patterns{")) {
+					group = 1;
+					line = line.substring("\\patterns{".length()).trim();
+				} else if (line.startsWith("\\hyphenation{")) {
+					group = 2;
+					line = line.substring("\\hyphenation{".length()).trim();
+				}
+				if (line.startsWith("}")) {
+					group = 0;
+					continue;
+				}
+				if (group == 0 || line.isEmpty()) {
+					continue;
+				}
+				for (final var token : line.split("\\s+")) {
+					if (token.isEmpty() || token.charAt(0) == '\\' || "}".equals(token)) {
+						continue;
+					}
+					if (group == 1) {
+						hyphenator.addPattern(token);
+					} else {
+						hyphenator.addException(token);
+					}
+				}
+			}
+		}
+		return hyphenator;
+	}
+
+	/**
+	 * The American English pattern file bundled with this class:
+	 * {@code hyph-en-us.tex} from the hyph-utf8 package (Copyright (C) 1990,
+	 * 2004, 2005 Gerard D.C. Kuiken), which carries Knuth's original
+	 * {@code hyphen.tex} patterns plus the corrections from the TUGboat
+	 * Hyphenation Exception Log. Its notice permits copying and distribution in
+	 * any medium provided the copyright notice and that notice are preserved,
+	 * so the file is bundled unmodified with its header comments.
+	 */
+	private static final String ENGLISH_PATTERNS = "hyph-en-us.tex";
+
+	private static final class EnglishHolder {
+		static final Hyphenator INSTANCE = load();
+
+		private static Hyphenator load() {
+			try (var in = Hyphenator.class.getResourceAsStream(ENGLISH_PATTERNS)) {
+				if (in == null) {
+					throw new IllegalStateException("Missing hyphenation patterns: " + ENGLISH_PATTERNS);
+				}
+				return readTex(in);
+			} catch (final IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		}
+	}
+
+	/**
+	 * The American English hyphenator, with the left and right minimums of 2 and
+	 * 3 the pattern file is designed for. The instance is built once and shared;
+	 * it is immutable in use.
 	 *
 	 * @return an English hyphenator
 	 */
 	public static Hyphenator english() {
-		return new Hyphenator(
-				".ach4", ".ad4der", ".af1t", ".al3t", ".am5at", ".an5c", ".ang4", ".ani5m",
-				"a1b", "ab3i", "2a1c", "ach4", "a1d", "1al", "al3i", "a1m", "an4c", "an5d",
-				"1an", "a1p", "a1r", "ar3d", "a1t", "at5t", "1au", "2a1v", "1aw", "1ax", "1ba",
-				"1be", "be5r", "1bi", "1bl", "b2l", "1bo", "1br", "b2r", "1bu", "1ca", "1ce",
-				"1ch", "c2h", "1ci", "1cl", "c2l", "1co", "1cr", "c2r", "1cu", "1cy", "1da",
-				"1de", "de2s", "1di", "di4s", "1do", "1dr", "d2r", "1du", "1e2", "e1a", "1ea",
-				" e5act", "ea4t", "e1b", "e3ch", "ec4t", "e1d", "e1f", "eg4", "e1l", "el5d",
-				"e1m", "e1n", "en5t", "e1o", "e1p", "e1r", "er3s", "e1s", "es4c", "e1t", "e1v",
-				"e1w", "e1x", "1ex", "1fa", "1fe", "1fi", "1fl", "f2l", "1fo", "1fr", "f2r",
-				"1fu", "1ga", "1ge", "1gh", "g2h", "1gi", "1gl", "g2l", "1go", "1gr", "g2r",
-				"1gu", "1ha", "1he", "1hi", "1ho", "1hu", "1hy", "1ia", "i1b", "i1c", "1id",
-				"i1d", "ig4", "i1f", "i1g", "il4", "1im", "i1m", "1in", "i1n", "1io", "i1o",
-				"i1p", "i1r", "i1s", "is4c", "i1t", "i1u", "i1v", "iv3i", "i1z", "1ja", "1je",
-				"1jo", "1ju", "1ka", "1ke", "1ki", "1la", "1le", "1li", "1lo", "1lu", "1ly",
-				"1ma", "1me", "3men", "1mi", "1mo", "1mu", "1na", "1ne", "1ni", "1no", "1nu",
-				"1ny", "1oa", "o1b", "1ob", "o1c", "oc5t", "o1d", "o1e", "o1f", "o1g", "oi3",
-				"o1i", "o1l", "1om", "o1m", "1on", "o1n", "o1o", "o1p", "o1r", "or5m", "o1s",
-				"o1t", "ot5t", "o1u", "o1v", "1pa", "1pe", "1ph", "p2h", "1pi", "1pl", "p2l",
-				"1po", "1pr", "p2r", "1pu", "1qu", "q2u", "1ra", "1re", "re4s", "1ri", "1ro",
-				"1ru", "1sa", "1sc", "s2c", "1se", "1sh", "s2h", "1si", "1sl", "s2l", "1so",
-				"1sp", "s2p", "1st", "s2t", "1su", "1sw", "1sy", "1ta", "1te", "1th", "t2h",
-				"1ti", "1to", "1tr", "t2r", "1tu", "1ty", "1ua", "u1b", "u1c", "u1d", "u1e",
-				"u1f", "u1g", "u1i", "u1l", "u1m", "u1n", "un1", "u1p", "u1r", "u1s", "us5t",
-				"u1t", "u1v", "1va", "1ve", "1vi", "1vo", "1wa", "1we", "1wh", "1wi", "1wo",
-				"1ya", "1ye", "1yo", "1za", "1ze", "1zi", "1zo", "tion5", "4tion", "na4t5i",
-				"hy3phen", "phen5a", "com5pu", "put5er", "sys5tem", "ex1am", "am5ple",
-				"al5go", "rithm5", "lay4o5ut", "typo5graph");
+		return EnglishHolder.INSTANCE;
+	}
+
+	/**
+	 * Returns the number of loaded patterns.
+	 *
+	 * @return the pattern count
+	 */
+	public int getPatternCount() {
+		return this.patterns.size();
+	}
+
+	/**
+	 * Returns the number of words with explicitly listed breaks.
+	 *
+	 * @return the exception count
+	 */
+	public int getExceptionCount() {
+		return this.exceptions.size();
 	}
 }
