@@ -32,6 +32,7 @@ import net.zamasoft.pdfg2d.gc.image.util.TransformedImage;
 import net.zamasoft.pdfg2d.gc.paint.BlendMode;
 import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.pdfg2d.gc.paint.ConicGradient;
+import net.zamasoft.pdfg2d.gc.paint.GrayColor;
 import net.zamasoft.pdfg2d.gc.paint.LinearGradient;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.paint.Pattern;
@@ -161,9 +162,16 @@ public class G2DGC implements GC {
 
 	protected boolean drewAnything = false;
 
-	protected Paint strokePaint;
+	/**
+	 * 既定は黒。{@link net.zamasoft.pdfg2d.pdf.gc.PDFGC}と同じ契約で、
+	 * 明示的に設定される前でも{@code null}を返さない。状態を保存して元へ戻す
+	 * 呼び出し側(擬似ボールドの{@code FontUtils.drawText}など)は、読み出した値を
+	 * そのまま{@code setStrokePaint}へ渡すため、{@code null}だと復元で落ちる。
+	 */
+	protected Paint strokePaint = GrayColor.BLACK;
 
-	protected Paint fillPaint;
+	/** 既定は黒。理由は{@link #strokePaint}と同じ。 */
+	protected Paint fillPaint = GrayColor.BLACK;
 
 	protected java.awt.Paint awtFillPaint;
 
@@ -296,7 +304,12 @@ public class G2DGC implements GC {
 	}
 
 	public double[] getLinePattern() {
+		// BasicStroke returns null for a solid line, which is the normal case.
+		// setLinePattern stores STROKE_SOLID as null, so map it back here.
 		float[] da = ((BasicStroke) this.g.getStroke()).getDashArray();
+		if (da == null) {
+			return GC.STROKE_SOLID;
+		}
 		double[] pattern = new double[da.length];
 		for (int i = 0; i < da.length; ++i) {
 			pattern[i] = da[i];
