@@ -24,6 +24,14 @@ public class TextImpl extends AbstractText implements Serializable {
 
 	private int charOffset;
 
+	/**
+	 * True when this run is the hyphen a layout engine materializes at a line
+	 * end for a break inside a word ({@code SoftHyphen}). Such a run is only
+	 * valid as the last visible content of its line, so a consumer can detect
+	 * and drop one that ends up anywhere else.
+	 */
+	public boolean materializedHyphen = false;
+
 	/** The character buffer. */
 	public char[] chars;
 
