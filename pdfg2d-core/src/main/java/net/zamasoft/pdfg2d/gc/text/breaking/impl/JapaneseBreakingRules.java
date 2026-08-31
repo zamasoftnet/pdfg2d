@@ -23,6 +23,16 @@ public class JapaneseBreakingRules implements TextBreakingRules {
 	 */
 	private static final String JLREQ_CLOSING_BRACKETS = "’”）〕］｝〉》」』】⦆〙〗»〟";
 
+	/**
+	 * The {@code Pf} quotation marks of cl-02. They close a quotation, but they
+	 * are also the apostrophe: between letters, {@code Darcy’s} is one word and
+	 * must not break after the mark (UAX #14 LB19). The ASCII branch of
+	 * {@link #requiresAfter(char)} already does this for {@code U+0027}, because
+	 * every ASCII letter and mark there requires a letter after it; these live
+	 * above {@code U+00FF} and fell through to "no character required".
+	 */
+	private static final String JLREQ_CLOSING_QUOTES = "’”»›";
+
 	private static final CharacterSet ASCII = new BitSetCharacterSet(
 			"#$%&*+-/0123456789=@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\^_abcdefghijklmnopqrstuvwxyz|~");
 
@@ -134,6 +144,11 @@ public class JapaneseBreakingRules implements TextBreakingRules {
 			// Dash, etc.
 			if (c == '─' || c == '“') {
 				return CharacterSet.ALL;
+			}
+			if (JLREQ_CLOSING_QUOTES.indexOf(c) != -1) {
+				// Apostrophe when a letter follows; a closing quote otherwise.
+				// A space, a bracket or a kanji after the mark still breaks.
+				return LATIN_OR_DIGIT;
 			}
 			// JLREQ 3.1.10: 分離禁止文字(cl-08)の同字連続は分割禁止
 			// (2倍ダーシ——・2倍リーダ……・‥‥)。―(U+2015)は同注記の
