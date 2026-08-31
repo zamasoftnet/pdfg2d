@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -58,6 +59,8 @@ final class FontCatalogBuilder {
 	final Map<String, Object> nameToFonts = new HashMap<>();
 
 	final Map<String, FontFamilyList> genericToFamily = new HashMap<>();
+
+	final Map<String, List<PDFFontSourceManager.GenericFamily>> genericToLangFamily = new HashMap<>();
 
 	final Collection<FontSource> allFonts = new ArrayList<>();
 
@@ -318,7 +321,26 @@ final class FontCatalogBuilder {
 
 	/** {@code <generic-fonts>}の1エントリを登録します。 */
 	void genericFamily(final String genericFamily, final FontFamilyList family) {
-		this.genericToFamily.put(genericFamily, family);
+		this.genericFamily(genericFamily, null, family);
+	}
+
+	/**
+	 * {@code <generic-fonts>}の言語別エントリを文書順で登録します。
+	 * {@code lang}は空白区切りで複数のBCP-47タグを並べられます
+	 * ({@code lang="zh-Hant zh-TW zh-MO"})——地域だけのタグ({@code zh-TW})は
+	 * スクリプト付きのタグ({@code zh-Hant})と機械的には結び付かないため、
+	 * どのタグを同じ連鎖へ寄せるかは設定側で明示します。
+	 */
+	void genericFamily(final String genericFamily, final String lang, final FontFamilyList family) {
+		if (lang == null || lang.isBlank()) {
+			this.genericToFamily.put(genericFamily, family);
+			return;
+		}
+		for (final String tag : lang.trim().split("\\s+")) {
+			final Locale locale = Locale.forLanguageTag(tag);
+			this.genericToLangFamily.computeIfAbsent(genericFamily, key -> new ArrayList<>())
+					.add(new PDFFontSourceManager.GenericFamily(locale, family));
+		}
 	}
 
 	/** フォントを名前索引と全フォント一覧へ登録します。 */

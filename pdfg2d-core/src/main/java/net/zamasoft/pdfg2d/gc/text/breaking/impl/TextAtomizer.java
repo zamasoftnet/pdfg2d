@@ -90,6 +90,22 @@ public class TextAtomizer implements FilterGlyphHandler {
 				}
 				this.prevChar = '\u200B';
 			}
+			case TextControl.HYPHEN -> {
+				// A conditional break inside a word: the unit ends *after* the
+				// control, because breaking there is what materializes the hyphen.
+				// Ending it before would offer a break in front of the hyphen and
+				// split the word with nothing to show for it.
+				if (this.beforeControl != null) {
+					this.glyphHandler.control(this.beforeControl);
+					this.beforeControl = null;
+				}
+				this.glyphHandler.control(control);
+				this.internalFlush();
+				// Word joiner: the characters around the hyphen are one word, so
+				// the next glyph must not open a second opportunity by itself.
+				this.prevChar = '\u2060';
+				return;
+			}
 			case TextControl.CONTINUE_BEFORE -> {
 				// Treat as previous character (attach to following string <span>...)
 				if (this.prevChar == '\u200B') {

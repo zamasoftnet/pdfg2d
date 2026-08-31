@@ -40,7 +40,7 @@ public abstract class Control extends TextControl {
 	public abstract double getDescent();
 
 	@Override
-	public final String getString() {
+	public String getString() {
 		return BREAK;
 	}
 

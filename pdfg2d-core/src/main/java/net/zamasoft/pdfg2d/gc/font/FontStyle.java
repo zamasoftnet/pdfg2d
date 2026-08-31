@@ -8,6 +8,17 @@ package net.zamasoft.pdfg2d.gc.font;
  */
 public interface FontStyle {
 	/**
+	 * Returns the content language used for language-sensitive font selection.
+	 * Existing implementations without language information keep the legacy
+	 * selection behaviour.
+	 *
+	 * @return the content language, or {@code null} if unspecified
+	 */
+	public default java.util.Locale getLang() {
+		return null;
+	}
+
+	/**
 	 * Returns the writing direction.
 	 * 
 	 * @return the direction

@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import net.zamasoft.pdfg2d.font.FontSource;
@@ -50,24 +51,29 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 
 	protected Map<String, FontFamilyList> genericToFamily = new HashMap<String, FontFamilyList>();
 
+	protected record GenericFamily(Locale lang, FontFamilyList family) {
+	}
+
+	protected Map<String, List<GenericFamily>> genericToLangFamily = new HashMap<String, List<GenericFamily>>();
+
 	protected Map<URI, File> uriToFile = new HashMap<URI, File>();
 
 	protected Collection<FontSource> allFonts = new ArrayList<FontSource>();
 
 	/**
-	 * フォント選択はfamily/weight/style/direction/text-orientation/policyだけを読む(size・
+	 * フォント選択はfamily/weight/style/direction/text-orientation/policy/width/langを読む(size・
 	 * OpenType featureは整形の話で選択に関与しない)ため、キャッシュキーは
-	 * その5成分に限定する——FontStyle全体をキーにするとfeature集合や
+	 * その成分に限定する——FontStyle全体をキーにするとfeature集合や
 	 * サイズ違いだけの大量のstyleで無駄に分裂する(2026-07-31、
 	 * consult-codex-2026-07-31-font-features.txt §3.8)。
 	 */
 	protected record SelectionKey(net.zamasoft.pdfg2d.gc.font.FontFamilyList family, FontStyle.Weight weight,
 			FontStyle.Style style, FontStyle.Direction direction, FontStyle.TextOrientation textOrientation,
-			net.zamasoft.pdfg2d.gc.font.FontPolicyList policy, int widthClass) {
+			net.zamasoft.pdfg2d.gc.font.FontPolicyList policy, int widthClass, Locale lang) {
 		static SelectionKey of(final FontStyle fontStyle) {
 			return new SelectionKey(fontStyle.getFamily(), fontStyle.getWeight(), fontStyle.getStyle(),
 					fontStyle.getDirection(), fontStyle.getTextOrientation(), fontStyle.getPolicy(),
-					fontStyle.getWidthClass());
+					fontStyle.getWidthClass(), fontStyle.getLang());
 		}
 	}
 
@@ -343,6 +349,43 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 		}
 	}
 
+	/**
+	 * 言語別の汎用ファミリ連鎖を、完全一致、言語+スクリプト、言語のみの順で選ぶ。
+	 * 同じ優先度では文書順で先の設定を保持する。
+	 */
+	protected FontFamilyList resolveGenericFamily(final String name, final Locale requestedLang) {
+		if (requestedLang == null || requestedLang.getLanguage().isEmpty()) {
+			return this.genericToFamily.get(name);
+		}
+		final Locale requested = Locale.forLanguageTag(requestedLang.toLanguageTag());
+		final List<GenericFamily> candidates = this.genericToLangFamily.get(name);
+		GenericFamily best = null;
+		int bestScore = 0;
+		if (candidates != null) {
+			for (final GenericFamily candidate : candidates) {
+				final Locale configured = candidate.lang();
+				int score = 0;
+				if (configured.toLanguageTag().equalsIgnoreCase(requested.toLanguageTag())) {
+					score = 3;
+				} else if (!configured.getScript().isEmpty() && configured.getCountry().isEmpty()
+						&& configured.getVariant().isEmpty()
+						&& configured.getLanguage().equalsIgnoreCase(requested.getLanguage())
+						&& configured.getScript().equalsIgnoreCase(requested.getScript())) {
+					score = 2;
+				} else if (configured.getScript().isEmpty() && configured.getCountry().isEmpty()
+						&& configured.getVariant().isEmpty()
+						&& configured.getLanguage().equalsIgnoreCase(requested.getLanguage())) {
+					score = 1;
+				}
+				if (score > bestScore) {
+					best = candidate;
+					bestScore = score;
+				}
+			}
+		}
+		return best == null ? this.genericToFamily.get(name) : best.family();
+	}
+
 	protected void lookup(FontStyle fontStyle, FontFamilyList family, List<FontSource> fontList, boolean recurse) {
 		for (int i = 0; i < family.getLength(); ++i) {
 			FontSource[] fonts;
@@ -354,7 +397,7 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				if (recurse) {
 					throw new IllegalStateException("Generic font defined by another generic font");
 				}
-				FontFamilyList gfamily = this.genericToFamily.get(name);
+				FontFamilyList gfamily = this.resolveGenericFamily(name, fontStyle.getLang());
 				if (gfamily != null) {
 					this.lookup(fontStyle, gfamily, fontList, true);
 				}

@@ -16,7 +16,13 @@ public record FontFamily(GenericFamily genericFamily, String name) implements Se
 	 * Represents a generic font family.
 	 */
 	public enum GenericFamily {
-		NONE, SERIF, SANS_SERIF, CURSIVE, FANTASY, MONOSPACE
+		NONE, SERIF, SANS_SERIF, CURSIVE, FANTASY, MONOSPACE,
+		/**
+		 * {@code fangsong}: the Chinese imitation-Song face. CSS Fonts lists it
+		 * beside the other generics; it needs its own entry because no other
+		 * generic stands for it (2026-08-31).
+		 */
+		FANGSONG
 	}
 
 	public static final FontFamily SERIF_VALUE = new FontFamily(GenericFamily.SERIF, "serif");
@@ -28,6 +34,8 @@ public record FontFamily(GenericFamily genericFamily, String name) implements Se
 	public static final FontFamily FANTASY_VALUE = new FontFamily(GenericFamily.FANTASY, "fantasy");
 
 	public static final FontFamily MONOSPACE_VALUE = new FontFamily(GenericFamily.MONOSPACE, "monospace");
+
+	public static final FontFamily FANGSONG_VALUE = new FontFamily(GenericFamily.FANGSONG, "fangsong");
 
 	/**
 	 * Creates a FontFamily from a name.
@@ -45,6 +53,7 @@ public record FontFamily(GenericFamily genericFamily, String name) implements Se
 			case "fantasy" -> FontFamily.FANTASY_VALUE;
 			case "monospace" -> FontFamily.MONOSPACE_VALUE;
 			case "sans-serif" -> FontFamily.SANS_SERIF_VALUE;
+			case "fangsong" -> FontFamily.FANGSONG_VALUE;
 			default -> new FontFamily(name);
 		};
 	}

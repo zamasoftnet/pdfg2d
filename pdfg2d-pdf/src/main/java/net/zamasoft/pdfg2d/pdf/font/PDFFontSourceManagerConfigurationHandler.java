@@ -176,7 +176,7 @@ class PDFFontSourceManagerConfigurationHandler extends DefaultHandler {
 							.hasMoreTokens();) {
 						entries.add(new FontFamily(i.nextToken()));
 					}
-					this.catalog.genericFamily(genericFamily,
+					this.catalog.genericFamily(genericFamily, atts.getValue("lang"),
 							new FontFamilyList(entries.toArray(new FontFamily[entries.size()])));
 					break;
 			}

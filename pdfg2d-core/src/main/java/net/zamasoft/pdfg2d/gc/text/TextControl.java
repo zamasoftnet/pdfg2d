@@ -18,6 +18,14 @@ public non-sealed abstract class TextControl implements Element {
 	public static final String BREAK = "\u200B";
 
 	/**
+	 * A conditional break <em>inside</em> a word, such as a soft hyphen. Unlike
+	 * {@link #BREAK} the unit ends <em>after</em> the control, not before it: the
+	 * control belongs to the unit it may end, because breaking there is what
+	 * materializes the hyphen.
+	 */
+	public static final String HYPHEN = "\u00AD";
+
+	/**
 	 * Treated as the previous character. The TextControl itself attaches before the
 	 * following string.
 	 */

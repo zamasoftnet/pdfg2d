@@ -64,6 +64,20 @@ public final class SoftHyphen extends Control {
 		return this.text.getDescent();
 	}
 
+	/**
+	 * A soft hyphen is a conditional break <em>inside</em> a word, so the unit it
+	 * ends must include the hyphen itself. {@link Control} answers
+	 * {@link TextControl#BREAK}, which ends the unit <em>before</em> the control.
+	 * Replaying a stream that already carries soft hyphens - which is what a page
+	 * break does with the line it drops - then offers a break just in front of the
+	 * hyphen, and taking it splits the word with no hyphen at all (8 words in a
+	 * 226-page book, 2026-08-31).
+	 */
+	@Override
+	public String getString() {
+		return HYPHEN;
+	}
+
 	@Override
 	public String toString() {
 		return "[SHY]";

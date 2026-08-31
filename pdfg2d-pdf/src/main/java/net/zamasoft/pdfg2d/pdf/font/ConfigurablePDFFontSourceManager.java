@@ -8,6 +8,9 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -171,6 +174,11 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 
 			this.nameToFonts = MultimapUtils.unmodifiableMap(handler.catalog.nameToFonts);
 			this.genericToFamily = Collections.unmodifiableMap(handler.catalog.genericToFamily);
+			final Map<String, List<GenericFamily>> genericToLangFamily = new HashMap<>();
+			for (final Map.Entry<String, List<GenericFamily>> entry : handler.catalog.genericToLangFamily.entrySet()) {
+				genericToLangFamily.put(entry.getKey(), List.copyOf(entry.getValue()));
+			}
+			this.genericToLangFamily = Collections.unmodifiableMap(genericToLangFamily);
 			this.allFonts = handler.catalog.allFonts;
 
 			this.fontListCache = null;
