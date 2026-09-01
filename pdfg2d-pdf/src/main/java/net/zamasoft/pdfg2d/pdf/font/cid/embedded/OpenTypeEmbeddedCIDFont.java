@@ -271,6 +271,6 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 
 	public String getPSName() {
 		OpenTypeEmbeddedCIDFontSource metaFont = (OpenTypeEmbeddedCIDFontSource) this.getFontSource();
-		return metaFont.getFontName();
+		return metaFont.getPostScriptName();
 	}
 }

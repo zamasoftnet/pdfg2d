@@ -505,13 +505,12 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		if (first == null || second == null) {
 			return 0;
 		}
-		final var source = (OpenTypeFontSource) this.getFontSource();
-		final double scale = (double) FontSource.DEFAULT_UNITS_PER_EM / source.getUnitsPerEm();
 		final var a = first.getBounds2D();
 		final var b = second.getBounds2D();
 		// 2字目の原点は1字目の縦advance後。字面が離れる量だけをkerning
-		// (呼出側がadvanceから減算する正値)として返す。
-		final double gap = this.getVAdvance(firstGid) + b.getMinY() * scale - a.getMaxY() * scale;
+		// (呼出側がadvanceから減算する正値)として返す。輪郭と縦advanceは
+		// どちらも1000 units-per-emへ正規化済みなので、そのまま混合できる。
+		final double gap = this.getAdvance(firstGid) + b.getMinY() - a.getMaxY();
 		if (!(gap > 0)) {
 			return 0;
 		}

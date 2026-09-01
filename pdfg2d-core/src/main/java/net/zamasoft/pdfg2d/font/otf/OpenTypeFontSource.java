@@ -117,6 +117,7 @@ public class OpenTypeFontSource extends AbstractFontSource {
 		String fontName = null;
 		{
 			final var name = (NameTable) ttFont.getTable(Table.NAME);
+			fontName = selectPostScriptName(name);
 			for (int i = 0; i < name.size(); ++i) {
 				final var record = name.get(i);
 				final short nameId = record.getNameId();
@@ -126,8 +127,6 @@ public class OpenTypeFontSource extends AbstractFontSource {
 				// 拾わないと素のファミリ名で照合できない
 				if (nameId == 1 || nameId == 3 || nameId == 4 || nameId == 16) {
 					aliases.add(record.getRecordString());
-				} else if (nameId == 6) {
-					fontName = record.getRecordString();
 				}
 			}
 		}
@@ -193,6 +192,73 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
+	 * name ID 6のうち、PDF/CFFにそのまま使えるASCII PostScript名を
+	 * 優先します。同じフォントにASCIIとローカライズ済みの名が両方ある場合、
+	 * レコード順の最後の名で上書きすると非ASCII名が選ばれていた。
+	 */
+	static String selectPostScriptName(final NameTable name) {
+		String asciiName = null;
+		int asciiPriority = Integer.MAX_VALUE;
+		String fallbackName = null;
+		int fallbackPriority = Integer.MAX_VALUE;
+		for (int i = 0; i < name.size(); ++i) {
+			final var record = name.get(i);
+			if (record.getNameId() != Table.NAME_POSTSCRIPT_NAME) {
+				continue;
+			}
+			final String candidate = record.getRecordString();
+			if (candidate == null || candidate.isEmpty()) {
+				continue;
+			}
+			final int priority = postScriptNamePriority(record.platformId(), record.encodingId(), false);
+			if (priority < fallbackPriority) {
+				fallbackName = candidate;
+				fallbackPriority = priority;
+			}
+			if (isSafeAsciiPostScriptName(candidate)) {
+				final int safePriority = postScriptNamePriority(record.platformId(), record.encodingId(), true);
+				if (safePriority < asciiPriority) {
+					asciiName = candidate;
+					asciiPriority = safePriority;
+				}
+			}
+		}
+		return asciiName != null ? asciiName : fallbackName;
+	}
+
+	private static int postScriptNamePriority(final short platformId, final short encodingId,
+			final boolean ascii) {
+		if (ascii && platformId == Table.PLATFORM_MACINTOSH && encodingId == Table.ENCODING_ROMAN) {
+			return 0;
+		}
+		if (platformId == Table.PLATFORM_MICROSOFT
+				&& (encodingId == Table.ENCODING_UCS2 || encodingId == Table.ENCODING_UCS4)) {
+			return ascii ? 1 : 0;
+		}
+		if (platformId == Table.PLATFORM_UNICODE) {
+			return ascii ? 2 : 1;
+		}
+		if (!ascii && platformId == Table.PLATFORM_MACINTOSH && encodingId == Table.ENCODING_ROMAN) {
+			return 2;
+		}
+		if (platformId == Table.PLATFORM_ISO && encodingId == Table.ENCODING_ASCII) {
+			return 3;
+		}
+		return 4;
+	}
+
+	private static boolean isSafeAsciiPostScriptName(final String name) {
+		for (int i = 0; i < name.length(); ++i) {
+			final char c = name.charAt(i);
+			if (c < '!' || c > '~' || c == '#' || c == '(' || c == ')' || c == '<' || c == '>' || c == '['
+					|| c == ']' || c == '{' || c == '}' || c == '/' || c == '%') {
+				return false;
+			}
+		}
+		return !name.isEmpty();
+	}
+
+	/**
 	 * 永続フォント索引からの再構築コンストラクタです(2026-08-01)。
 	 * ファイルI/Oを一切行わない——グリフ実データが必要になったとき
 	 * ({@link #getOpenTypeFont()}経由)に初めてフォントファイルを開く。
@@ -253,6 +319,18 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	 */
 	public OpenTypeFont getOpenTypeFont() {
 		return getOpenTypeFont(this.file, this.index);
+	}
+
+	/**
+	 * Returns the PostScript name selected from OpenType name ID 6 records.
+	 * Unlike {@link #getFontName()}, this is not affected by a configured family
+	 * name override.
+	 *
+	 * @return the preferred PostScript name, or {@code null} if none exists
+	 */
+	public String getPostScriptName() {
+		final var name = (NameTable) this.getOpenTypeFont().getTable(Table.NAME);
+		return selectPostScriptName(name);
 	}
 
 	/**

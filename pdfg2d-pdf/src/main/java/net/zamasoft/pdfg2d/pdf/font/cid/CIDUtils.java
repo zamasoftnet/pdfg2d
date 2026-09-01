@@ -491,7 +491,23 @@ public final class CIDUtils {
 		final char d = (char) ('A' + ((h >> 12) & 0xF));
 		final char e = (char) ('A' + ((h >> 16) & 0xF));
 		final char f = (char) ('A' + ((h >> 20) & 0xF));
-		return "" + a + b + c + d + e + f + '+' + psName;
+		return "" + a + b + c + d + e + f + '+' + sanitizeEmbeddedPostScriptName(psName);
+	}
+
+	/** PDF NameとCFF Name INDEXの両方に使えるASCII名に制限する。 */
+	private static String sanitizeEmbeddedPostScriptName(final String psName) {
+		final var name = new StringBuilder(psName == null ? 0 : psName.length());
+		if (psName != null) {
+			for (int i = 0; i < psName.length(); ++i) {
+				final char c = psName.charAt(i);
+				if (c < '!' || c > '~' || c == '#' || c == '(' || c == ')' || c == '<' || c == '>' || c == '['
+						|| c == ']' || c == '{' || c == '}' || c == '/' || c == '%') {
+					continue;
+				}
+				name.append(c);
+			}
+		}
+		return name.isEmpty() ? "SubsetFont" : name.toString();
 	}
 
 	/** Writes the direction-specific Type0 wrapper and its sparse ToUnicode map. */

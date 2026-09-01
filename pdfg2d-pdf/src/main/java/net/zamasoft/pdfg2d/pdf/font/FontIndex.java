@@ -62,8 +62,10 @@ public final class FontIndex {
 	 * 再生するため破棄して再構築する。
 	 * 3: 幅級(OS/2 usWidthClass)を記録(2026-08-29、font-stretchの
 	 * 書体選択)。レコードにwidthClassの1バイトを追加した。
+	 * 4: name ID 6のASCII PostScript名優先を反映するため、旧索引に
+	 * 保存されたローカライズ名を破棄する(2026-09-01)。
 	 */
-	private static final int VERSION = 3;
+	private static final int VERSION = 4;
 
 	private static final int SUBTYPE_EMBEDDED = 0;
 	private static final int SUBTYPE_CID_IDENTITY = 1;
