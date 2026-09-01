@@ -432,8 +432,9 @@ public class OpenTypeFontSource extends AbstractFontSource {
 				return false;
 			}
 		}
-		if (this.cmap.mapCharCode(c) != 0) {
-			return true;
+		final int gid = this.cmap.mapCharCode(c);
+		if (gid != 0) {
+			return !this.isGlyphless(gid, c);
 		}
 		if (this.uvsCmap != null && this.uvsCmap.isVarSelector(c)) {
 			return true;
@@ -446,10 +447,54 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	 * text-orientation: uprightのフォント選択だけが使う。
 	 */
 	public boolean canDisplayUpright(final int c) {
-		if (this.cmap.mapCharCode(c) != 0) {
-			return true;
+		final int gid = this.cmap.mapCharCode(c);
+		if (gid != 0) {
+			return !this.isGlyphless(gid, c);
 		}
 		return this.uvsCmap != null && this.uvsCmap.isVarSelector(c);
+	}
+
+	/**
+	 * cmapに登録があるのに字形が空かどうかを返します。
+	 *
+	 * <p>
+	 * 空の字形をcmapに載せたフォントが実在します——JejuGothic /
+	 * JejuHallasan / JejuMyeongjoは漢字(代表字の{@code 漢}を含む)が全て
+	 * 中身の無いglyfを指し、Adobe Blankは全字がそうです。cmapだけを見て
+	 * 「表示できる」と答えると、代替フォントを探さず警告も出ないまま
+	 * **文字が黙って消えます**(2026-09-01、ハングルのフォント見本で発覚)。
+	 * </p>
+	 *
+	 * <p>
+	 * 空白・制御・書式文字は字形が無いのが正常なので除外します。
+	 * </p>
+	 *
+	 * @param gid cmapが返したglyph ID
+	 * @param c   もとの文字
+	 * @return 字形が無く、その文字にとって不正なら{@code true}
+	 */
+	private boolean isGlyphless(final int gid, final int c) {
+		if (Character.isWhitespace(c) || Character.isSpaceChar(c)) {
+			return false;
+		}
+		switch (Character.getType(c)) {
+			case Character.CONTROL:
+			case Character.FORMAT:
+			case Character.SURROGATE:
+			case Character.PRIVATE_USE:
+			case Character.UNASSIGNED:
+				return false;
+			default:
+				break;
+		}
+		try {
+			final var glyph = this.getOpenTypeFont().getGlyph(gid);
+			return glyph == null || glyph.isBlank();
+		} catch (final RuntimeException e) {
+			// 字形が読めないことを理由にフォントを外さない(従来どおり選ぶ)
+			LOG.log(Level.FINE, "Failed to read a glyph: " + this.file, e);
+			return false;
+		}
 	}
 
 	@Override

@@ -27,7 +27,7 @@ public record GlyfCompositeComp(
 		short argument1,
 		short argument2,
 		short flags,
-		short glyphIndex,
+		int glyphIndex,
 		double xscale,
 		double yscale,
 		double scale01,
@@ -48,7 +48,9 @@ public record GlyfCompositeComp(
 	protected static GlyfCompositeComp read(final int firstIndex, final int firstContour, final RandomAccessFile raf)
 			throws IOException {
 		final short flags = (short) (raf.read() << 8 | raf.read());
-		final short glyphIndex = (short) Math.abs((short) (raf.read() << 8 | raf.read()));
+		// glyphIndexはuint16。shortへ丸めてabsを取ると、glyphが32768個以上の
+		// フォントで別のglyphを指す(2026-09-01)
+		final int glyphIndex = raf.read() << 8 | raf.read();
 
 		short argument1, argument2;
 		// Get the arguments as just their raw values
@@ -56,8 +58,12 @@ public record GlyfCompositeComp(
 			argument1 = (short) (raf.read() << 8 | raf.read());
 			argument2 = (short) (raf.read() << 8 | raf.read());
 		} else {
-			argument1 = (short) raf.read();
-			argument2 = (short) raf.read();
+			// **符号付き**の1バイト。read()の0..255をそのまま使うと、
+			// 左へ寄せる成分(例: -16)が+240へ化けて合成字が崩れる
+			// ——Gothic A1のά(α+トノス)やзで、字面が右へずれて
+			// 次の字と重なっていた(2026-09-01)
+			argument1 = (byte) raf.read();
+			argument2 = (byte) raf.read();
 		}
 
 		int xtranslate = 0;
@@ -116,7 +122,7 @@ public record GlyfCompositeComp(
 		return this.flags;
 	}
 
-	public short getGlyphIndex() {
+	public int getGlyphIndex() {
 		return this.glyphIndex;
 	}
 

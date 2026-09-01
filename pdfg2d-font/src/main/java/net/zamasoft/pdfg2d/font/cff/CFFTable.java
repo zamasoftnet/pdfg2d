@@ -100,7 +100,7 @@ public class CFFTable implements Table {
 	/** Top-DICT escape operator: {@code CharstringType} (default 2). */
 	public static final int CHARSTRING_TYPE = 0x0C06;
 	/** Top-DICT escape operator: {@code FontMatrix}. */
-	public static final int FONT_MATRIX = 0x070C;
+	public static final int FONT_MATRIX = 0x0C07;
 	/** Top-DICT escape operator: {@code StrokeWidth}. */
 	public static final int STROKE_WIDTH = 0x0C08;
 	/** Private-DICT escape operator: {@code BlueScale}. */
@@ -118,21 +118,21 @@ public class CFFTable implements Table {
 	/** Private-DICT escape operator: {@code LanguageGroup}. */
 	public static final int LANGUAGE_GROUP = 0x0C11;
 	/** Private-DICT escape operator: {@code ExpansionFactor}. */
-	public static final int EXPANSION_FACTOR = 0x120C;
+	public static final int EXPANSION_FACTOR = 0x0C12;
 	/** Private-DICT escape operator: {@code initialRandomSeed}. */
-	public static final int INITIAL_RANDOM_SEED = 0x130C;
+	public static final int INITIAL_RANDOM_SEED = 0x0C13;
 	/** Top-DICT escape operator: {@code SyntheticBase} index. */
-	public static final int SYNTHETIC_BASE = 0x140C;
+	public static final int SYNTHETIC_BASE = 0x0C14;
 	/** Top-DICT escape operator: {@code PostScript} SID. */
-	public static final int POST_SCRIPT = 0x150C;
+	public static final int POST_SCRIPT = 0x0C15;
 	/** Top-DICT escape operator: {@code BaseFontName} SID. */
-	public static final int BASE_FONT_NAME = 0x160C;
+	public static final int BASE_FONT_NAME = 0x0C16;
 	/** Top-DICT escape operator: {@code BaseFontBlend} delta array. */
-	public static final int BASE_FONT_BLEND = 0x170C;
+	public static final int BASE_FONT_BLEND = 0x0C17;
 	/** CIDFont Top-DICT escape operator: {@code ROS} (Registry/Ordering/Supplement). */
-	public static final int ROS = 0x1E0C;
+	public static final int ROS = 0x0C1E;
 	/** CIDFont Top-DICT escape operator: {@code CIDFontVersion}. */
-	public static final int CID_FONT_VERSION = 0x1F0C;
+	public static final int CID_FONT_VERSION = 0x0C1F;
 	/** CIDFont Top-DICT escape operator: {@code CIDFontRevision}. */
 	public static final int CID_FONT_REVISION = 0x0C20;
 	/** CIDFont Top-DICT escape operator: {@code CIDFontType}. */
@@ -181,6 +181,12 @@ public class CFFTable implements Table {
 	private final StringBuilder buff = new StringBuilder();
 
 	private final Type2CharString charString;
+
+	/**
+	 * Top DICTの{@code FontMatrix}が与えるcharstringのem単位(=1/xx)。
+	 * 指定が無いフォントでは0。
+	 */
+	private double glyphUnitsPerEm;
 
 	/**
 	 * Parses the CFF table from the given font file.
@@ -266,6 +272,15 @@ public class CFFTable implements Table {
 						break;
 					case FD_SELECT:
 						fdSelectOffset = this.stack.get(0).intValue();
+						break;
+					case FONT_MATRIX:
+						// xx yx xy yy dx dy。charstringの座標系は1/xx単位のem
+						if (this.stack.size() >= 4) {
+							final double xx = this.stack.get(0).doubleValue();
+							if (xx > 0) {
+								this.glyphUnitsPerEm = 1.0 / xx;
+							}
+						}
 						break;
 				}
 				this.stack.clear();
@@ -539,6 +554,28 @@ public class CFFTable implements Table {
 	public Glyph getGlyph(int ix, short upm) {
 		int[] localSubrOffsets = this.localSubrOffsets == null ? null : this.localSubrOffsets[ix];
 		return this.charString.getGlyph(ix, this.charStringOffsets[ix], upm, this.globalSubrOffsets, localSubrOffsets);
+	}
+
+	/**
+	 * charstringの座標が何単位で1emかを返します。
+	 *
+	 * <p>
+	 * Top DICTに{@code FontMatrix}があればそれが基準
+	 * (既定の{@code 0.001}なら1000)。無い場合、OpenType/CFFでは
+	 * {@code head}の{@code unitsPerEm}が基準になります(FreeType等の実装と
+	 * 同じ扱い)。両者が食い違うフォントが実在し、Pretendardは
+	 * {@code unitsPerEm=2048}でFontMatrixを持たないため、CFFの既定値
+	 * 1000で読むと字形だけが2.048倍になります(2026-09-01)。
+	 * </p>
+	 *
+	 * @param headUnitsPerEm {@code head}テーブルのunitsPerEm
+	 * @return charstring座標系の1em(通常は1000または2048)
+	 */
+	public double getGlyphUnitsPerEm(final short headUnitsPerEm) {
+		if (this.glyphUnitsPerEm > 0) {
+			return this.glyphUnitsPerEm;
+		}
+		return headUnitsPerEm > 0 ? headUnitsPerEm : 1000.0;
 	}
 
 	private byte[] readHeader() throws IOException {

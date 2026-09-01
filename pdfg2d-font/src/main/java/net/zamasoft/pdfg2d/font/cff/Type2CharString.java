@@ -833,14 +833,18 @@ public class Type2CharString {
 		if (b0 == 28) {
 			int b1 = this.raf.read();
 			int b2 = this.raf.read();
-			return b1 << 8 | b2;
+			// **符号付き**16bit。符号を落とすと-1109以下が+64000台に化ける
+			// (2026-09-01。1000 upmのフォントではこの符号化まで届く差分が
+			// ほとんど無く、2048 upmのPretendardで字形が壊れて発覚)
+			return (short) (b1 << 8 | b2);
 		}
 		if (b0 == 255) {
 			int b1 = this.raf.read();
 			int b2 = this.raf.read();
 			int b3 = this.raf.read();
 			int b4 = this.raf.read();
-			return b1 << 24 | b2 << 16 | b3 << 8 | b4;
+			// Type 2では16.16固定小数(DICT dataの32bit整数とは違う)
+			return Math.round((b1 << 24 | b2 << 16 | b3 << 8 | b4) / 65536f);
 		}
 		throw new IOException("Invalid integer: " + b0);
 	}
