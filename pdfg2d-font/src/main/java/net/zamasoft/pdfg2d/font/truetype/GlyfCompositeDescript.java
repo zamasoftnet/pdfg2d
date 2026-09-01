@@ -21,12 +21,30 @@ import net.zamasoft.pdfg2d.font.table.Program;
  */
 public class GlyfCompositeDescript extends GlyfDescript {
 
+	/** 解けなかった成分の点数・輪郭数。 */
+	private static final int[] EMPTY_SIZE = { 0, 0 };
+
 	private final List<GlyfCompositeComp> components;
 
+	/**
+	 * 全成分を合わせた点と輪郭の数です。
+	 *
+	 * <p>
+	 * 読み取りの途中で数え上げた値をそのまま持つ(2026-09-01)。以前は
+	 * {@link #getPointCount()}が最後の成分を<b>解き直して</b>その点数を足していた。
+	 * 成分がそれ自体合成グリフだと部分木を丸ごと読み直すので、小片を大量に
+	 * 積む書体(点字体・ピクセル書体)で1グリフに何分もかかっていた。
+	 * </p>
+	 */
+	private final int pointCount, contourCount;
+
 	private GlyfCompositeDescript(final GlyfTable parentTable, final short xMin, final short yMin, final short xMax,
-			final short yMax, final short[] instructions, final List<GlyfCompositeComp> components) {
+			final short yMax, final short[] instructions, final List<GlyfCompositeComp> components,
+			final int pointCount, final int contourCount) {
 		super(parentTable, -1, xMin, yMin, xMax, yMax, instructions);
 		this.components = components;
+		this.pointCount = pointCount;
+		this.contourCount = contourCount;
 	}
 
 	/**
@@ -51,17 +69,32 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		GlyfCompositeComp comp;
 		int firstIndex = 0;
 		int firstContour = 0;
+		// 同じ成分を何度も指す書体(小片を積むピクセル書体・点字体)は、
+		// 同じグリフを何百回も読み直していた。1グリフを読む間だけ覚える
+		// (2026-09-01。Handjetは1グリフに2.2秒かかっていた)
+		final java.util.Map<Integer, int[]> counts = new java.util.HashMap<>();
 		do {
 			comp = GlyfCompositeComp.read(firstIndex, firstContour, raf);
-			components.add(comp);
 
 			final long off = raf.getFilePointer();
-			final GlyfDescript desc = parentTable.getDescription(comp.getGlyphIndex());
-			raf.seek(off);
-			if (desc != null) {
-				firstIndex += desc.getPointCount();
-				firstContour += desc.getContourCount();
+			int[] size = counts.get(comp.getGlyphIndex());
+			if (size == null) {
+				final GlyfDescript desc = parentTable.getDescription(comp.getGlyphIndex());
+				// 解けない成分(字形の無いグリフ、または自分へ戻る循環——
+				// GlyfTableが読み取り中の番号を覚えて切っている)は0として数える
+				size = desc == null ? EMPTY_SIZE : new int[] { desc.getPointCount(), desc.getContourCount() };
+				counts.put(comp.getGlyphIndex(), size);
 			}
+			components.add(comp);
+			firstIndex += size[0];
+			firstContour += size[1];
+			// **読み位置を戻すのは問い合わせを終えてから**(2026-09-01)。
+			// 成分がそれ自体合成グリフのとき、getPointCount/getContourCountは
+			// 中でgetDescriptionを呼んでrafを動かす。解決の直後だけ戻していたので、
+			// 次の成分をずれた位置から読み、flagsとglyphIndexが0xFFFFになっていた——
+			// 範囲外のグリフ番号、EOF、MORE_COMPONENTSが立ちっぱなしの無限ループ、
+			// そしてStackOverflowError。本番のフォント一覧が500になった原因
+			raf.seek(off);
 		} while ((comp.getFlags() & GlyfCompositeComp.MORE_COMPONENTS) != 0);
 
 		// Are there hinting instructions to read?
@@ -70,7 +103,8 @@ public class GlyfCompositeDescript extends GlyfDescript {
 			instructions = Program.readInstructions(raf, (raf.read() << 8 | raf.read()));
 		}
 
-		return new GlyfCompositeDescript(parentTable, xMin, yMin, xMax, yMax, instructions, components);
+		return new GlyfCompositeDescript(parentTable, xMin, yMin, xMax, yMax, instructions, components, firstIndex,
+				firstContour);
 	}
 
 	/**
@@ -156,9 +190,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 	 */
 	@Override
 	public int getPointCount() {
-		final GlyfCompositeComp c = this.components.get(this.components.size() - 1);
-		final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
-		return c.getFirstIndex() + (gd == null ? 0 : gd.getPointCount());
+		return this.pointCount;
 	}
 
 	/**
@@ -168,9 +200,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 	 */
 	@Override
 	public int getContourCount() {
-		final GlyfCompositeComp c = this.components.get(this.components.size() - 1);
-		final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
-		return c.getFirstContour() + (gd == null ? 0 : gd.getContourCount());
+		return this.contourCount;
 	}
 
 	/**
@@ -203,6 +233,11 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		for (int n = 0; n < this.components.size(); n++) {
 			final GlyfCompositeComp c = this.components.get(n);
 			final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
+			// 解けない成分は点を持たないので、どの番号も含まない
+			// (字形の無いグリフを指す成分でここが落ちていた——2026-09-01)
+			if (gd == null) {
+				continue;
+			}
 			if (c.getFirstIndex() <= i && i < (c.getFirstIndex() + gd.getPointCount())) {
 				return c;
 			}
@@ -214,6 +249,10 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		for (int j = 0; j < this.components.size(); j++) {
 			final GlyfCompositeComp c = this.components.get(j);
 			final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
+			// 同上
+			if (gd == null) {
+				continue;
+			}
 			if (c.getFirstContour() <= i && i < (c.getFirstContour() + gd.getContourCount())) {
 				return c;
 			}

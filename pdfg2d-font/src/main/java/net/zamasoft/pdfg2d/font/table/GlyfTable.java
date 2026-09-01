@@ -28,6 +28,32 @@ import net.zamasoft.pdfg2d.font.truetype.GlyfSimpleDescript;
 public record GlyfTable(DirectoryEntry de, LocaTable loca, RandomAccessFile raf) implements Table {
 
 	/**
+	 * いま読んでいる途中のグリフ番号です(スレッドごと)。
+	 *
+	 * <p>
+	 * 合成グリフの成分は{@link #getDescription(int)}で読み直すので、成分が
+	 * 自分自身を(直接または循環して)指す不正なフォントでは無限再帰して
+	 * {@code StackOverflowError}になる。2026-09-01に本番のフォント一覧が
+	 * これで落ちた——書体ごとに代表符号位置の字形を引いてscriptを名乗るように
+	 * したところ、フォントパックの1書体でこの循環を踏んだ。
+	 * </p>
+	 *
+	 * <p>
+	 * <b>深さの上限では切れない。</b>{@code GlyfCompositeDescript.getPointCount()}は
+	 * 呼び直して<b>別に組み立てた</b>記述子の上で自分を呼ぶので、深さは
+	 * 上限と上限−1の間を往復するだけで、フレームだけが積み上がる。読んでいる
+	 * 最中のグリフ番号を覚えて、そこへ戻る成分を落とす必要がある。
+	 * </p>
+	 *
+	 * <p>
+	 * {@code record}はインスタンスフィールドを持てないのでスレッドごとに持つ。
+	 * 同じ表を複数のスレッドが読んでも、経路はスレッドごとに独立している。
+	 * </p>
+	 */
+	private static final ThreadLocal<java.util.Set<Integer>> READING = ThreadLocal
+			.withInitial(java.util.HashSet::new);
+
+	/**
 	 * Reads and returns the glyph description for the glyph at the given index.
 	 *
 	 * @param i the glyph index (GID)
@@ -38,6 +64,12 @@ public record GlyfTable(DirectoryEntry de, LocaTable loca, RandomAccessFile raf)
 	 */
 	public GlyfDescript getDescription(final int i) {
 		GlyfDescript desc = null;
+		final java.util.Set<Integer> reading = READING.get();
+		if (!reading.add(i)) {
+			// このグリフは読んでいる最中——成分が自分へ戻っている不正なフォント。
+			// 字形の無いグリフと同じ扱いにして、読み手に成分を落とさせる
+			return null;
+		}
 		try {
 			final int len = this.loca.getOffset((i + 1)) - this.loca.getOffset(i);
 			if (len <= 0) {
@@ -54,6 +86,8 @@ public record GlyfTable(DirectoryEntry de, LocaTable loca, RandomAccessFile raf)
 			}
 		} catch (final IOException e) {
 			throw new RuntimeException(e);
+		} finally {
+			reading.remove(i);
 		}
 		return desc;
 	}
