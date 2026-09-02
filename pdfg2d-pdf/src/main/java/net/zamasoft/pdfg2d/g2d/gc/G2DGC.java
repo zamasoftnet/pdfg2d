@@ -621,6 +621,47 @@ public class G2DGC implements GC {
 		this.drawLayer(RasterEffects.blurPremultiplied(layer, deviceSigma), region.x, region.y);
 	}
 
+	/**
+	 * 軸に沿った矩形の塗りを装置の画素格子へ揃えます(2026-09-02)。
+	 *
+	 * <p>
+	 * アンチエイリアスのまま矩形を突き合わせると、共有する辺が画素の途中に
+	 * あるとき両側が半透明に塗られて下地が 1px の筋になる(表のセル・1×1 の
+	 * タイル・隣接する背景)。解像度を上げても筋は 1px のまま。辺を同じ規則
+	 * (四捨五入)で整数へ寄せれば、隣り合う矩形は同じ画素列を境に接する。
+	 * 回転・斜行のある変換、1 画素に満たない矩形(罫線の細線)は触らない。
+	 * </p>
+	 *
+	 * @return 揃えて塗ったなら {@code true}
+	 */
+	private boolean fillSnappedRectangle(final Shape shape) {
+		if (!(shape instanceof Rectangle2D rect) || this.fillAt != null
+				|| !(this.awtFillPaint instanceof java.awt.Color)) {
+			// グラデーション等は利用者座標で定義されるので、装置座標で塗れない
+			return false;
+		}
+		final AffineTransform at = this.g.getTransform();
+		if (at.getShearX() != 0 || at.getShearY() != 0) {
+			return false;
+		}
+		final Rectangle2D device = at.createTransformedShape(rect).getBounds2D();
+		if (device.getWidth() < 1 || device.getHeight() < 1) {
+			return false;
+		}
+		final double x0 = Math.round(device.getMinX()), y0 = Math.round(device.getMinY());
+		final double x1 = Math.round(device.getMaxX()), y1 = Math.round(device.getMaxY());
+		if (x1 <= x0 || y1 <= y0) {
+			return false;
+		}
+		this.g.setTransform(new AffineTransform());
+		try {
+			this.g.fill(new Rectangle2D.Double(x0, y0, x1 - x0, y1 - y0));
+		} finally {
+			this.g.setTransform(at);
+		}
+		return true;
+	}
+
 	public void fill(Shape shape) {
 		this.drewAnything = true;
 		java.awt.Paint paint = this.g.getPaint();
@@ -629,7 +670,9 @@ public class G2DGC implements GC {
 		Composite composite = this.g.getComposite();
 		this.g.setComposite(BlendComposite.getInstance(this.blendMode, this.fillAlpha));
 
-		if (this.fillAt != null) {
+		if (this.fillSnappedRectangle(shape)) {
+			// 揃えて塗った
+		} else if (this.fillAt != null) {
 			AffineTransform saveAt = g.getTransform();
 			this.g.transform(this.fillAt);
 			try {
