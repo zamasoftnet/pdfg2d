@@ -44,7 +44,7 @@ import net.zamasoft.pdfg2d.gc.text.Text;
 public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	private static final long serialVersionUID = 2L;
 
-	protected static final int DEFAULT_VERTICAL_ORIGIN = 880;
+	protected static final int DEFAULT_VERTICAL_ORIGIN = net.zamasoft.pdfg2d.font.FontSource.DEFAULT_VERTICAL_ORIGIN;
 
 	protected static final boolean ADJUST_VERTICAL = false;
 

@@ -68,6 +68,13 @@ public interface FontSource extends Serializable {
 	public static final short DEFAULT_UNITS_PER_EM = 1000;
 
 	/**
+	 * 縦書きの原点(横書きの原点からの高さ、1000単位)。VORG 表が無い書体の
+	 * 既定で、CIDフォントの W2 と縦組みの字形の平行移動が同じ値を使う
+	 * (2026-09-02: 以前は OpenTypeFont・CIDUtils・WebFontSubset に別々にあった)。
+	 */
+	public static final int DEFAULT_VERTICAL_ORIGIN = 880;
+
+	/**
 	 * Returns whether the character can be displayed.
 	 * 
 	 * @param c the character to check

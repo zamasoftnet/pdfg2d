@@ -49,7 +49,7 @@ public final class CIDUtils {
 
 	public static final int CID_FORCE_BOLD = 1 << 18;
 
-	public static final int DEFAULT_VERTICAL_ORIGIN = 880;
+	public static final int DEFAULT_VERTICAL_ORIGIN = net.zamasoft.pdfg2d.font.FontSource.DEFAULT_VERTICAL_ORIGIN;
 
 	public static final int DEFAULT_H = 500;
 

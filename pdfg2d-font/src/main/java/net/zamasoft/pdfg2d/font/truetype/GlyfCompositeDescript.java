@@ -38,13 +38,32 @@ public class GlyfCompositeDescript extends GlyfDescript {
 	 */
 	private final int pointCount, contourCount;
 
+	/**
+	 * 成分のグリフ番号→解いた記述(2026-09-02)。読み取りのときに1度だけ解き、
+	 * 点や輪郭を引くたびに{@code parentTable.getDescription}(ファイルの
+	 * seek+パース)へ戻らない。以前は1点ごとに全成分を解き直していたので、
+	 * 合成の入れ子が深い書体で1グリフに長い時間がかかっていた。
+	 * 解けなかった成分は{@code null}のまま覚える。
+	 */
+	private final java.util.Map<Integer, GlyfDescript> resolved;
+
 	private GlyfCompositeDescript(final GlyfTable parentTable, final short xMin, final short yMin, final short xMax,
 			final short yMax, final short[] instructions, final List<GlyfCompositeComp> components,
-			final int pointCount, final int contourCount) {
+			final int pointCount, final int contourCount, final java.util.Map<Integer, GlyfDescript> resolved) {
 		super(parentTable, -1, xMin, yMin, xMax, yMax, instructions);
 		this.components = components;
 		this.pointCount = pointCount;
 		this.contourCount = contourCount;
+		this.resolved = resolved;
+	}
+
+	/** 成分の記述。読み取り時に解いたものを返し、無ければ表へ問い合わせる。 */
+	private GlyfDescript descript(final GlyfCompositeComp c) {
+		final Integer gid = c.getGlyphIndex();
+		if (this.resolved.containsKey(gid)) {
+			return this.resolved.get(gid);
+		}
+		return this.parentTable.getDescription(gid);
 	}
 
 	/**
@@ -73,6 +92,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		// 同じグリフを何百回も読み直していた。1グリフを読む間だけ覚える
 		// (2026-09-01。Handjetは1グリフに2.2秒かかっていた)
 		final java.util.Map<Integer, int[]> counts = new java.util.HashMap<>();
+		final java.util.Map<Integer, GlyfDescript> resolved = new java.util.HashMap<>();
 		do {
 			comp = GlyfCompositeComp.read(firstIndex, firstContour, raf);
 
@@ -84,6 +104,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 				// GlyfTableが読み取り中の番号を覚えて切っている)は0として数える
 				size = desc == null ? EMPTY_SIZE : new int[] { desc.getPointCount(), desc.getContourCount() };
 				counts.put(comp.getGlyphIndex(), size);
+				resolved.put(comp.getGlyphIndex(), desc);
 			}
 			components.add(comp);
 			firstIndex += size[0];
@@ -104,7 +125,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		}
 
 		return new GlyfCompositeDescript(parentTable, xMin, yMin, xMax, yMax, instructions, components, firstIndex,
-				firstContour);
+				firstContour, resolved);
 	}
 
 	/**
@@ -114,7 +135,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 	public int getEndPtOfContours(final int i) {
 		final GlyfCompositeComp c = getCompositeCompEndPt(i);
 		if (c != null) {
-			final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
+			final GlyfDescript gd = this.descript(c);
 			return gd.getEndPtOfContours(i - c.getFirstContour()) + c.getFirstIndex();
 		}
 		return 0;
@@ -127,7 +148,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 	public byte getFlags(final int i) {
 		final GlyfCompositeComp c = getCompositeComp(i);
 		if (c != null) {
-			final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
+			final GlyfDescript gd = this.descript(c);
 			return gd.getFlags(i - c.getFirstIndex());
 		}
 		return 0;
@@ -142,7 +163,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 	public short getXCoordinate(final int i) {
 		final GlyfCompositeComp c = getCompositeComp(i);
 		if (c != null) {
-			final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
+			final GlyfDescript gd = this.descript(c);
 			final int n = i - c.getFirstIndex();
 			final int x = gd.getXCoordinate(n);
 			final int y = gd.getYCoordinate(n);
@@ -162,7 +183,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 	public short getYCoordinate(final int i) {
 		final GlyfCompositeComp c = getCompositeComp(i);
 		if (c != null) {
-			final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
+			final GlyfDescript gd = this.descript(c);
 			final int n = i - c.getFirstIndex();
 			final int x = gd.getXCoordinate(n);
 			final int y = gd.getYCoordinate(n);
@@ -232,7 +253,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 	protected GlyfCompositeComp getCompositeComp(final int i) {
 		for (int n = 0; n < this.components.size(); n++) {
 			final GlyfCompositeComp c = this.components.get(n);
-			final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
+			final GlyfDescript gd = this.descript(c);
 			// 解けない成分は点を持たないので、どの番号も含まない
 			// (字形の無いグリフを指す成分でここが落ちていた——2026-09-01)
 			if (gd == null) {
@@ -248,7 +269,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 	protected GlyfCompositeComp getCompositeCompEndPt(final int i) {
 		for (int j = 0; j < this.components.size(); j++) {
 			final GlyfCompositeComp c = this.components.get(j);
-			final GlyfDescript gd = this.parentTable.getDescription(c.getGlyphIndex());
+			final GlyfDescript gd = this.descript(c);
 			// 同上
 			if (gd == null) {
 				continue;
