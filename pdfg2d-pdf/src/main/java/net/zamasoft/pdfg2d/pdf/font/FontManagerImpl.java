@@ -53,6 +53,18 @@ public class FontManagerImpl implements FontManager, Closeable {
 	}
 
 	/**
+	 * Returns the font store that names and caches the fonts this manager hands out.
+	 * Another output (e.g. a PDF written alongside an SVG) can build metrics for the
+	 * same font source against this store, so the text drawn into that output uses
+	 * fonts registered there.
+	 *
+	 * @return the font store
+	 */
+	public FontStore getFontStore() {
+		return this.fontStore;
+	}
+
+	/**
 	 * Constructs a FontManagerImpl with the given font source manager and a default font store.
 	 *
 	 * @param fontdb the global font source manager used for font lookup

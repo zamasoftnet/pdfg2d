@@ -8,6 +8,7 @@ import java.io.OutputStream;
 
 import net.zamasoft.pdfg2d.gc.font.FontManager;
 import net.zamasoft.pdfg2d.gc.image.Image;
+import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGroupImage;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.zstream.resolver.Source;
@@ -80,6 +81,36 @@ public interface PDFWriter extends Closeable {
 	Image addImage(final BufferedImage image) throws IOException;
 
 	/**
+	 * Adds an in-memory image generated as part of PDF rendering.
+	 *
+	 * <p>
+	 * Generated images are embedded losslessly with Flate compression and are
+	 * never resized, regardless of the normal image compression and maximum-size
+	 * settings. Alpha is emitted through the usual soft-mask path.
+	 * </p>
+	 *
+	 * @param image the generated buffered image to add
+	 * @return the PDF image representation
+	 * @throws IOException if an I/O error occurs
+	 */
+	Image addGeneratedImage(final BufferedImage image) throws IOException;
+
+	/**
+	 * Returns the shared ICC profile stream used to identify renderer-generated
+	 * RGB image samples as sRGB, creating the indirect stream object on first use.
+	 *
+	 * <p>
+	 * This is the stream reference itself, rather than a named page resource:
+	 * image dictionaries embed it directly as
+	 * {@code /ColorSpace [/ICCBased profile-ref]}.
+	 * </p>
+	 *
+	 * @return the shared sRGB ICC profile stream reference
+	 * @throws IOException if the profile stream cannot be written
+	 */
+	ObjectRef useGeneratedImageRGBProfile() throws IOException;
+
+	/**
 	 * Adds an attachment file.
 	 * 
 	 * @param name       The attachment name
@@ -135,6 +166,23 @@ public interface PDFWriter extends Closeable {
 	 * @throws IOException in case of I/O error
 	 */
 	PDFNamedOutput createShadingPattern(double pageHeight, AffineTransform at) throws IOException;
+
+	/**
+	 * Creates a Type 4 free-form Gouraud mesh shading and its PatternType 2
+	 * wrapper. The supplied vertex data is already bit-packed according to the
+	 * fixed 8-bit flags, 32-bit coordinates and 16-bit components used by this
+	 * API.
+	 *
+	 * @param pageHeight page or form height used by the PDF coordinate flip
+	 * @param matrix     gradient-local to current user-space transform
+	 * @param colorType  process color type for the packed components
+	 * @param decode     coordinate and component decode ranges
+	 * @param vertexData complete packed Type 4 vertex stream
+	 * @return the Pattern resource name
+	 * @throws IOException if the pattern cannot be written
+	 */
+	String createType4ShadingPattern(double pageHeight, AffineTransform matrix, Color.Type colorType,
+			double[] decode, byte[] vertexData) throws IOException;
 
 	/**
 	 * Creates a luminosity soft mask from an existing (grayscale) shading

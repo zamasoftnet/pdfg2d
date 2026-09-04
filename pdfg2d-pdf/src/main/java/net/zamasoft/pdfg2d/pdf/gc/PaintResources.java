@@ -1,6 +1,8 @@
 package net.zamasoft.pdfg2d.pdf.gc;
 
 import java.awt.geom.AffineTransform;
+import java.awt.geom.NoninvertibleTransformException;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Objects;
@@ -9,19 +11,22 @@ import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.paint.CMYKColor;
 import net.zamasoft.pdfg2d.gc.paint.Color;
+import net.zamasoft.pdfg2d.gc.paint.ConicGradient;
 import net.zamasoft.pdfg2d.gc.paint.GrayColor;
 import net.zamasoft.pdfg2d.gc.paint.LinearGradient;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.paint.Pattern;
 import net.zamasoft.pdfg2d.gc.paint.RadialGradient;
+import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
 import net.zamasoft.pdfg2d.pdf.PDFOutput;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.util.ColorUtils;
 
 /**
  * Creates the PDF resources needed to paint with non-color paints: tiling
- * patterns for {@link Pattern} and axial/radial shading patterns for
- * {@link LinearGradient}/{@link RadialGradient}.
+ * patterns for {@link Pattern}, axial/radial shading patterns for
+ * {@link LinearGradient}/{@link RadialGradient}, and Type 4 mesh patterns for
+ * {@link ConicGradient}.
  * <p>
  * Resources are cached per document (keyed by their defining geometry) via the
  * writer-level resource cache held by {@link PDFGC}, so that repeated use of
@@ -33,6 +38,8 @@ import net.zamasoft.pdfg2d.util.ColorUtils;
  * @since 1.2
  */
 final class PaintResources {
+	private static final double MAX_CONIC_STEP = 1.0 / 180.0;
+	private static final double CONIC_INNER_RADIUS = 0.01;
 
 	private PaintResources() {
 		// static use only
@@ -50,14 +57,15 @@ final class PaintResources {
 	 * default equality is identity, so stop colors and fractions are compared
 	 * by content here.
 	 */
-	private record ShadingKey(double pageHeight, AffineTransform transform, Paint paint) {
+	private record ShadingKey(double pageWidth, double pageHeight, AffineTransform transform, Paint paint) {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o)
 				return true;
 			if (!(o instanceof ShadingKey other))
 				return false;
-			if (Double.compare(pageHeight, other.pageHeight) != 0)
+			if (Double.compare(pageWidth, other.pageWidth) != 0
+					|| Double.compare(pageHeight, other.pageHeight) != 0)
 				return false;
 			if (!Objects.equals(transform, other.transform))
 				return false;
@@ -84,12 +92,20 @@ final class PaintResources {
 						Arrays.equals(rg1.colors(), rg2.colors()) &&
 						Arrays.equals(rg1.fractions(), rg2.fractions());
 			}
+			if (paint instanceof ConicGradient cg1 && other.paint instanceof ConicGradient cg2) {
+				return Double.compare(cg1.cx(), cg2.cx()) == 0 &&
+						Double.compare(cg1.cy(), cg2.cy()) == 0 &&
+						Double.compare(cg1.startAngle(), cg2.startAngle()) == 0 &&
+						cg1.spread() == cg2.spread() &&
+						Arrays.equals(cg1.colors(), cg2.colors()) &&
+						Arrays.equals(cg1.fractions(), cg2.fractions());
+			}
 			return paint.equals(other.paint);
 		}
 
 		@Override
 		public int hashCode() {
-			int result = Objects.hash(pageHeight, transform);
+			int result = Objects.hash(pageWidth, pageHeight, transform);
 			if (paint instanceof LinearGradient lg) {
 				result = 31 * result + Objects.hash(lg.x1(), lg.y1(), lg.x2(), lg.y2());
 				result = 31 * result + Arrays.hashCode(lg.colors());
@@ -98,6 +114,10 @@ final class PaintResources {
 				result = 31 * result + Objects.hash(rg.cx(), rg.cy(), rg.radius(), rg.fx(), rg.fy());
 				result = 31 * result + Arrays.hashCode(rg.colors());
 				result = 31 * result + Arrays.hashCode(rg.fractions());
+			} else if (paint instanceof ConicGradient cg) {
+				result = 31 * result + Objects.hash(cg.cx(), cg.cy(), cg.startAngle(), cg.spread());
+				result = 31 * result + Arrays.hashCode(cg.colors());
+				result = 31 * result + Arrays.hashCode(cg.fractions());
 			} else {
 				result = 31 * result + Objects.hashCode(paint);
 			}
@@ -162,7 +182,7 @@ final class PaintResources {
 				}
 
 				final var pout = gc.out;
-				final var key = new ShadingKey(pout.getHeight(), at, gradient);
+				final var key = new ShadingKey(pout.getWidth(), pout.getHeight(), at, gradient);
 				var name = gc.resourceCache.get(key);
 				if (name != null) {
 					yield name;
@@ -208,7 +228,7 @@ final class PaintResources {
 				}
 
 				final var pout = gc.out;
-				final var key = new ShadingKey(pout.getHeight(), at, gp);
+				final var key = new ShadingKey(pout.getWidth(), pout.getHeight(), at, gp);
 				var name = gc.resourceCache.get(key);
 				if (name != null) {
 					yield name;
@@ -249,8 +269,227 @@ final class PaintResources {
 					throw new GraphicsException(e);
 				}
 			}
-			case COLOR, CONIC_GRADIENT -> null; // 円錐はPDFに無い(利用側がCapabilityで回避)
+			case CONIC_GRADIENT -> conicPaintName(gc, (ConicGradient) paint);
+			case COLOR -> null;
 		};
+	}
+
+	private record ConicMesh(double[] decode, byte[] vertexData) {
+	}
+
+	private static String conicPaintName(final PDFGC gc, final ConicGradient gradient) {
+		if (gc.pdfVersion.v < PDFParams.Version.V_1_3.v) {
+			return null;
+		}
+		var at = gc.getTransform();
+		if (at == null) {
+			at = new AffineTransform(gradient.transform());
+		} else {
+			at.concatenate(gradient.transform());
+		}
+		final var pout = gc.out;
+		final var key = new ShadingKey(pout.getWidth(), pout.getHeight(), at, gradient);
+		var name = gc.resourceCache.get(key);
+		if (name != null) {
+			return name;
+		}
+
+		final var colorType = shadingColorType(pout.getPdfWriter().getParams(), gradient.colors());
+		final var mesh = createConicMesh(gradient, at, pout.getWidth(), pout.getHeight(), colorType, false);
+		try {
+			name = pout.getPdfWriter().createType4ShadingPattern(pout.getHeight(), at, colorType,
+					mesh.decode(), mesh.vertexData());
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+		gc.resourceCache.put(key, name);
+		return name;
+	}
+
+	private static ConicMesh createConicMesh(final ConicGradient gradient, final AffineTransform patternMatrix,
+			final double width, final double height, final Color.Type colorType, final boolean alphaOnly) {
+		if (!Double.isFinite(gradient.cx()) || !Double.isFinite(gradient.cy())
+				|| !Double.isFinite(gradient.startAngle()) || !Double.isFinite(width) || !Double.isFinite(height)
+				|| !(width > 0) || !(height > 0)) {
+			throw new GraphicsException("Conic gradient geometry must be finite and non-empty.");
+		}
+		final int n = Math.min(gradient.fractions().length, gradient.colors().length);
+		if (n == 0) {
+			throw new GraphicsException("A conic gradient requires at least one color stop.");
+		}
+		for (var i = 0; i < n; ++i) {
+			final double fraction = gradient.fractions()[i];
+			if (!Double.isFinite(fraction) || fraction < 0 || fraction > 1
+					|| (i > 0 && fraction < gradient.fractions()[i - 1])) {
+				throw new GraphicsException("Conic gradient fractions must be finite and sorted within 0..1.");
+			}
+			if (gradient.colors()[i] == null) {
+				throw new GraphicsException("Conic gradient colors cannot contain null.");
+			}
+		}
+
+		final double[] corners = { 0, 0, width, 0, width, height, 0, height };
+		try {
+			final var pdfPatternMatrix = new AffineTransform(patternMatrix);
+			pdfPatternMatrix.preConcatenate(new AffineTransform(1, 0, 0, -1, 0, height));
+			pdfPatternMatrix.createInverse().transform(corners, 0, corners, 0, 4);
+		} catch (NoninvertibleTransformException e) {
+			throw new GraphicsException("The conic gradient pattern matrix is not invertible.", e);
+		}
+		double radius = 0;
+		for (var i = 0; i < corners.length; i += 2) {
+			final double distance = Math.hypot(corners[i] - gradient.cx(), corners[i + 1] - gradient.cy());
+			if (!Double.isFinite(distance)) {
+				throw new GraphicsException("The conic gradient extent is not finite.");
+			}
+			radius = Math.max(radius, distance);
+		}
+		radius *= 1.05;
+		if (!(radius > 0) || !Double.isFinite(radius)) {
+			throw new GraphicsException("The conic gradient extent is empty.");
+		}
+
+		final int components = alphaOnly ? 1 : switch (colorType) {
+			case GRAY -> 1;
+			case RGB -> 3;
+			case CMYK -> 4;
+			default -> throw new GraphicsException("Unsupported conic mesh color type: " + colorType);
+		};
+		final double[] decode = new double[4 + 2 * components];
+		decode[0] = gradient.cx() - radius;
+		decode[1] = gradient.cx() + radius;
+		decode[2] = gradient.cy() - radius;
+		decode[3] = gradient.cy() + radius;
+		for (var i = 0; i < components; ++i) {
+			decode[4 + 2 * i] = 0;
+			decode[5 + 2 * i] = 1;
+		}
+
+		// One supplied turn is authoritative. FolioJet expands repeating conics
+		// before constructing this paint, so no second periodic expansion belongs
+		// in the PDF backend.
+		final var data = new ByteArrayOutputStream();
+		if (n == 1) {
+			writeConicSegment(data, gradient, decode, colorType, alphaOnly, radius,
+					0, 1, gradient.colors()[0], gradient.colors()[0]);
+		} else {
+			final double first = gradient.fractions()[0];
+			if (first > 0) {
+				writeConicSegment(data, gradient, decode, colorType, alphaOnly, radius,
+						0, first, gradient.colors()[0], gradient.colors()[0]);
+			}
+			for (var i = 0; i < n - 1; ++i) {
+				writeConicSegment(data, gradient, decode, colorType, alphaOnly, radius,
+						gradient.fractions()[i], gradient.fractions()[i + 1],
+						gradient.colors()[i], gradient.colors()[i + 1]);
+			}
+			final double last = gradient.fractions()[n - 1];
+			if (last < 1) {
+				writeConicSegment(data, gradient, decode, colorType, alphaOnly, radius,
+						last, 1, gradient.colors()[n - 1], gradient.colors()[n - 1]);
+			}
+		}
+		return new ConicMesh(decode, data.toByteArray());
+	}
+
+	private static void writeConicSegment(final ByteArrayOutputStream out, final ConicGradient gradient,
+			final double[] decode, final Color.Type colorType, final boolean alphaOnly, final double outerRadius,
+			final double start, final double end, final Color startColor, final Color endColor) {
+		final double extent = end - start;
+		final int steps = extent == 0 ? 1 : Math.max(1, (int) Math.ceil(extent / MAX_CONIC_STEP));
+		for (var i = 0; i < steps; ++i) {
+			final double ratio0 = (double) i / steps;
+			final double ratio1 = (double) (i + 1) / steps;
+			final double fraction0 = start + extent * ratio0;
+			final double fraction1 = start + extent * ratio1;
+			final Color color0 = interpolate(startColor, endColor, ratio0);
+			final Color color1 = interpolate(startColor, endColor, ratio1);
+			writeConicSector(out, gradient, decode, colorType, alphaOnly, outerRadius,
+					fraction0, fraction1, color0, color1);
+		}
+	}
+
+	private static Color interpolate(final Color a, final Color b, final double ratio) {
+		// Always flatten through straight RGB, including at endpoints. This keeps
+		// CMYK/spot stops consistent with the Java2D conic paint before the sampled
+		// result is converted to the mesh's effective process color space.
+		final float f = (float) Math.max(0, Math.min(1, ratio));
+		return RGBAColor.create(
+				a.getRed() + (b.getRed() - a.getRed()) * f,
+				a.getGreen() + (b.getGreen() - a.getGreen()) * f,
+				a.getBlue() + (b.getBlue() - a.getBlue()) * f,
+				a.getAlpha() + (b.getAlpha() - a.getAlpha()) * f);
+	}
+
+	private static void writeConicSector(final ByteArrayOutputStream out, final ConicGradient gradient,
+			final double[] decode, final Color.Type colorType, final boolean alphaOnly, final double outerRadius,
+			final double fraction0, final double fraction1, final Color color0, final Color color1) {
+		final double angle0 = gradient.startAngle() + 2 * Math.PI * fraction0;
+		final double angle1 = gradient.startAngle() + 2 * Math.PI * fraction1;
+		final double ix0 = gradient.cx() + Math.sin(angle0) * CONIC_INNER_RADIUS;
+		final double iy0 = gradient.cy() - Math.cos(angle0) * CONIC_INNER_RADIUS;
+		final double ix1 = gradient.cx() + Math.sin(angle1) * CONIC_INNER_RADIUS;
+		final double iy1 = gradient.cy() - Math.cos(angle1) * CONIC_INNER_RADIUS;
+		final double ox0 = gradient.cx() + Math.sin(angle0) * outerRadius;
+		final double oy0 = gradient.cy() - Math.cos(angle0) * outerRadius;
+		final double ox1 = gradient.cx() + Math.sin(angle1) * outerRadius;
+		final double oy1 = gradient.cy() - Math.cos(angle1) * outerRadius;
+
+		writeMeshVertex(out, decode, colorType, alphaOnly, ix0, iy0, color0);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ox0, oy0, color0);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ox1, oy1, color1);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ix0, iy0, color0);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ox1, oy1, color1);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ix1, iy1, color1);
+	}
+
+	private static void writeMeshVertex(final ByteArrayOutputStream out, final double[] decode,
+			final Color.Type colorType, final boolean alphaOnly, final double x, final double y, final Color color) {
+		out.write(0); // no edge reuse: every triangle contains three explicit vertices
+		writeUInt32(out, quantize32(x, decode[0], decode[1]));
+		writeUInt32(out, quantize32(y, decode[2], decode[3]));
+		if (alphaOnly) {
+			writeUInt16(out, quantize16(color.getAlpha()));
+			return;
+		}
+		switch (colorType) {
+			case GRAY -> writeUInt16(out, quantize16(ColorUtils.toGray(
+					color.getRed(), color.getGreen(), color.getBlue())));
+			case RGB -> {
+				writeUInt16(out, quantize16(color.getRed()));
+				writeUInt16(out, quantize16(color.getGreen()));
+				writeUInt16(out, quantize16(color.getBlue()));
+			}
+			case CMYK -> {
+				final var cmyk = ColorUtils.toCMYK(color);
+				writeUInt16(out, quantize16(cmyk.getComponent(CMYKColor.C)));
+				writeUInt16(out, quantize16(cmyk.getComponent(CMYKColor.M)));
+				writeUInt16(out, quantize16(cmyk.getComponent(CMYKColor.Y)));
+				writeUInt16(out, quantize16(cmyk.getComponent(CMYKColor.K)));
+			}
+			default -> throw new GraphicsException("Unsupported conic mesh color type: " + colorType);
+		}
+	}
+
+	private static long quantize32(final double value, final double minimum, final double maximum) {
+		final double normalized = Math.max(0, Math.min(1, (value - minimum) / (maximum - minimum)));
+		return Math.round(normalized * 0xffff_ffffL);
+	}
+
+	private static int quantize16(final double value) {
+		return (int) Math.round(Math.max(0, Math.min(1, value)) * 0xffff);
+	}
+
+	private static void writeUInt32(final ByteArrayOutputStream out, final long value) {
+		out.write((int) (value >>> 24) & 0xff);
+		out.write((int) (value >>> 16) & 0xff);
+		out.write((int) (value >>> 8) & 0xff);
+		out.write((int) value & 0xff);
+	}
+
+	private static void writeUInt16(final ByteArrayOutputStream out, final int value) {
+		out.write(value >>> 8);
+		out.write(value);
 	}
 
 	/**
@@ -276,24 +515,26 @@ final class PaintResources {
 	 */
 	static void writeShadingFunction(final PDFOutput sout, final PDFParams params, final Color[] colors,
 			final double[] fractions) throws IOException {
-		final Color.Type colorType;
+		writeShadingFunction(sout, shadingColorType(params, colors), colors, fractions);
+	}
+
+	private static Color.Type shadingColorType(final PDFParams params, final Color[] colors) {
 		if (params.effectiveColorMode() == PDFParams.ColorMode.GRAY) {
-			colorType = Color.Type.GRAY;
-		} else if (params.effectiveColorMode() == PDFParams.ColorMode.CMYK) {
-			colorType = Color.Type.CMYK;
-		} else {
-			var type = stopType(colors[0]);
-			for (var i = 1; i < colors.length; ++i) {
-				if (type != stopType(colors[i])) {
-					type = Color.Type.RGB;
-				}
-			}
-			if (type == Color.Type.RGBA) {
+			return Color.Type.GRAY;
+		}
+		if (params.effectiveColorMode() == PDFParams.ColorMode.CMYK) {
+			return Color.Type.CMYK;
+		}
+		if (colors.length == 0) {
+			throw new IllegalArgumentException("A shading requires at least one color.");
+		}
+		var type = stopType(colors[0]);
+		for (var i = 1; i < colors.length; ++i) {
+			if (type != stopType(colors[i])) {
 				type = Color.Type.RGB;
 			}
-			colorType = type;
 		}
-		writeShadingFunction(sout, colorType, colors, fractions);
+		return type == Color.Type.RGBA ? Color.Type.RGB : type;
 	}
 
 	/**
@@ -498,6 +739,10 @@ final class PaintResources {
 			colors = rg.colors();
 			fractions = rg.fractions();
 			paintTransform = rg.transform();
+		} else if (paint instanceof ConicGradient cg) {
+			colors = cg.colors();
+			fractions = cg.fractions();
+			paintTransform = cg.transform();
 		} else {
 			return null;
 		}
@@ -507,13 +752,13 @@ final class PaintResources {
 
 		var at = gc.getTransform();
 		if (at == null) {
-			at = paintTransform;
+			at = paintTransform != null ? new AffineTransform(paintTransform) : new AffineTransform();
 		} else if (paintTransform != null) {
 			at.concatenate(paintTransform);
 		}
 
 		final var pout = gc.out;
-		final var key = new MaskKey(new ShadingKey(pout.getHeight(), at, paint));
+		final var key = new MaskKey(new ShadingKey(pout.getWidth(), pout.getHeight(), at, paint));
 		var name = gc.resourceCache.get(key);
 		if (name != null) {
 			return name;
@@ -527,45 +772,53 @@ final class PaintResources {
 		}
 
 		final String shadingName;
-		try (final var sout = pout.getPdfWriter().createShadingPattern(pout.getHeight(), at)) {
-			if (paint instanceof LinearGradient lg) {
-				sout.writeName("ShadingType");
-				sout.writeInt(2);
-				sout.lineBreak();
-				sout.writeName("Coords");
-				sout.startArray();
-				sout.writeReal(lg.x1());
-				sout.writeReal(lg.y1());
-				sout.writeReal(lg.x2());
-				sout.writeReal(lg.y2());
-				sout.endArray();
-				sout.lineBreak();
+		try {
+			if (paint instanceof ConicGradient cg) {
+				final var mesh = createConicMesh(cg, at, pout.getWidth(), pout.getHeight(), Color.Type.GRAY, true);
+				shadingName = pout.getPdfWriter().createType4ShadingPattern(pout.getHeight(), at, Color.Type.GRAY,
+						mesh.decode(), mesh.vertexData());
 			} else {
-				final var rg = (RadialGradient) paint;
-				var dx = rg.fx() - rg.cx();
-				var dy = rg.fy() - rg.cy();
-				final var d = Math.sqrt(dx * dx + dy * dy);
-				if (d > rg.radius()) {
-					final var scale = (rg.radius() * .9999) / d;
-					dx *= scale;
-					dy *= scale;
+				try (final var sout = pout.getPdfWriter().createShadingPattern(pout.getHeight(), at)) {
+					if (paint instanceof LinearGradient lg) {
+						sout.writeName("ShadingType");
+						sout.writeInt(2);
+						sout.lineBreak();
+						sout.writeName("Coords");
+						sout.startArray();
+						sout.writeReal(lg.x1());
+						sout.writeReal(lg.y1());
+						sout.writeReal(lg.x2());
+						sout.writeReal(lg.y2());
+						sout.endArray();
+						sout.lineBreak();
+					} else {
+						final var rg = (RadialGradient) paint;
+						var dx = rg.fx() - rg.cx();
+						var dy = rg.fy() - rg.cy();
+						final var d = Math.sqrt(dx * dx + dy * dy);
+						if (d > rg.radius()) {
+							final var scale = (rg.radius() * .9999) / d;
+							dx *= scale;
+							dy *= scale;
+						}
+						sout.writeName("ShadingType");
+						sout.writeInt(3);
+						sout.lineBreak();
+						sout.writeName("Coords");
+						sout.startArray();
+						sout.writeReal(rg.cx() + dx);
+						sout.writeReal(rg.cy() + dy);
+						sout.writeReal(0);
+						sout.writeReal(rg.cx());
+						sout.writeReal(rg.cy());
+						sout.writeReal(rg.radius());
+						sout.endArray();
+						sout.lineBreak();
+					}
+					writeShadingFunction(sout, Color.Type.GRAY, grays, fractions);
+					shadingName = sout.getName();
 				}
-				sout.writeName("ShadingType");
-				sout.writeInt(3);
-				sout.lineBreak();
-				sout.writeName("Coords");
-				sout.startArray();
-				sout.writeReal(rg.cx() + dx);
-				sout.writeReal(rg.cy() + dy);
-				sout.writeReal(0);
-				sout.writeReal(rg.cx());
-				sout.writeReal(rg.cy());
-				sout.writeReal(rg.radius());
-				sout.endArray();
-				sout.lineBreak();
 			}
-			writeShadingFunction(sout, Color.Type.GRAY, grays, fractions);
-			shadingName = sout.getName();
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		}

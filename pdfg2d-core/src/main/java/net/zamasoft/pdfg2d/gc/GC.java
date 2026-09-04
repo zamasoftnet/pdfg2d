@@ -142,6 +142,35 @@ public interface GC {
 	}
 
 	/**
+	 * Opens a semantic replacement scope. Everything drawn until the returned
+	 * handle is closed is represented to text extractors and assistive
+	 * technology by {@code logicalText}, while the enclosed drawing operations
+	 * remain unchanged visually. A typical use is one visually reordered line
+	 * whose glyph runs are painted in visual order.
+	 *
+	 * <p>
+	 * Always close the returned state, preferably with try-with-resources. Calls
+	 * made while a replacement scope is already open may return a no-op state;
+	 * callers must therefore put the complete replacement text on the outermost
+	 * scope.
+	 * </p>
+	 *
+	 * <p>
+	 * The default implementation does nothing and returns
+	 * {@link #NO_OP_STATE}, preserving output for back-ends that do not expose a
+	 * semantic text replacement facility.
+	 * </p>
+	 *
+	 * @param logicalText the replacement text in logical reading order
+	 * @return a handle that closes the replacement scope; never {@code null}
+	 * @throws GraphicsException if a graphics error occurs
+	 * @since 1.3
+	 */
+	public default State beginTextReplacement(final String logicalText) throws GraphicsException {
+		return NO_OP_STATE;
+	}
+
+	/**
 	 * Resets the current graphics state to the initial state.
 	 *
 	 * @throws GraphicsException if a graphics error occurs
@@ -242,9 +271,9 @@ public interface GC {
 	 * 出力先が厳密に描ける描画機能(2026-08-29)。
 	 *
 	 * <p>
-	 * PDFにはぼかし・円錐シェーディング・要素単位のフィルタ合成が無く、
-	 * 利用側(FolioJet)はそれらを同心塗りや扇形で近似する。Java2Dやブラウザが
-	 * 描くSVGなら厳密にできるので、利用側はまずこれで問い合わせ、できるなら
+	 * 出力形式ごとに厳密化できる機能が異なる。PDF は生成画像によるぼかし・
+	 * 要素単位のフィルタ合成と Type 4 メッシュによる円錐グラデーションに対応する。
+	 * 利用側はまずこれで問い合わせ、できるなら
 	 * 厳密経路({@link #supports(Capability)}がtrueの機能用のAPI)へ、
 	 * できなければ近似へ進み、近似したことを利用者へ知らせる。
 	 * 既定は全てfalse(=近似)。
@@ -265,8 +294,35 @@ public interface GC {
 		BLEND_GROUP
 	}
 
+	/**
+	 * Reports how {@link #drawGroupEffects(Image, GroupEffects)} rendered a
+	 * captured group.
+	 */
+	public enum GroupEffectsResult {
+		/** The group and its effects remained vector content. */
+		VECTOR,
+		/** The affected group alone was rasterized. */
+		RASTERIZED,
+		/** A resource limit was exceeded, so the group was drawn without effects. */
+		LIMIT_FALLBACK,
+		/** The backend cannot render the requested group effects; nothing was drawn. */
+		UNSUPPORTED
+	}
+
 	/** 出力先が{@code capability}を厳密に描けるなら true。既定は false。 */
 	public default boolean supports(final Capability capability) {
+		return false;
+	}
+
+	/**
+	 * Returns whether group effects accepted by this graphics context are
+	 * implemented by rasterizing the captured group. Callers may use this to
+	 * avoid routing content, such as text shadows, through a path that would
+	 * change its semantic representation.
+	 *
+	 * @return {@code true} when non-trivial group effects are rasterized
+	 */
+	public default boolean rasterizesGroupEffects() {
 		return false;
 	}
 
@@ -416,11 +472,62 @@ public interface GC {
 	}
 
 	/**
+	 * Attempts to fill a shape with an exact Gaussian blur.
+	 *
+	 * <p>
+	 * A {@code false} result guarantees that nothing was drawn. Callers can
+	 * therefore emit their own approximation without risking duplicate output.
+	 * The default implementation delegates to {@link #fillBlurred(Shape, double)}
+	 * only when {@link Capability#GAUSSIAN_BLUR} is supported.
+	 * </p>
+	 *
+	 * @param shape the shape to fill
+	 * @param sigma the blur standard deviation in user-space units
+	 * @return {@code true} if the blurred fill was drawn; {@code false} if
+	 *         nothing was drawn
+	 * @throws GraphicsException if a graphics error occurs while drawing
+	 */
+	public default boolean tryFillBlurred(final Shape shape, final double sigma) throws GraphicsException {
+		if (!this.supports(Capability.GAUSSIAN_BLUR)) {
+			return false;
+		}
+		this.fillBlurred(shape, sigma);
+		return true;
+	}
+
+	/**
 	 * 画像(通常は {@link #createGroupImage} で描いた層)に効果を掛けて描く。
 	 * 対応しない出力先では効果を無視して {@link #drawImage(Image)} する。
 	 */
 	public default void drawImage(final Image image, final GroupEffects effects) throws GraphicsException {
 		this.drawImage(image);
+	}
+
+	/**
+	 * Draws a captured group with element-wide effects and reports the rendering
+	 * path actually used.
+	 *
+	 * <p>
+	 * {@link GroupEffectsResult#UNSUPPORTED} guarantees that nothing was drawn,
+	 * so a caller can safely choose its own approximation. Other results mean
+	 * that this method completed the draw, including a limit fallback when
+	 * reported. The default implementation uses the backend's existing
+	 * {@link #drawImage(Image, GroupEffects)} path when
+	 * {@link Capability#GROUP_FILTER} is supported.
+	 * </p>
+	 *
+	 * @param image   captured group image
+	 * @param effects effects to apply to the whole group
+	 * @return the rendering path used
+	 * @throws GraphicsException if a graphics error occurs
+	 */
+	public default GroupEffectsResult drawGroupEffects(final Image image, final GroupEffects effects)
+			throws GraphicsException {
+		if (!this.supports(Capability.GROUP_FILTER)) {
+			return GroupEffectsResult.UNSUPPORTED;
+		}
+		this.drawImage(image, effects);
+		return GroupEffectsResult.VECTOR;
 	}
 
 	/**
@@ -442,4 +549,24 @@ public interface GC {
 	 * @throws GraphicsException if a graphics error occurs
 	 */
 	public GroupImageGC createGroupImage(final double width, final double height) throws GraphicsException;
+
+	/**
+	 * Creates the group used to capture an element that may later receive
+	 * element-wide filter effects.
+	 *
+	 * <p>
+	 * Backends that need deferred replay may override this independently of
+	 * {@link #createGroupImage(double, double)}. The default keeps the ordinary
+	 * group implementation, preserving existing vector/group semantics.
+	 * </p>
+	 *
+	 * @param width  the width of the captured group
+	 * @param height the height of the captured group
+	 * @return a group graphics context suitable for later
+	 *         {@link #drawGroupEffects(Image, GroupEffects)}
+	 * @throws GraphicsException if a graphics error occurs
+	 */
+	public default GroupImageGC createFilterGroup(final double width, final double height) throws GraphicsException {
+		return this.createGroupImage(width, height);
+	}
 }

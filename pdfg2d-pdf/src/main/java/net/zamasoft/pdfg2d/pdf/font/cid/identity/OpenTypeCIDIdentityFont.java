@@ -60,6 +60,23 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 		return gid;
 	}
 
+	/**
+	 * Identity fonts cannot allocate a semantic alias because CID equals the
+	 * displayed GID. The display glyph is returned unchanged and the existing
+	 * ToUnicode behaviour is retained. Such fonts therefore rely on
+	 * {@code ActualText} for bidirectional mirroring; embedded subsets are
+	 * recommended when robust bidi extraction is required.
+	 */
+	@Override
+	public int toGID(final int displayCodePoint, final int logicalCodePoint,
+			final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		final int gid = super.toGID(displayCodePoint, features);
+		if (gid != 0) {
+			this.unicodes.set(gid, displayCodePoint);
+		}
+		return gid;
+	}
+
 	protected int toChar(int gid) {
 		return this.unicodes.get(gid);
 	}
@@ -127,6 +144,11 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 	}
 
 	public int getLigature(int gid, int cid) {
+		return -1;
+	}
+
+	@Override
+	public int getLigature(int gid, int cid, net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
 		return -1;
 	}
 }

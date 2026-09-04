@@ -125,6 +125,48 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 	}
 
 	/**
+	 * Opens a marked-content sequence whose enclosed content is semantically
+	 * replaced by {@code actualText}. The value is serialized by the existing
+	 * PDF text-string writer, including UTF-16 encoding when required.
+	 *
+	 * <p>
+	 * Marked-content {@code ActualText} requires PDF 1.5 or later. For an older
+	 * target version this method and the matching {@link #endActualText()} are
+	 * no-ops rather than emitting invalid content.
+	 * </p>
+	 *
+	 * @param actualText replacement text in logical reading order
+	 * @throws IOException if an I/O error occurs
+	 * @since 1.3
+	 */
+	public void beginActualText(final String actualText) throws IOException {
+		if (this.pdfWriter.getParams().version().v < net.zamasoft.pdfg2d.pdf.params.PDFParams.Version.V_1_5.v) {
+			return;
+		}
+		final String replacement = java.util.Objects.requireNonNull(actualText, "actualText");
+		this.writeName("Span");
+		this.startHash();
+		this.writeName("ActualText");
+		this.writeText(replacement);
+		this.endHash();
+		this.writeOperator("BDC");
+	}
+
+	/**
+	 * Closes the sequence opened by {@link #beginActualText(String)}. This is a
+	 * no-op for target versions earlier than PDF 1.5.
+	 *
+	 * @throws IOException if an I/O error occurs
+	 * @since 1.3
+	 */
+	public void endActualText() throws IOException {
+		if (this.pdfWriter.getParams().version().v < net.zamasoft.pdfg2d.pdf.params.PDFParams.Version.V_1_5.v) {
+			return;
+		}
+		this.writeOperator("EMC");
+	}
+
+	/**
 	 * Writes coordinates relative to the bottom-left origin of PDF.
 	 * 
 	 * @param x X coordinate (top-left origin)

@@ -78,23 +78,52 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		return this.addGID(c, fgid);
 	}
 
+	/**
+	 * Registers a semantic CID alias for a display glyph. The physical outline
+	 * is selected from {@code displayCodePoint}, while this Type0 wrapper's
+	 * ToUnicode map records {@code logicalCodePoint}.
+	 */
+	@Override
+	public int toGID(final int displayCodePoint, final int logicalCodePoint,
+			net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		final var source = (OpenTypeEmbeddedCIDFontSource) this.getFontSource();
+		int fgid = source.getCmapFormat().mapCharCode(displayCodePoint);
+		fgid = this.substituteFeatures(fgid, features);
+		return this.addGID(displayCodePoint, logicalCodePoint, fgid);
+	}
+
 	int addGID(final int c, int fgid) {
+		return this.addGID(c, c, fgid);
+	}
+
+	private int addGID(final int displayCodePoint, final int logicalCodePoint, int fgid) {
 		if (fgid == 0) {
 			return 0;
 		}
 		final int directVertical = this.substituteVertical(fgid);
-		fgid = this.substituteVertical(c, fgid);
-		final boolean emDashFallback = c == 0x2014 && directVertical != fgid;
-		final int semanticVariant = emDashFallback ? 0x2014 : 0;
-		final int gid = this.subset.register(fgid, this.verticalShapeFlags(c), semanticVariant,
+		fgid = this.substituteVertical(displayCodePoint, fgid);
+		final boolean emDashFallback = displayCodePoint == 0x2014 && directVertical != fgid;
+		final int semanticVariant = logicalCodePoint != displayCodePoint || emDashFallback
+				? logicalCodePoint : 0;
+		final int gid = this.subset.register(fgid, this.verticalShapeFlags(displayCodePoint), semanticVariant,
 				this.getHAdvance(fgid), this.getVAdvance(fgid), this.isVertical());
 		if (this.gidToCid.get(gid) < 0) {
-			this.gidToCid.set(gid, c);
+			this.gidToCid.set(gid, logicalCodePoint);
 		}
 		return gid;
 	}
 
 	public int getLigature(int gid, int cid) {
+		return this.getLigatureImpl(gid, cid, null);
+	}
+
+	@Override
+	public int getLigature(int gid, int cid, net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		return this.getLigatureImpl(gid, cid, features);
+	}
+
+	private int getLigatureImpl(int gid, int cid,
+			net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
 		if (gid == -1) {
 			return -1;
 		}
@@ -108,9 +137,10 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 			return this.addGID(c, fgid);
 		}
 
-		// GSUB standard ligatures: translate the subset glyph and the incoming
-		// character into font glyph ids, look up the ligature, and register its
-		// glyph in the subset. The ligature is keyed to the joining character
+		// Translate the subset glyph and the incoming character into font glyph
+		// ids. The feature-aware path applies single substitutions before the
+		// required vertical substitution, then registers the selected ligature
+		// back into the subset. The ligature is keyed to the joining character
 		// for a best-effort ToUnicode mapping.
 		int firstFgid = this.subset.sourceGid(gid);
 		if (firstFgid < 0) {
@@ -120,8 +150,12 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		if (secondFgid == 0) {
 			return -1;
 		}
+		if (features != null) {
+			secondFgid = this.substituteFeatures(secondFgid, features);
+		}
 		secondFgid = this.substituteVertical(cid, secondFgid);
-		int ligFgid = this.gsubLigature(firstFgid, secondFgid);
+		int ligFgid = features == null ? this.gsubLigature(firstFgid, secondFgid)
+				: this.gsubLigature(firstFgid, secondFgid, features);
 		if (ligFgid <= 0) {
 			return -1;
 		}

@@ -1,18 +1,32 @@
 package net.zamasoft.pdfg2d.pdf.font.cid.embedded;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 
+import net.zamasoft.pdfg2d.gc.font.FontFeatureSet;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Direction;
+import net.zamasoft.pdfg2d.pdf.PDFPageOutput;
+import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
+import net.zamasoft.pdfg2d.pdf.params.PDFParams;
+import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 
 /** Glyph-ledger regressions below the PDF object writer. */
 public class OpenTypeEmbeddedCIDFontSubsetTest {
 	private static final File FONT = new File("../pdfg2d-demo/src/main/resources/ipaexm.ttf");
+
+	private record RenderedFont(String pdf, int ordinaryCid, int aliasCid, int verticalDashCid) {
+	}
 
 	private record Pair(OpenTypeEmbeddedCIDFont horizontal, OpenTypeEmbeddedCIDFont vertical,
 			OpenTypeEmbeddedCIDFontSubset subset) {
@@ -25,6 +39,123 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 		final var horizontal = (OpenTypeEmbeddedCIDFont) horizontalSource.createFont("H", null, subset);
 		final var vertical = (OpenTypeEmbeddedCIDFont) verticalSource.createFont("V", null, subset);
 		return new Pair(horizontal, vertical, subset);
+	}
+
+	private static void drawCids(final PDFPageOutput page, final OpenTypeEmbeddedCIDFont font,
+			final int... cids) throws Exception {
+		page.useResource("Font", font.getName());
+		page.writeOperator("BT");
+		page.writeName(font.getName());
+		page.writeInt(12);
+		page.writeOperator("Tf");
+		page.writeBytes16(cids, 0, cids.length);
+		page.writeOperator("Tj");
+		page.writeOperator("ET");
+	}
+
+	private static RenderedFont renderAliases() throws Exception {
+		final var bytes = new ByteArrayOutputStream();
+		final var builder = new StreamFragmentedOutput(bytes);
+		final var params = PDFParams.createDefault()
+				.withCompression(PDFParams.Compression.NONE)
+				.withFileId(new byte[16]);
+		final var pdf = new PDFWriterImpl(builder, params);
+		final var page = pdf.nextPage(100, 100);
+		final var horizontalSource = new OpenTypeEmbeddedCIDFontSource(FONT, 0, Direction.LTR);
+		final var verticalSource = new OpenTypeEmbeddedCIDFontSource(FONT, 0, Direction.TB);
+		final var horizontal = (OpenTypeEmbeddedCIDFont) pdf.useFont(horizontalSource);
+		final var vertical = (OpenTypeEmbeddedCIDFont) pdf.useFont(verticalSource);
+
+		final int ordinaryCid = horizontal.toGID(')', ')', FontFeatureSet.EMPTY);
+		final int aliasCid = horizontal.toGID(')', '(', FontFeatureSet.EMPTY);
+		final int verticalDashCid = vertical.toGID(0x2014);
+		drawCids(page, horizontal, ordinaryCid, aliasCid);
+		drawCids(page, vertical, verticalDashCid);
+
+		page.close();
+		pdf.close();
+		builder.close();
+		return new RenderedFont(bytes.toString(StandardCharsets.ISO_8859_1), ordinaryCid, aliasCid,
+				verticalDashCid);
+	}
+
+	private static String objectBody(final String pdf, final int objectNumber) {
+		final var matcher = Pattern.compile("(?s)\\b" + objectNumber + "\\s+0\\s+obj\\b(.*?)endobj")
+				.matcher(pdf);
+		assertTrue(matcher.find(), "missing object " + objectNumber);
+		return matcher.group(1);
+	}
+
+	private static String toUnicodeCMap(final String pdf, final String encoding) {
+		final var font = Pattern.compile("(?s)\\b\\d+\\s+0\\s+obj\\s*<<(?:(?!endobj).)*?"
+				+ "/Encoding\\s*/" + Pattern.quote(encoding)
+				+ "\\b(?:(?!endobj).)*?/ToUnicode\\s+(\\d+)\\s+0\\s+R")
+				.matcher(pdf);
+		assertTrue(font.find(), "missing Type0 font with /Encoding /" + encoding);
+		final String object = objectBody(pdf, Integer.parseInt(font.group(1)));
+		final int marker = object.indexOf("stream");
+		assertTrue(marker >= 0, "ToUnicode object has no stream");
+		int begin = marker + "stream".length();
+		if (begin < object.length() && object.charAt(begin) == '\r') {
+			++begin;
+		}
+		if (begin < object.length() && object.charAt(begin) == '\n') {
+			++begin;
+		}
+		final int end = object.lastIndexOf("endstream");
+		assertTrue(end >= begin, "unterminated ToUnicode stream");
+		return object.substring(begin, end);
+	}
+
+	private static int codePoint(final String hex) {
+		final byte[] bytes = java.util.HexFormat.of().parseHex(hex);
+		final String value = new String(bytes, StandardCharsets.UTF_16BE);
+		return value.codePointAt(0);
+	}
+
+	/** Parses both legal ToUnicode forms so sparse-CID output is not assumed contiguous. */
+	private static Map<Integer, Integer> parseToUnicode(final String cmap) {
+		final var mappings = new HashMap<Integer, Integer>();
+		final var bfchar = Pattern.compile("(?s)\\d+\\s+beginbfchar(.*?)endbfchar").matcher(cmap);
+		while (bfchar.find()) {
+			final var row = Pattern.compile("<([0-9A-Fa-f]+)>\\s*<([0-9A-Fa-f]+)>")
+					.matcher(bfchar.group(1));
+			while (row.find()) {
+				mappings.put(Integer.parseInt(row.group(1), 16), codePoint(row.group(2)));
+			}
+		}
+
+		final var bfrange = Pattern.compile("(?s)\\d+\\s+beginbfrange(.*?)endbfrange").matcher(cmap);
+		while (bfrange.find()) {
+			final var row = Pattern.compile("<([0-9A-Fa-f]+)>\\s*<([0-9A-Fa-f]+)>\\s*"
+					+ "(?:<([0-9A-Fa-f]+)>|\\[((?:\\s*<[0-9A-Fa-f]+>)+)\\s*\\])")
+					.matcher(bfrange.group(1));
+			while (row.find()) {
+				final int first = Integer.parseInt(row.group(1), 16);
+				final int last = Integer.parseInt(row.group(2), 16);
+				if (row.group(3) != null) {
+					final int firstCodePoint = codePoint(row.group(3));
+					for (int cid = first; cid <= last; ++cid) {
+						mappings.put(cid, firstCodePoint + cid - first);
+					}
+				} else {
+					final var value = Pattern.compile("<([0-9A-Fa-f]+)>").matcher(row.group(4));
+					for (int cid = first; cid <= last; ++cid) {
+						assertTrue(value.find(), "short bfrange array for CID " + cid);
+						mappings.put(cid, codePoint(value.group(1)));
+					}
+				}
+			}
+		}
+		return mappings;
+	}
+
+	private static int count(final String value, final String needle) {
+		int count = 0;
+		for (int at = 0; (at = value.indexOf(needle, at)) >= 0; at += needle.length()) {
+			++count;
+		}
+		return count;
 	}
 
 	private static int[] directionMappings(final boolean verticalFirst) throws Exception {
@@ -79,5 +210,51 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 		final var verticalBounds = pair.vertical.getShape(verticalCid).getBounds2D();
 		assertEquals(horizontalBounds.getWidth(), verticalBounds.getHeight(), 1.0);
 		assertEquals(horizontalBounds.getHeight(), verticalBounds.getWidth(), 1.0);
+	}
+
+	@Test
+	public void displayGlyphCanHaveDistinctLogicalUnicodeAliases() throws Exception {
+		final var pair = pair();
+		final int displayCid = pair.horizontal.toGID(')', ')', FontFeatureSet.EMPTY);
+		final int logicalAliasCid = pair.horizontal.toGID(')', '(', FontFeatureSet.EMPTY);
+		final int verticalDashCid = pair.vertical.toGID(0x2014);
+		assertNotEquals(displayCid, logicalAliasCid);
+		assertEquals(pair.subset.sourceGid(displayCid), pair.subset.sourceGid(logicalAliasCid),
+				"both CIDs must draw the same source outline");
+		assertEquals((int) ')', pair.horizontal.toChar(displayCid));
+		assertEquals((int) '(', pair.horizontal.toChar(logicalAliasCid));
+		assertEquals(logicalAliasCid, pair.horizontal.toGID(')', '(', FontFeatureSet.EMPTY),
+				"the semantic alias must be stable");
+		final int[] signature = pair.subset.signature();
+		assertEquals((int) '(', signature[logicalAliasCid * 3 + 2]);
+		assertEquals(0x2014, signature[verticalDashCid * 3 + 2],
+				"the vertical em-dash fallback and mirrored punctuation must coexist in one ledger");
+	}
+
+	@Test
+	public void realPdfMapsSemanticAliasesAndKeepsTheSharedVerticalVariant() throws Exception {
+		final var rendered = renderAliases();
+		final var horizontal = parseToUnicode(toUnicodeCMap(rendered.pdf, "Identity-H"));
+		final var vertical = parseToUnicode(toUnicodeCMap(rendered.pdf, "Identity-V"));
+		assertEquals((int) ')', horizontal.get(rendered.ordinaryCid).intValue());
+		assertEquals((int) '(', horizontal.get(rendered.aliasCid).intValue());
+		assertEquals(0x2014, vertical.get(rendered.verticalDashCid).intValue());
+		assertNotEquals(rendered.ordinaryCid, rendered.aliasCid);
+		assertEquals(1, count(rendered.pdf, "/FontFile3"),
+				"horizontal aliases and the vertical semantic variant must share one physical subset");
+		assertEquals(1, count(rendered.pdf, "/Subtype /CIDFontType0")
+				- count(rendered.pdf, "/Subtype /CIDFontType0C"));
+		assertTrue(rendered.pdf.contains(String.format("<%04X%04X> Tj", rendered.ordinaryCid, rendered.aliasCid)),
+				"both uses of the display glyph must be present in the page content stream");
+	}
+
+	@Test
+	public void legacyApisKeepTheOriginalCidSequence() throws Exception {
+		final var pair = pair();
+		assertArrayEquals(new int[] { 1, 2, 3 }, new int[] {
+				pair.horizontal.toGID('A'),
+				pair.horizontal.toGID(')', FontFeatureSet.EMPTY),
+				pair.vertical.toGID(0x2014) },
+				"a subset that never calls the three-argument API must retain legacy numbering");
 	}
 }

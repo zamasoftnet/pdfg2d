@@ -35,6 +35,10 @@ import net.zamasoft.pdfg2d.pdf.font.ConfigurablePDFFontSourceManager;
  * @param rgbProfile               ICC profile for RGB content; when set, RGB colors are emitted
  *                                 in an ICCBased color space instead of DeviceRGB
  * @param renderingIntent          Default color rendering intent, or {@code null} to omit
+ * @param blurRasterDpi            Raster resolution for generated Gaussian-blur layers
+ * @param filterRasterDpi          Raster resolution for generated element-filter layers
+ * @param actualTextReplacement    Whether line-level {@code /ActualText} replacement is enabled;
+ *                                 defaults to {@code false}
  */
 public record PDFParams(
 		FontSourceManager fontSourceManager,
@@ -60,7 +64,13 @@ public record PDFParams(
 		int deflateLevel,
 		boolean objectStreams,
 		byte[] rgbProfile,
-		RenderingIntent renderingIntent) {
+		RenderingIntent renderingIntent,
+		int blurRasterDpi,
+		int filterRasterDpi,
+		boolean actualTextReplacement) {
+
+	private static final int DEFAULT_BLUR_RASTER_DPI = 150;
+	private static final int DEFAULT_FILTER_RASTER_DPI = 300;
 
 	/**
 	 * Represents the PDF version or conformance profile to generate.
@@ -269,6 +279,8 @@ public record PDFParams(
 		if (deflateLevel < -1 || deflateLevel > 9) {
 			throw new IllegalArgumentException("deflateLevel must be -1 (default) or 0-9.");
 		}
+		blurRasterDpi = Math.max(72, Math.min(600, blurRasterDpi));
+		filterRasterDpi = Math.max(72, Math.min(600, filterRasterDpi));
 		if (objectStreams) {
 			if (version != null && version.v < Version.V_1_5.v) {
 				throw new IllegalArgumentException("Object streams require PDF 1.5 or later.");
@@ -303,6 +315,114 @@ public record PDFParams(
 			// For now, we skip setParams call as it implies a circular dependency with
 			// mutable state.
 		}
+	}
+
+	/**
+	 * Compatibility constructor without an ActualText replacement setting.
+	 * Line-level replacement is disabled by default.
+	 */
+	public PDFParams(
+			FontSourceManager fontSourceManager,
+			Version version,
+			Compression compression,
+			JPEGImage jpegImage,
+			ImageCompression imageCompression,
+			int imageCompressionLossless,
+			String platformEncoding,
+			boolean bookmarks,
+			EncryptionParams encryption,
+			ColorMode colorMode,
+			int maxImageWidth,
+			int maxImageHeight,
+			int precision,
+			byte[] fileId,
+			PDFMetaInfo metaInfo,
+			ViewerPreferences viewerPreferences,
+			Action openAction,
+			boolean linearized,
+			OutputIntent outputIntent,
+			TaggedParams tagged,
+			int deflateLevel,
+			boolean objectStreams,
+			byte[] rgbProfile,
+			RenderingIntent renderingIntent,
+			int blurRasterDpi,
+			int filterRasterDpi) {
+		this(fontSourceManager, version, compression, jpegImage, imageCompression, imageCompressionLossless,
+				platformEncoding, bookmarks, encryption, colorMode, maxImageWidth, maxImageHeight, precision, fileId,
+				metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel,
+				objectStreams, rgbProfile, renderingIntent, blurRasterDpi, filterRasterDpi, false);
+	}
+
+	/**
+	 * Compatibility constructor without a filter raster resolution. Uses the
+	 * default of 300 dpi.
+	 */
+	public PDFParams(
+			FontSourceManager fontSourceManager,
+			Version version,
+			Compression compression,
+			JPEGImage jpegImage,
+			ImageCompression imageCompression,
+			int imageCompressionLossless,
+			String platformEncoding,
+			boolean bookmarks,
+			EncryptionParams encryption,
+			ColorMode colorMode,
+			int maxImageWidth,
+			int maxImageHeight,
+			int precision,
+			byte[] fileId,
+			PDFMetaInfo metaInfo,
+			ViewerPreferences viewerPreferences,
+			Action openAction,
+			boolean linearized,
+			OutputIntent outputIntent,
+			TaggedParams tagged,
+			int deflateLevel,
+			boolean objectStreams,
+			byte[] rgbProfile,
+			RenderingIntent renderingIntent,
+			int blurRasterDpi) {
+		this(fontSourceManager, version, compression, jpegImage, imageCompression, imageCompressionLossless,
+				platformEncoding, bookmarks, encryption, colorMode, maxImageWidth, maxImageHeight, precision, fileId,
+				metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel,
+				objectStreams, rgbProfile, renderingIntent, blurRasterDpi, DEFAULT_FILTER_RASTER_DPI);
+	}
+
+	/**
+	 * Compatibility constructor without a blur raster resolution. Uses the
+	 * default of 150 dpi.
+	 */
+	public PDFParams(
+			FontSourceManager fontSourceManager,
+			Version version,
+			Compression compression,
+			JPEGImage jpegImage,
+			ImageCompression imageCompression,
+			int imageCompressionLossless,
+			String platformEncoding,
+			boolean bookmarks,
+			EncryptionParams encryption,
+			ColorMode colorMode,
+			int maxImageWidth,
+			int maxImageHeight,
+			int precision,
+			byte[] fileId,
+			PDFMetaInfo metaInfo,
+			ViewerPreferences viewerPreferences,
+			Action openAction,
+			boolean linearized,
+			OutputIntent outputIntent,
+			TaggedParams tagged,
+			int deflateLevel,
+			boolean objectStreams,
+			byte[] rgbProfile,
+			RenderingIntent renderingIntent) {
+		this(fontSourceManager, version, compression, jpegImage, imageCompression, imageCompressionLossless,
+				platformEncoding, bookmarks, encryption, colorMode, maxImageWidth, maxImageHeight, precision, fileId,
+				metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel,
+				objectStreams, rgbProfile, renderingIntent, DEFAULT_BLUR_RASTER_DPI, DEFAULT_FILTER_RASTER_DPI);
 	}
 
 	/**
@@ -363,7 +483,7 @@ public record PDFParams(
 		this(fontSourceManager, version, compression, jpegImage, imageCompression, imageCompressionLossless,
 				platformEncoding, bookmarks, encryption, colorMode, maxImageWidth, maxImageHeight, precision, fileId,
 				metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel,
-				objectStreams, null, null);
+				objectStreams, null, null, DEFAULT_BLUR_RASTER_DPI);
 	}
 
 	/**
@@ -492,7 +612,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -505,7 +625,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -518,7 +638,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -531,7 +651,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -544,7 +664,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -558,7 +678,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -571,7 +691,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -584,7 +704,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -597,7 +717,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -610,7 +730,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -623,7 +743,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -636,7 +756,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -649,7 +769,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -662,7 +782,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -675,7 +795,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -688,7 +808,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -702,7 +822,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -715,7 +835,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -728,7 +848,7 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent, tagged, deflateLevel, objectStreams, rgbProfile,
-				renderingIntent);
+				renderingIntent, blurRasterDpi, filterRasterDpi, actualTextReplacement);
 	}
 
 	/**
@@ -742,7 +862,8 @@ public record PDFParams(
 				fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
-				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent, blurRasterDpi, filterRasterDpi,
+				actualTextReplacement);
 	}
 
 	/**
@@ -759,7 +880,8 @@ public record PDFParams(
 				fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
-				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent, blurRasterDpi, filterRasterDpi,
+				actualTextReplacement);
 	}
 
 	/**
@@ -778,7 +900,8 @@ public record PDFParams(
 				fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
-				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent, blurRasterDpi, filterRasterDpi,
+				actualTextReplacement);
 	}
 
 	/**
@@ -810,7 +933,8 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
-				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent, blurRasterDpi, filterRasterDpi,
+				actualTextReplacement);
 	}
 
 	/**
@@ -842,6 +966,55 @@ public record PDFParams(
 		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
 				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
 				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
-				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent);
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent, blurRasterDpi, filterRasterDpi,
+				actualTextReplacement);
+	}
+
+	/**
+	 * Returns a new instance with the raster resolution used for generated
+	 * Gaussian-blur layers. Values are clamped to 72–600 dpi.
+	 *
+	 * @param blurRasterDpi requested blur raster resolution in dpi
+	 * @return new PDFParams instance
+	 */
+	public PDFParams withBlurRasterDpi(final int blurRasterDpi) {
+		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent, blurRasterDpi, filterRasterDpi,
+				actualTextReplacement);
+	}
+
+	/**
+	 * Returns a new instance with the raster resolution used for element-wide
+	 * filter layers. Values are clamped to 72–600 dpi.
+	 *
+	 * @param filterRasterDpi requested filter raster resolution in dpi
+	 * @return new PDFParams instance
+	 */
+	public PDFParams withFilterRasterDpi(final int filterRasterDpi) {
+		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent, blurRasterDpi, filterRasterDpi,
+				actualTextReplacement);
+	}
+
+	/**
+	 * Returns a new instance with line-level {@code /ActualText} replacement
+	 * enabled or disabled. It is disabled by default because measurements show
+	 * that PDFium extracts bidirectional text correctly from visual glyphs but
+	 * incorrectly with the replacement span, while MuPDF is not improved.
+	 * Enable it only for Acrobat-centric text extraction workflows.
+	 *
+	 * @param actualTextReplacement whether line-level replacement is enabled
+	 * @return new PDFParams instance
+	 */
+	public PDFParams withActualTextReplacement(final boolean actualTextReplacement) {
+		return new PDFParams(fontSourceManager, version, compression, jpegImage, imageCompression,
+				imageCompressionLossless, platformEncoding, bookmarks, encryption, colorMode, maxImageWidth,
+				maxImageHeight, precision, fileId, metaInfo, viewerPreferences, openAction, linearized, outputIntent,
+				tagged, deflateLevel, objectStreams, rgbProfile, renderingIntent, blurRasterDpi, filterRasterDpi,
+				actualTextReplacement);
 	}
 }

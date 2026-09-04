@@ -7,7 +7,6 @@ import java.io.IOException;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import net.zamasoft.pdfg2d.font.table.ColrTable;
 import net.zamasoft.pdfg2d.font.table.CpalTable;
@@ -60,7 +59,16 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	 * ligature glyph. boxed Mapからプリミティブ索引へ(2026-08-01、95点計画
 	 * 増分3)——グリフ対毎に引かれる整形ホットパス。
 	 */
-	private final net.zamasoft.pdfg2d.util.LongIntLookup ligatures;
+	private final net.zamasoft.pdfg2d.util.LongIntLookup ligaLigatures;
+
+	/** GSUB {@code clig} pairs (contextual ligatures, default on). */
+	private final net.zamasoft.pdfg2d.util.LongIntLookup cligLigatures;
+
+	/** GSUB {@code dlig} pairs (discretionary ligatures, default off). */
+	private final net.zamasoft.pdfg2d.util.LongIntLookup dligLigatures;
+
+	/** GSUB {@code hlig} pairs (historical ligatures, default off). */
+	private final net.zamasoft.pdfg2d.util.LongIntLookup hligLigatures;
 
 	/**
 	 * Cache of composed GSUB single-substitution plans per feature set
@@ -98,9 +106,13 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		final var ttfFont = source.getOpenTypeFont();
 		this.hmtx = (XmtxTable) ttfFont.getTable(Table.HMTX);
 
-		// GSUB standard ligatures (liga) and GPOS pair kerning (kern) are read
-		// once here so that shaping can apply them per pair.
-		this.ligatures = buildLigatures((GsubTable) ttfFont.getTable(Table.GSUB));
+		// GSUB ligatures and GPOS pair kerning are read once here so that shaping
+		// can apply them per pair.
+		final var gsub = (GsubTable) ttfFont.getTable(Table.GSUB);
+		this.ligaLigatures = buildLigatures(gsub, TAG_LIGA);
+		this.cligLigatures = buildLigatures(gsub, TAG_CLIG);
+		this.dligLigatures = buildLigatures(gsub, TAG_DLIG);
+		this.hligLigatures = buildLigatures(gsub, TAG_HLIG);
 		final var gpos = (GposTable) ttfFont.getTable(Table.GPOS);
 		var kern = (gpos != null) ? gpos.collectKernPairPos() : List.<PairPos>of();
 		if (kern.isEmpty()) {
@@ -127,7 +139,6 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 			// fonts that split vert across subtables (unified 2026-07-31 with
 			// the generic feature-plan collection; script/language filtering
 			// matches liga/kern: none).
-			final var gsub = (GsubTable) ttfFont.getTable(Table.GSUB);
 			if (gsub != null) {
 				var subs = gsub.collectSingleSubstitutions(TAG_VRT2);
 				if (subs.isEmpty()) {
@@ -144,8 +155,10 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		this.vmtx = null;
 	}
 
-	/** Packed {@code vrt2}/{@code vert} feature tags. */
-	private static final int TAG_VRT2 = 0x76727432, TAG_VERT = 0x76657274;
+	/** Packed ligature and vertical-substitution feature tags. */
+	private static final int TAG_LIGA = 0x6c696761, TAG_CLIG = 0x636c6967,
+			TAG_DLIG = 0x646c6967, TAG_HLIG = 0x686c6967,
+			TAG_VRT2 = 0x76727432, TAG_VERT = 0x76657274;
 
 	/**
 	 * Applies the required vertical substitution ({@code vrt2}/{@code vert})
@@ -530,6 +543,22 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	}
 
 	/**
+	 * Applies the CSS ligature feature policy. Default-on {@code liga} and
+	 * {@code clig} are consulted unless explicitly disabled; default-off
+	 * {@code dlig} and {@code hlig} are consulted only when enabled. If the same
+	 * pair is present in several features, precedence is {@code liga},
+	 * {@code clig}, {@code dlig}, then {@code hlig}.
+	 */
+	@Override
+	public int getLigature(final int gid, final int cid,
+			final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		if (gid < 0) {
+			return -1;
+		}
+		return this.gsubLigature(gid, this.toGID(cid, features), features);
+	}
+
+	/**
 	 * Returns the ligature glyph for a two-glyph GSUB {@code liga} pair, in
 	 * font glyph-id space, or -1 if none.
 	 *
@@ -538,10 +567,59 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	 * @return the ligature's font glyph id, or -1
 	 */
 	protected final int gsubLigature(final int firstFontGid, final int secondFontGid) {
-		if (this.ligatures == null) {
-			return -1;
+		return findLigature(this.ligaLigatures, firstFontGid, secondFontGid);
+	}
+
+	/**
+	 * Returns the first enabled ligature for a font-glyph pair, using the
+	 * documented feature precedence.
+	 */
+	protected final int gsubLigature(final int firstFontGid, final int secondFontGid,
+			final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		final long key = ((long) firstFontGid << 32) | (secondFontGid & 0xFFFFFFFFL);
+		if (isLigatureEnabled(TAG_LIGA, features)) {
+			final int gid = findLigature(this.ligaLigatures, key);
+			if (gid >= 0) {
+				return gid;
+			}
 		}
-		return this.ligatures.getOrDefault(((long) firstFontGid << 32) | (secondFontGid & 0xFFFFFFFFL), -1);
+		if (isLigatureEnabled(TAG_CLIG, features)) {
+			final int gid = findLigature(this.cligLigatures, key);
+			if (gid >= 0) {
+				return gid;
+			}
+		}
+		if (isLigatureEnabled(TAG_DLIG, features)) {
+			final int gid = findLigature(this.dligLigatures, key);
+			if (gid >= 0) {
+				return gid;
+			}
+		}
+		if (isLigatureEnabled(TAG_HLIG, features)) {
+			return findLigature(this.hligLigatures, key);
+		}
+		return -1;
+	}
+
+	/** Package-visible for focused feature-policy tests. */
+	static boolean isLigatureEnabled(final int tag,
+			final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
+		return switch (tag) {
+			case TAG_LIGA, TAG_CLIG -> features.value(tag) != 0;
+			case TAG_DLIG, TAG_HLIG -> features.value(tag) > 0;
+			default -> false;
+		};
+	}
+
+	private static int findLigature(final net.zamasoft.pdfg2d.util.LongIntLookup ligatures,
+			final int firstFontGid, final int secondFontGid) {
+		return findLigature(ligatures,
+				((long) firstFontGid << 32) | (secondFontGid & 0xFFFFFFFFL));
+	}
+
+	private static int findLigature(final net.zamasoft.pdfg2d.util.LongIntLookup ligatures,
+			final long key) {
+		return ligatures != null ? ligatures.getOrDefault(key, -1) : -1;
 	}
 
 	/**
@@ -628,18 +706,18 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	}
 
 	/**
-	 * Builds the two-component ligature map from the {@code liga} feature.
+	 * Builds the two-component ligature map from the requested feature.
 	 * Longer ligatures are formed incrementally by the shaper through the
 	 * intermediate ligatures that fonts conventionally also define.
 	 */
-	private static net.zamasoft.pdfg2d.util.LongIntLookup buildLigatures(final GsubTable gsub) {
+	private static net.zamasoft.pdfg2d.util.LongIntLookup buildLigatures(final GsubTable gsub, final int tag) {
 		if (gsub == null) {
 			return null;
 		}
 		// 構築中のみboxed Mapを使う(重複キーのlast-wins意味論を保存)。
 		// 保持するのはプリミティブ索引だけ
 		final var map = new HashMap<Long, Integer>();
-		for (final var subst : gsub.collectLigatures()) {
+		for (final var subst : gsub.collectLigatures(tag)) {
 			final var firstGlyphs = subst.coverage().getGlyphIds();
 			for (int i = 0; i < firstGlyphs.length && i < subst.getLigatureSetCount(); i++) {
 				final int firstGid = firstGlyphs[i];

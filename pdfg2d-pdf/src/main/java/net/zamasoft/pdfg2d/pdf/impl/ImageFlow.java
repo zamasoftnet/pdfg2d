@@ -43,6 +43,7 @@ import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.image.util.TransformedImage;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
+import net.zamasoft.pdfg2d.pdf.PDFWriter;
 import net.zamasoft.pdfg2d.pdf.gc.PDFImage;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.util.codec.ASCII85OutputStream;
@@ -65,6 +66,8 @@ class ImageFlow {
 
 	private final Logger LOG = Logger.getLogger(ImageFlow.class.getName());
 
+	private final PDFWriter pdfWriter;
+
 	private final Map<String, ObjectRef> nameToResourceRef;
 
 	private final PDFFragmentOutputImpl objectsFlow;
@@ -78,6 +81,9 @@ class ImageFlow {
 
 	/** Mapping from BufferedImage instance to image (PDFImage). */
 	private final Map<BufferedImage, Image> bufferedImages = new IdentityHashMap<>();
+
+	/** Generated images use a separate cache because their encoding policy differs. */
+	private final Map<BufferedImage, Image> generatedImages = new IdentityHashMap<>();
 
 	private int imageNumber = 0;
 
@@ -150,6 +156,7 @@ class ImageFlow {
 	/**
 	 * Constructs a new ImageFlow.
 	 *
+	 * @param pdfWriter         the owning writer, used for shared document resources
 	 * @param nameToResourceRef the map from resource name to object reference used
 	 *                          by the PDF resource dictionary
 	 * @param objectsFlow       the fragment output to which image XObjects are
@@ -160,8 +167,10 @@ class ImageFlow {
 	 *                          mode, version, etc.)
 	 * @throws IOException if an I/O error occurs during initialization
 	 */
-	public ImageFlow(final Map<String, ObjectRef> nameToResourceRef, final PDFFragmentOutputImpl objectsFlow,
+	public ImageFlow(final PDFWriter pdfWriter, final Map<String, ObjectRef> nameToResourceRef,
+			final PDFFragmentOutputImpl objectsFlow,
 			final XRefImpl xref, final PDFParams params) throws IOException {
+		this.pdfWriter = pdfWriter;
 		this.xref = xref;
 		this.nameToResourceRef = nameToResourceRef;
 		this.objectsFlow = objectsFlow;
@@ -226,7 +235,7 @@ class ImageFlow {
 		};
 
 		try {
-			pdfImage = this.addImage(in, null);
+			pdfImage = this.addImage(in, null, false);
 			this.images.put(uri, pdfImage);
 			return pdfImage;
 		} finally {
@@ -248,8 +257,22 @@ class ImageFlow {
 		if (pdfImage != null) {
 			return pdfImage;
 		}
-		final var res = this.addImage(null, image);
+		final var res = this.addImage(null, image, false);
 		this.bufferedImages.put(image, res);
+		return res;
+	}
+
+	/**
+	 * Registers a renderer-generated image without applying normal image resizing
+	 * or lossy compression settings.
+	 */
+	public Image addGeneratedImage(final BufferedImage image) throws IOException {
+		final var pdfImage = this.generatedImages.get(image);
+		if (pdfImage != null) {
+			return pdfImage;
+		}
+		final var res = this.addImage(null, image, true);
+		this.generatedImages.put(image, res);
 		return res;
 	}
 
@@ -269,11 +292,13 @@ class ImageFlow {
 	 *                      or {@code null} when the caller has already decoded it
 	 * @param originalImage a pre-decoded {@link BufferedImage}, or {@code null}
 	 *                      when the raw stream should be decoded here
+	 * @param generated     whether to force lossless, unscaled generated-image encoding
 	 * @return the {@link Image} descriptor, possibly wrapped in a
 	 *         {@link TransformedImage} to account for EXIF orientation
 	 * @throws IOException if an I/O error occurs during reading or writing
 	 */
-	private Image addImage(final ImageInputStream imageIn, final BufferedImage originalImage) throws IOException {
+	private Image addImage(final ImageInputStream imageIn, final BufferedImage originalImage,
+			final boolean generated) throws IOException {
 		var image = originalImage;
 		int orientation = 1;
 		ImageReader ir = null;
@@ -329,8 +354,12 @@ class ImageFlow {
 		try {
 
 			final PDFParams.ColorMode colorMode = this.params.effectiveColorMode();
-			final PDFParams.Compression streamCompression = this.params.compression();
-			final PDFParams.ImageCompression imageCompression = this.params.imageCompression();
+			final PDFParams.Compression streamCompression = generated
+					? PDFParams.Compression.BINARY
+					: this.params.compression();
+			final PDFParams.ImageCompression imageCompression = generated
+					? PDFParams.ImageCompression.FLATE
+					: this.params.imageCompression();
 			final PDFParams.Version pdfVersion = this.params.version();
 			final boolean softMaskSupport = pdfVersion.allowsTransparency();
 			final boolean jpeg2000Support = pdfVersion.v >= PDFParams.Version.V_1_5.v;
@@ -361,8 +390,8 @@ class ImageFlow {
 
 			boolean iccErrorHuck = false;
 			boolean iccGray = false;
-			final int maxWidth = this.params.maxImageWidth();
-			final int maxHeight = this.params.maxImageHeight();
+			final int maxWidth = generated ? 0 : this.params.maxImageWidth();
+			final int maxHeight = generated ? 0 : this.params.maxImageHeight();
 
 			if (image == null) {
 				try {
@@ -480,6 +509,11 @@ class ImageFlow {
 					}
 				}
 			}
+			final ObjectRef generatedRGBProfileRef = generated
+					&& pdfVersion.v >= PDFParams.Version.V_1_3.v
+					&& image.getColorModel().getNumComponents() != 1
+							? this.pdfWriter.useGeneratedImageRGBProfile()
+							: null;
 			pdfImage = new PDFImage(name, orgWidth, orgHeight);
 			try {
 				final var imageRef = this.xref.nextObjectRef();
@@ -623,7 +657,7 @@ class ImageFlow {
 					try {
 						cm = image.getColorModel();
 
-						if ((width + height) > this.params.imageCompressionLossless()) {
+						if (!generated && (width + height) > this.params.imageCompressionLossless()) {
 							imageType = imageCompression;
 						}
 						ImageWriter iw;
@@ -673,7 +707,16 @@ class ImageFlow {
 
 						final boolean deviceGray = (cm.getNumComponents() == 1);
 						this.objectsFlow.writeName("ColorSpace");
-						this.objectsFlow.writeName(deviceGray ? "DeviceGray" : "DeviceRGB");
+						if (deviceGray) {
+							this.objectsFlow.writeName("DeviceGray");
+						} else if (generatedRGBProfileRef != null) {
+							this.objectsFlow.startArray();
+							this.objectsFlow.writeName("ICCBased");
+							this.objectsFlow.writeObjectRef(generatedRGBProfileRef);
+							this.objectsFlow.endArray();
+						} else {
+							this.objectsFlow.writeName("DeviceRGB");
+						}
 						this.objectsFlow.breakBefore();
 
 						this.objectsFlow.writeName("Filter");

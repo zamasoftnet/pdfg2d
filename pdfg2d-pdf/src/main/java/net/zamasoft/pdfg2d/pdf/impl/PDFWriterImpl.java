@@ -9,6 +9,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.FontStore;
 import net.zamasoft.pdfg2d.gc.font.FontManager;
 import net.zamasoft.pdfg2d.gc.image.Image;
+import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.zstream.io.FragmentedOutput;
 import net.zamasoft.zstream.io.util.FragmentOutputAdapter;
 import net.zamasoft.zstream.io.util.PositionTrackingOutput;
@@ -69,6 +71,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	protected static final int BUFFER_SIZE = 8192;
 
 	private static final byte[] HEADER = { '%', 'P', 'D', 'F', '-' };
+	private static final String SRGB_PROFILE_RESOURCE = "sRGB_IEC61966-2-1_no_black_scaling.icc";
 
 	final FragmentedOutput builder;
 
@@ -404,7 +407,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 				&& resolvedParams.colorMode() == PDFParams.ColorMode.PRESERVE
 				&& resolvedParams.rgbProfile() == null) {
 			resolvedParams = resolvedParams
-					.withRGBProfile(loadResource("sRGB_IEC61966-2-1_no_black_scaling.icc"));
+					.withRGBProfile(loadResource(SRGB_PROFILE_RESOURCE));
 		}
 		this.params = resolvedParams;
 		this.builder = builder.supportsPositionInfo() ? builder : new PositionTrackingOutput(builder);
@@ -585,7 +588,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		// Objects
 		this.objectsFlow = this.mainFlow.forkFragment();
 		this.fonts = new FontFlow(this.nameToResourceRef, this.objectsFlow, this.xref);
-		this.images = new ImageFlow(this.nameToResourceRef, this.objectsFlow, this.xref, this.params);
+		this.images = new ImageFlow(this, this.nameToResourceRef, this.objectsFlow, this.xref, this.params);
 	}
 
 	public PDFWriterImpl(final FragmentedOutput builder) throws IOException {
@@ -808,6 +811,36 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	@Override
 	public Image addImage(final BufferedImage image) throws IOException {
 		return this.images.addImage(image);
+	}
+
+	@Override
+	public Image addGeneratedImage(final BufferedImage image) throws IOException {
+		return this.images.addGeneratedImage(image);
+	}
+
+	/** Shared bundled-sRGB stream referenced directly by generated image XObjects. */
+	private ObjectRef generatedImageRGBProfileRef = null;
+
+	@Override
+	public ObjectRef useGeneratedImageRGBProfile() throws IOException {
+		if (this.generatedImageRGBProfileRef != null) {
+			return this.generatedImageRGBProfileRef;
+		}
+		final var ref = this.xref.nextObjectRef();
+		final var flow = this.objectsFlow;
+		flow.startObject(ref);
+		flow.startHash();
+		flow.writeName("N");
+		flow.writeInt(3);
+		flow.writeName("Alternate");
+		flow.writeName("DeviceRGB");
+		flow.lineBreak();
+		try (final var out = flow.startStreamFromHash(PDFFragmentOutput.Mode.BINARY)) {
+			out.write(loadResource(SRGB_PROFILE_RESOURCE));
+		}
+		flow.endObject();
+		this.generatedImageRGBProfileRef = ref;
+		return ref;
 	}
 
 	/**
@@ -1087,6 +1120,100 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		};
 	}
 
+	@Override
+	public String createType4ShadingPattern(final double pageHeight, final AffineTransform matrix,
+			final Color.Type colorType, final double[] decode, final byte[] vertexData) throws IOException {
+		if (decode == null || vertexData == null) {
+			throw new NullPointerException("Decode and vertex data cannot be null.");
+		}
+		// The caller resolves the document's effective color mode before packing;
+		// an explicit GRAY remains GRAY for luminosity-mask meshes even in a CMYK
+		// document.
+		final Color.Type effectiveType = colorType == Color.Type.RGBA ? Color.Type.RGB : colorType;
+		final int components = switch (effectiveType) {
+			case GRAY -> 1;
+			case RGB -> 3;
+			case CMYK -> 4;
+			default -> throw new IllegalArgumentException("Unsupported mesh color type: " + effectiveType);
+		};
+		if (decode.length != 4 + 2 * components) {
+			throw new IllegalArgumentException(
+					"Decode length must be " + (4 + 2 * components) + " for " + effectiveType + '.');
+		}
+
+		final var patternRef = this.xref.nextObjectRef();
+		final var name = this.addResource("Pattern", "P", patternRef);
+		final var shadingRef = this.xref.nextObjectRef();
+		final var flow = this.objectsFlow;
+
+		flow.startObject(patternRef);
+		flow.startHash();
+		flow.writeName("Type");
+		flow.writeName("Pattern");
+		flow.lineBreak();
+		flow.writeName("PatternType");
+		flow.writeInt(2);
+		flow.lineBreak();
+		flow.writeName("Matrix");
+		flow.startArray();
+		final var transform = matrix != null ? new AffineTransform(matrix) : new AffineTransform();
+		transform.preConcatenate(new AffineTransform(1, 0, 0, -1, 0, pageHeight));
+		final var flatMatrix = new double[6];
+		transform.getMatrix(flatMatrix);
+		for (final double value : flatMatrix) {
+			flow.writeReal(value);
+		}
+		flow.endArray();
+		flow.lineBreak();
+		flow.writeName("Shading");
+		flow.writeObjectRef(shadingRef);
+		flow.lineBreak();
+		flow.endHash();
+		flow.endObject();
+
+		flow.startObject(shadingRef);
+		flow.startHash();
+		flow.writeName("ShadingType");
+		flow.writeInt(4);
+		flow.lineBreak();
+		flow.writeName("ColorSpace");
+		flow.writeName(switch (effectiveType) {
+			case GRAY -> "DeviceGray";
+			case RGB -> "DeviceRGB";
+			case CMYK -> "DeviceCMYK";
+			default -> throw new IllegalStateException();
+		});
+		flow.lineBreak();
+		flow.writeName("BitsPerCoordinate");
+		flow.writeInt(32);
+		flow.writeName("BitsPerComponent");
+		flow.writeInt(16);
+		flow.writeName("BitsPerFlag");
+		flow.writeInt(8);
+		flow.lineBreak();
+		// Coordinate samples were quantized against these exact ranges. Preserve
+		// enough decimal precision that the serialized Decode values describe the
+		// same mapping even when normal page coordinates use only 1-2 decimals.
+		final int savedPrecision = flow.getPrecision();
+		flow.setPrecision(12);
+		try {
+			flow.writeName("Decode");
+			flow.startArray();
+			for (final double value : decode) {
+				flow.writeReal(value);
+			}
+			flow.endArray();
+			flow.lineBreak();
+		} finally {
+			flow.setPrecision(savedPrecision);
+		}
+		try (final var out = flow.startStreamFromHash(PDFFragmentOutput.Mode.BINARY)) {
+			out.write(vertexData);
+		}
+		flow.endObject();
+		return name;
+	}
+
 	/** Separation color space resource names by colorant name. */
 	private Map<String, String> separationNames = null;
 
@@ -1110,19 +1237,26 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 		final var flow = this.objectsFlow;
 
-		// The ICC profile stream
-		final var profileRef = this.xref.nextObjectRef();
-		flow.startObject(profileRef);
-		flow.startHash();
-		flow.writeName("N");
-		flow.writeInt(3);
-		flow.writeName("Alternate");
-		flow.writeName("DeviceRGB");
-		flow.lineBreak();
-		try (final var out = flow.startStreamFromHash(PDFFragmentOutput.Mode.BINARY)) {
-			out.write(profile);
+		// Reuse the direct image-profile stream when the configured vector profile
+		// is the same bundled sRGB data. The named ColorSpace resource and inline
+		// image ColorSpace arrays then share one indirect ICC stream object.
+		final ObjectRef profileRef;
+		if (Arrays.equals(profile, loadResource(SRGB_PROFILE_RESOURCE))) {
+			profileRef = this.useGeneratedImageRGBProfile();
+		} else {
+			profileRef = this.xref.nextObjectRef();
+			flow.startObject(profileRef);
+			flow.startHash();
+			flow.writeName("N");
+			flow.writeInt(3);
+			flow.writeName("Alternate");
+			flow.writeName("DeviceRGB");
+			flow.lineBreak();
+			try (final var out = flow.startStreamFromHash(PDFFragmentOutput.Mode.BINARY)) {
+				out.write(profile);
+			}
+			flow.endObject();
 		}
-		flow.endObject();
 
 		// The color space array [/ICCBased stream]
 		final var csRef = this.xref.nextObjectRef();

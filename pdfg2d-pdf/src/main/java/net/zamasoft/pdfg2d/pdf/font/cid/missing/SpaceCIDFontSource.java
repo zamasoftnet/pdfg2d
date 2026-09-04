@@ -53,6 +53,23 @@ public class SpaceCIDFontSource extends MissingCIDFontSource {
 			case 0x2028:
 			case 0x2029:
 			case 0x202F:
+				// Fixed-width spaces (U+2000..U+200A), medium mathematical space and
+				// the ideographic space: drawn as nothing but with their proper
+				// advance, so a stray THIN SPACE no longer falls to the missing
+				// glyph font (2026-09-04, user report 281f for U+2009).
+			case 0x2000:
+			case 0x2001:
+			case 0x2002:
+			case 0x2003:
+			case 0x2004:
+			case 0x2005:
+			case 0x2006:
+			case 0x2007:
+			case 0x2008:
+			case 0x2009:
+			case 0x200A:
+			case 0x205F:
+			case 0x3000:
 				return true;
 		}
 		return false;

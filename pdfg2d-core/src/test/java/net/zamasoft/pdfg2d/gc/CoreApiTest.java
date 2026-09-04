@@ -154,7 +154,9 @@ class CoreApiTest {
 
         final var page = recorder.getPage();
         assertEquals(3, page.commands().size());
-        assertEquals(new RecorderGC.FillBlurred(shape, 2.5), page.commands().get(0));
+        final var recordedBlur = (RecorderGC.FillBlurred) page.commands().get(0);
+        assertEquals(shape.getBounds2D(), recordedBlur.shape().getBounds2D());
+        assertEquals(2.5, recordedBlur.sigma());
         assertEquals(new RecorderGC.DrawImageEffects(image, effects), page.commands().get(1));
 
         // 対応する再生先には厳密な呼び出しがそのまま届く

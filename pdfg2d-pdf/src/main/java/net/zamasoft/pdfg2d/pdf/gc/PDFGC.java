@@ -1,9 +1,12 @@
 package net.zamasoft.pdfg2d.pdf.gc;
 
+import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.NoninvertibleTransformException;
 import java.awt.geom.PathIterator;
 import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -15,9 +18,13 @@ import java.util.logging.Logger;
 
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
+import net.zamasoft.pdfg2d.gc.GroupEffects;
+import net.zamasoft.pdfg2d.gc.RecorderGC;
+import net.zamasoft.pdfg2d.gc.RecorderGC.RecorderImage;
 import net.zamasoft.pdfg2d.gc.font.FontManager;
 import net.zamasoft.pdfg2d.gc.image.GroupImageGC;
 import net.zamasoft.pdfg2d.gc.image.Image;
+import net.zamasoft.pdfg2d.gc.image.util.TransformedImage;
 import net.zamasoft.pdfg2d.gc.paint.BlendMode;
 import net.zamasoft.pdfg2d.gc.paint.CMYKColor;
 import net.zamasoft.pdfg2d.gc.paint.Color;
@@ -31,6 +38,9 @@ import net.zamasoft.pdfg2d.pdf.PDFOutput;
 import net.zamasoft.pdfg2d.pdf.PDFWriter;
 import net.zamasoft.pdfg2d.pdf.font.PDFFontSource.Type;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
+import net.zamasoft.pdfg2d.g2d.gc.G2DGC;
+import net.zamasoft.pdfg2d.g2d.image.RasterImageImpl;
+import net.zamasoft.pdfg2d.g2d.util.RasterEffects;
 
 /* PDF Operator Reference
  * 
@@ -155,6 +165,11 @@ public class PDFGC implements GC, Closeable {
 
 	private static final double ONE_THIRD = 1.0 / 3.0;
 	private static final double TWO_THIRD = 2.0 / 3.0;
+	private static final long MAX_BLUR_LAYER_PIXELS = 16_000_000L;
+	private static final long MAX_FILTER_LAYER_PIXELS = 16_000_000L;
+
+	private record BlurRegion(double x, double y, int width, int height) {
+	}
 
 	private record ExtGStateKey(float strokeAlpha, float fillAlpha, byte strokeOverprint, byte fillOverprint,
 			BlendMode blendMode) {
@@ -398,6 +413,9 @@ public class PDFGC implements GC, Closeable {
 	 */
 	private boolean inMark = false;
 
+	/** Whether this GC currently owns an {@code /ActualText} replacement span. */
+	private boolean inTextReplacement = false;
+
 	/** Alternate text for the image currently being drawn, if any. */
 	private String pendingAlt = null;
 
@@ -441,6 +459,453 @@ public class PDFGC implements GC, Closeable {
 
 	public PDFWriter getPdfWriter() {
 		return this.out.getPdfWriter();
+	}
+
+	@Override
+	public boolean supports(final Capability capability) {
+		return switch (capability) {
+			case GAUSSIAN_BLUR, GROUP_FILTER, DROP_SHADOW -> this.pdfVersion.allowsTransparency();
+			case CONIC_GRADIENT -> this.pdfVersion.v >= PDFParams.Version.V_1_3.v;
+			default -> false;
+		};
+	}
+
+	/** PDF implements non-trivial group filters by rasterizing only the group. */
+	@Override
+	public boolean rasterizesGroupEffects() {
+		return true;
+	}
+
+	/**
+	 * Captures filter content for deferred vector or raster replay. Ordinary
+	 * {@link #createGroupImage(double, double)} calls still create real Form
+	 * XObjects immediately.
+	 */
+	@Override
+	public GroupImageGC createFilterGroup(final double width, final double height) {
+		return new RecorderGC.RecorderGroupImageGC(this.getFontManager(), width, height, true);
+	}
+
+	@Override
+	public GroupEffectsResult drawGroupEffects(final Image image, final GroupEffects effects)
+			throws GraphicsException {
+		if (!this.supports(Capability.GROUP_FILTER)) {
+			return GroupEffectsResult.UNSUPPORTED;
+		}
+		if (!(image instanceof RecorderImage recorded)) {
+			return GC.super.drawGroupEffects(image, effects);
+		}
+
+		if (effects == null || effects.isIdentity()) {
+			this.drawImage(this.materialize(recorded));
+			return GroupEffectsResult.VECTOR;
+		}
+		if (effects.colorMatrix() == null && effects.blurSigma() <= 0
+				&& effects.dropShadow() == null && effects.opacity() < 1) {
+			final Image group = this.materialize(recorded);
+			final float groupAlpha = (float) Math.max(0, Math.min(1, this.fillAlpha * effects.opacity()));
+			try (final State state = this.begin()) {
+				this.setStrokePaint(GrayColor.BLACK);
+				this.setFillPaint(GrayColor.BLACK);
+				this.setStrokeAlpha(1);
+				this.setFillAlpha(groupAlpha);
+				this.drawImage(group);
+			}
+			return GroupEffectsResult.VECTOR;
+		}
+
+		return this.rasterizeGroup(recorded, effects);
+	}
+
+	private Image materialize(final RecorderImage recorded) {
+		final GroupImageGC group = this.createGroupImage(recorded.getWidth(), recorded.getHeight());
+		recorded.drawTo(group);
+		return group.finish();
+	}
+
+	private GroupEffectsResult rasterizeGroup(final RecorderImage recorded, final GroupEffects effects) {
+		final AffineTransform current = this.actualTransform == null
+				? new AffineTransform()
+				: new AffineTransform(this.actualTransform);
+		final double singularValue = maxSingularValue(current);
+		final double localScale = (this.getPdfWriter().getParams().filterRasterDpi() / 72.0) * singularValue;
+		final double blurSigma = effects.blurSigma() > 0 ? effects.blurSigma() * localScale : 0;
+		final GroupEffects.DropShadow shadow = effects.dropShadow();
+		final double shadowDx = shadow == null ? 0 : shadow.dx() * localScale;
+		final double shadowDy = shadow == null ? 0 : shadow.dy() * localScale;
+		final double shadowSigma = shadow != null && shadow.sigma() > 0 ? shadow.sigma() * localScale : 0;
+		final double padValue = Math.ceil(3 * blurSigma) + Math.ceil(3 * shadowSigma)
+				+ Math.ceil(Math.max(Math.abs(shadowDx), Math.abs(shadowDy))) + 1;
+		if (!Double.isFinite(localScale) || !(localScale > 0)
+				|| !Double.isFinite(blurSigma) || !Double.isFinite(shadowSigma)
+				|| !Double.isFinite(shadowDx) || !Double.isFinite(shadowDy)
+				|| !Double.isFinite(padValue) || padValue > Integer.MAX_VALUE) {
+			return this.drawFilterFallback(recorded);
+		}
+		final int pad = (int) padValue;
+		final Rectangle2D nominalBounds = new Rectangle2D.Double(0, 0,
+				recorded.getWidth(), recorded.getHeight());
+		final Rectangle2D recordedBounds = recorded.getContentBounds();
+		final Rectangle2D rasterBounds = recordedBounds == null || recordedBounds.isEmpty()
+				? nominalBounds
+				: recordedBounds.createIntersection(nominalBounds);
+		if (rasterBounds.isEmpty()) {
+			// The recorder contains drawing, but all of it lies outside the nominal
+			// group box and would have been clipped by the full-size raster as well.
+			return GroupEffectsResult.VECTOR;
+		}
+		final BlurRegion region = blurRegion(rasterBounds, localScale, pad);
+		if (region == null || region.width * (long) region.height > MAX_FILTER_LAYER_PIXELS) {
+			return this.drawFilterFallback(recorded);
+		}
+
+		final BufferedImage layer = new BufferedImage(region.width, region.height, BufferedImage.TYPE_INT_ARGB);
+		final var graphics = layer.createGraphics();
+		try {
+			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+					RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+			graphics.translate(-region.x, -region.y);
+			graphics.scale(localScale, localScale);
+			recorded.drawTo(new FilterRasterGC(graphics, this.getFontManager()));
+		} finally {
+			graphics.dispose();
+		}
+
+		final int width = region.width, height = region.height;
+		float[][] planes = RasterEffects.toPlanes(layer);
+		if (effects.colorMatrix() != null) {
+			RasterEffects.applyColorMatrix(planes, effects.colorMatrix());
+		}
+		RasterEffects.premultiply(planes);
+		if (blurSigma > 0) {
+			RasterEffects.gaussianBlur(planes, width, height, blurSigma);
+		}
+		if (shadow != null) {
+			final Color color = shadow.color();
+			final float[] rgba = color == null ? new float[] { 0, 0, 0, 1 }
+					: new float[] { color.getRed(), color.getGreen(), color.getBlue(), color.getAlpha() };
+			planes = RasterEffects.dropShadow(planes, width, height, shadowDx, shadowDy, shadowSigma, rgba);
+		}
+		if (effects.opacity() < 1) {
+			RasterEffects.scale(planes, (float) Math.max(0, effects.opacity()));
+		}
+		final BufferedImage filtered = RasterEffects.toPremultipliedImage(planes, width, height);
+		final Image generated;
+		try {
+			generated = this.getPdfWriter().addGeneratedImage(filtered);
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		} finally {
+			layer.flush();
+		}
+
+		final String recordedAlt = recorded.getAltString();
+		final String alt = recordedAlt == null || recordedAlt.isEmpty() ? "filter" : recordedAlt;
+		final float outerAlpha = this.fillAlpha;
+		try (final State state = this.begin()) {
+			this.setStrokePaint(GrayColor.BLACK);
+			this.setFillPaint(GrayColor.BLACK);
+			this.setStrokeAlpha(1);
+			this.setFillAlpha(outerAlpha);
+			final var placement = AffineTransform.getTranslateInstance(
+					region.x / localScale, region.y / localScale);
+			placement.scale(1 / localScale, 1 / localScale);
+			this.transform(placement);
+			this.drawImage(generated, alt);
+		}
+		return GroupEffectsResult.RASTERIZED;
+	}
+
+	private GroupEffectsResult drawFilterFallback(final RecorderImage recorded) {
+		this.drawImage(this.materialize(recorded));
+		return GroupEffectsResult.LIMIT_FALLBACK;
+	}
+
+	/**
+	 * A raster replay target that substitutes lazily supplied pixels for
+	 * PDF-only image handles. PixelBackedImage lives in the consuming UA, so its
+	 * public getPixels contract is discovered without adding a reverse module
+	 * dependency. A PDF image or Form without such pixels is intentionally empty.
+	 */
+	private static class FilterRasterGC extends G2DGC {
+		private static final Paint TRANSPARENT = RGBAColor.create(0, 0, 0, 0);
+
+		FilterRasterGC(final java.awt.Graphics2D graphics, final FontManager fontManager) {
+			super(graphics, fontManager);
+		}
+
+		/**
+		 * Raster replay deliberately drops semantic replacement scopes: the
+		 * resulting pixels contain no searchable text and must not duplicate an
+		 * outer replacement attached by a higher-level caller.
+		 */
+		@Override
+		public State beginTextReplacement(final String logicalText) {
+			return GC.NO_OP_STATE;
+		}
+
+		@Override
+		public void drawImage(final Image image) throws GraphicsException {
+			final Image raster = rasterImage(image);
+			if (raster != null) {
+				super.drawImage(raster);
+			}
+		}
+
+		@Override
+		public void setStrokePaint(final Paint paint) throws GraphicsException {
+			super.setStrokePaint(rasterPaint(paint));
+		}
+
+		@Override
+		public void setFillPaint(final Paint paint) throws GraphicsException {
+			super.setFillPaint(rasterPaint(paint));
+		}
+
+		@Override
+		public GroupImageGC createGroupImage(final double width, final double height) {
+			final AffineTransform at = this.g.getTransform();
+			final Rectangle2D bounds = at
+					.createTransformedShape(new Rectangle2D.Double(0, 0, width, height)).getBounds2D();
+			final double minX = Math.floor(bounds.getMinX()), minY = Math.floor(bounds.getMinY());
+			final double maxX = Math.ceil(bounds.getMaxX()), maxY = Math.ceil(bounds.getMaxY());
+			final double rasterWidth = maxX - minX, rasterHeight = maxY - minY;
+			if (!(rasterWidth > 0) || !(rasterHeight > 0)
+					|| rasterWidth > Integer.MAX_VALUE || rasterHeight > Integer.MAX_VALUE) {
+				throw new GraphicsException("Invalid transformed filter group size: " + rasterWidth + "x"
+						+ rasterHeight);
+			}
+			final BufferedImage groupImage = new BufferedImage((int) rasterWidth, (int) rasterHeight,
+					BufferedImage.TYPE_INT_ARGB);
+			final var groupGraphics = groupImage.createGraphics();
+			groupGraphics.setRenderingHints(this.g.getRenderingHints());
+			final AffineTransform deviceShift = AffineTransform.getTranslateInstance(-minX, -minY);
+			final AffineTransform shifted = new AffineTransform(deviceShift);
+			shifted.concatenate(at);
+			final AffineTransform imageToUser;
+			try {
+				imageToUser = at.createInverse();
+				imageToUser.translate(minX, minY);
+			} catch (NoninvertibleTransformException e) {
+				groupGraphics.dispose();
+				throw new GraphicsException("Cannot place a filter group under a non-invertible transform", e);
+			}
+			final var group = new FilterRasterGroupGC(groupGraphics, this.getFontManager(), groupImage,
+					imageToUser);
+			new G2DGC.GraphicsState(this).restore(group);
+			group.g.setTransform(shifted);
+			group.g.setClip(this.g.getClip());
+			return group;
+		}
+
+		private static Paint rasterPaint(final Paint paint) {
+			if (!(paint instanceof Pattern pattern)) {
+				return paint;
+			}
+			final Image raster = rasterImage(pattern.getImage());
+			return raster == null ? TRANSPARENT : new Pattern(raster, pattern.getTransform());
+		}
+
+		private static Image rasterImage(final Image image) {
+			try {
+				final var method = image.getClass().getMethod("getPixels");
+				if (Image.class.isAssignableFrom(method.getReturnType())) {
+					final Object pixels = method.invoke(image);
+					if (pixels instanceof Image pixelImage && pixelImage != image) {
+						return rasterImage(pixelImage);
+					}
+					return null;
+				}
+			} catch (NoSuchMethodException e) {
+				// Not a lazy pixel-backed wrapper.
+			} catch (ReflectiveOperationException | SecurityException e) {
+				return null;
+			}
+			if (image instanceof TransformedImage transformed) {
+				final Image original = transformed.getImage();
+				final Image raster = rasterImage(original);
+				if (raster == null) {
+					return null;
+				}
+				return raster == original ? image
+						: new TransformedImage(raster, new AffineTransform(transformed.getTransform()));
+			}
+			return image instanceof PDFImage || image instanceof PDFGroupImage ? null : image;
+		}
+	}
+
+	private static final class FilterRasterGroupGC extends FilterRasterGC implements GroupImageGC {
+		private final BufferedImage image;
+		private final AffineTransform imageToUser;
+
+		FilterRasterGroupGC(final java.awt.Graphics2D graphics, final FontManager fontManager,
+				final BufferedImage image, final AffineTransform imageToUser) {
+			super(graphics, fontManager);
+			this.image = image;
+			this.imageToUser = imageToUser;
+		}
+
+		@Override
+		public Image finish() {
+			Image result = new RasterImageImpl(this.image);
+			if (!this.imageToUser.isIdentity()) {
+				result = new TransformedImage(result, this.imageToUser);
+			}
+			return result;
+		}
+	}
+
+	/** Returns the largest singular value of the transform's linear part. */
+	private static double maxSingularValue(final AffineTransform at) {
+		final double[] m = new double[6];
+		at.getMatrix(m);
+		for (final double value : m) {
+			if (!Double.isFinite(value)) {
+				return Double.NaN;
+			}
+		}
+		final double determinant = at.getDeterminant();
+		if (!Double.isFinite(determinant) || determinant == 0) {
+			return Double.NaN;
+		}
+		// Stable closed form for the larger singular value of a 2x2 matrix.
+		final double p = Math.hypot(m[0] + m[3], m[1] - m[2]);
+		final double q = Math.hypot(m[0] - m[3], m[1] + m[2]);
+		return (p + q) / 2;
+	}
+
+	/** Converts a supported solid fill to the raster layer's RGBA color. */
+	private java.awt.Color blurColor() {
+		if (!(this.fillPaint instanceof Color color)) {
+			return null;
+		}
+		switch (color.getColorType()) {
+			case RGB, RGBA, GRAY, CMYK, SPOT -> {
+				// CMYK and spot colors expose their process/alternate RGB approximation.
+			}
+			default -> {
+				return null;
+			}
+		}
+		final float red = color.getRed();
+		final float green = color.getGreen();
+		final float blue = color.getBlue();
+		final float alpha = this.fillAlpha;
+		if (!Float.isFinite(red) || !Float.isFinite(green) || !Float.isFinite(blue)
+				|| !Float.isFinite(alpha)
+				|| red < 0 || red > 1 || green < 0 || green > 1 || blue < 0 || blue > 1
+				|| alpha < 0 || alpha > 1) {
+			return null;
+		}
+		return new java.awt.Color(red, green, blue, alpha);
+	}
+
+	private static BlurRegion blurRegion(final Rectangle2D bounds, final double scale, final int pad) {
+		if (bounds == null || bounds.isEmpty()
+				|| !Double.isFinite(bounds.getMinX()) || !Double.isFinite(bounds.getMinY())
+				|| !Double.isFinite(bounds.getMaxX()) || !Double.isFinite(bounds.getMaxY())) {
+			return null;
+		}
+		final double x = Math.floor(bounds.getMinX() * scale) - pad;
+		final double y = Math.floor(bounds.getMinY() * scale) - pad;
+		final double right = Math.ceil(bounds.getMaxX() * scale) + pad;
+		final double bottom = Math.ceil(bounds.getMaxY() * scale) + pad;
+		final double width = right - x;
+		final double height = bottom - y;
+		if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(width) || !Double.isFinite(height)
+				|| !(width > 0) || !(height > 0)
+				|| width > Integer.MAX_VALUE || height > Integer.MAX_VALUE) {
+			return null;
+		}
+		return new BlurRegion(x, y, (int) width, (int) height);
+	}
+
+	@Override
+	public boolean tryFillBlurred(final Shape shape, final double sigma) throws GraphicsException {
+		if (!this.supports(Capability.GAUSSIAN_BLUR) || shape == null
+				|| !Double.isFinite(sigma) || sigma < 0) {
+			return false;
+		}
+
+		final AffineTransform current = this.actualTransform == null
+				? new AffineTransform()
+				: new AffineTransform(this.actualTransform);
+		final double singularValue = maxSingularValue(current);
+		if (!Double.isFinite(singularValue) || !(singularValue > 0)) {
+			return false;
+		}
+		final double localScale = (this.getPdfWriter().getParams().blurRasterDpi() / 72.0) * singularValue;
+		final double pixelSigma = sigma * localScale;
+		final double radius = 3 * pixelSigma;
+		if (!Double.isFinite(localScale) || !(localScale > 0)
+				|| !Double.isFinite(pixelSigma) || pixelSigma < 0
+				|| !Double.isFinite(radius) || radius > Integer.MAX_VALUE) {
+			return false;
+		}
+
+		final java.awt.Color color = this.blurColor();
+		if (color == null) {
+			return false;
+		}
+		final int pad = RasterEffects.kernelRadius(pixelSigma);
+		final BlurRegion region = blurRegion(shape.getBounds2D(), localScale, pad);
+		if (region == null || region.width * (long) region.height > MAX_BLUR_LAYER_PIXELS) {
+			return false;
+		}
+
+		final BufferedImage layer = new BufferedImage(region.width, region.height,
+				BufferedImage.TYPE_INT_ARGB_PRE);
+		final var graphics = layer.createGraphics();
+		try {
+			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			graphics.translate(-region.x, -region.y);
+			graphics.scale(localScale, localScale);
+			graphics.setPaint(color);
+			graphics.fill(shape);
+		} finally {
+			graphics.dispose();
+		}
+
+		final BufferedImage blurred;
+		try {
+			blurred = RasterEffects.blurPremultiplied(layer, pixelSigma);
+		} finally {
+			layer.flush();
+		}
+		final Image image;
+		try {
+			image = this.getPdfWriter().addGeneratedImage(blurred);
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+
+		try (final State state = this.begin()) {
+			// The source color and effective alpha are already baked into the image.
+			// Solid paints also force any paint soft mask back to /None, including a
+			// mask inherited from the stroke paint. Reset both overprint channels.
+			this.setStrokePaint(GrayColor.BLACK);
+			this.setFillPaint(GrayColor.BLACK);
+			this.setStrokeAlpha(1);
+			this.setFillAlpha(1);
+
+			final var placement = AffineTransform.getTranslateInstance(
+					region.x / localScale, region.y / localScale);
+			placement.scale(1 / localScale, 1 / localScale);
+			this.transform(placement);
+			try (final State artifact = this.beginArtifactScope()) {
+				// Keep the caller's blend mode: the final image must blend with the page.
+				this.drawImage(image);
+			}
+		}
+		return true;
+	}
+
+	@Override
+	public void fillBlurred(final Shape shape, final double sigma) throws GraphicsException {
+		if (!this.tryFillBlurred(shape, sigma)) {
+			this.fill(shape);
+		}
 	}
 
 	@Override
@@ -525,6 +990,61 @@ public class PDFGC implements GC, Closeable {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>
+	 * Line-level replacement is opt-in through
+	 * {@link PDFParams#withActualTextReplacement(boolean)}. It is disabled by
+	 * default because measurements show that PDFium (Chrome and Edge) extracts
+	 * bidirectional text correctly from visual glyphs but incorrectly with the
+	 * line-level replacement span, while MuPDF is not improved. Enable it only
+	 * for Acrobat-centric text extraction workflows.
+	 * </p>
+	 *
+	 * <p>
+	 * When enabled, PDF 1.5 and later use one {@code /Span} marked-content
+	 * sequence carrying {@code /ActualText}. The replacement state is independent
+	 * of tagged content, artifacts and optional-content layers, so those
+	 * marked-content sequences remain properly nested inside or outside it.
+	 * Disabled replacement, nested calls and target versions earlier than PDF 1.5
+	 * return a no-op state.
+	 * </p>
+	 */
+	@Override
+	public State beginTextReplacement(final String logicalText) throws GraphicsException {
+		if (!this.getPdfWriter().getParams().actualTextReplacement()
+				|| this.inTextReplacement || this.pdfVersion.v < PDFParams.Version.V_1_5.v) {
+			return GC.NO_OP_STATE;
+		}
+		try {
+			this.applyTransform();
+			this.applyClip();
+			this.out.beginActualText(java.util.Objects.requireNonNull(logicalText, "logicalText"));
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+		this.inTextReplacement = true;
+		return new State() {
+			private boolean closed;
+
+			@Override
+			public void close() throws GraphicsException {
+				if (this.closed) {
+					return;
+				}
+				this.closed = true;
+				try {
+					PDFGC.this.out.endActualText();
+				} catch (IOException e) {
+					throw new GraphicsException(e);
+				} finally {
+					PDFGC.this.inTextReplacement = false;
+				}
+			}
+		};
+	}
+
+	/**
 	 * Restores the most recently saved graphics state; invoked exactly once
 	 * when a {@link State} returned by {@link #begin()} is closed.
 	 */
@@ -539,9 +1059,12 @@ public class PDFGC implements GC, Closeable {
 		}
 		final var state = this.stack.removeLast();
 		state.restore(this);
-		if (this.stack.isEmpty()) {
-			this.transform = null;
-		}
+		// A transform applied inside the closed state but never flushed (no
+		// drawing followed it, so no q/cm was written) belongs to that state
+		// alone: drop it like the pending clip. Keeping it would flush it into
+		// the enclosing state at the next begin()/draw and apply it twice
+		// (2026-09-03: filter layers opened as begin/transform/createFilterGroup/close).
+		this.transform = null;
 		this.clip = null;
 	}
 
@@ -872,6 +1395,10 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void drawImage(final Image image) throws GraphicsException {
+		this.drawImage(image, image.getAltString());
+	}
+
+	private void drawImage(final Image image, final String alt) throws GraphicsException {
 		if (DEBUG) {
 			LOG.fine("drawImage: " + image);
 		}
@@ -880,7 +1407,7 @@ public class PDFGC implements GC, Closeable {
 		} catch (IOException e) {
 			throw new GraphicsException(e);
 		}
-		this.pendingAlt = image.getAltString();
+		this.pendingAlt = alt;
 		try {
 			image.drawTo(this);
 		} finally {
@@ -1267,17 +1794,20 @@ public class PDFGC implements GC, Closeable {
 						gsOut.writeName("BM");
 						gsOut.writeName(blendMode.pdfName);
 					}
+					// ExtGState entries are partial dictionaries: omitting OP/op would
+					// leave a previously enabled overprint mode active. Always write the
+					// booleans so transitions back to the normal compositing path work.
+					gsOut.writeName("OP");
+					gsOut.writeBoolean(this.strokeOverprint != CMYKColor.OVERPRINT_NONE);
 					if (this.strokeOverprint != CMYKColor.OVERPRINT_NONE) {
-						gsOut.writeName("OP");
-						gsOut.writeBoolean(true);
 						if (this.strokeOverprint == CMYKColor.OVERPRINT_ILLUSTRATOR) {
 							gsOut.writeName("OPM");
 							gsOut.writeInt(1);
 						}
 					}
+					gsOut.writeName("op");
+					gsOut.writeBoolean(this.fillOverprint != CMYKColor.OVERPRINT_NONE);
 					if (this.fillOverprint != CMYKColor.OVERPRINT_NONE) {
-						gsOut.writeName("op");
-						gsOut.writeBoolean(true);
 						if (this.fillOverprint == CMYKColor.OVERPRINT_ILLUSTRATOR) {
 							gsOut.writeName("opm");
 							gsOut.writeInt(1);

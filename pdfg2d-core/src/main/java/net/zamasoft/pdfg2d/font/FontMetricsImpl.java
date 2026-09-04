@@ -151,8 +151,8 @@ public class FontMetricsImpl implements FontMetrics {
 		return this.size * this.getFont().getWidth(gid) / FontSource.DEFAULT_UNITS_PER_EM;
 	}
 
-	/** Packed {@code kern}/{@code liga} tags for the explicit-off checks. */
-	private static final int TAG_KERN = 0x6b65726e, TAG_LIGA = 0x6c696761;
+	/** Packed {@code kern} tag for the explicit-off check. */
+	private static final int TAG_KERN = 0x6b65726e;
 
 	@Override
 	public double getKerning(final int gid, final int sgid) {
@@ -166,18 +166,14 @@ public class FontMetricsImpl implements FontMetrics {
 
 	/**
 	 * Returns the ligature glyph ID for the given glyph and following character.
-	 * Explicitly disabled by {@code font-feature-settings "liga" 0} (an
-	 * unspecified {@code liga} keeps the default behaviour).
+	 * OpenType feature policy is applied by the font implementation.
 	 *
 	 * @param gid the current glyph ID
 	 * @param cid the following character code
 	 * @return the ligature glyph ID, or a negative value if none exists
 	 */
 	public int getLigature(final int gid, final int cid) {
-		if (this.features.value(TAG_LIGA) == 0) {
-			return -1;
-		}
-		return this.getFont().getLigature(gid, cid);
+		return this.getFont().getLigature(gid, cid, this.features);
 	}
 
 	/**

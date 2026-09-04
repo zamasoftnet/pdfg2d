@@ -156,6 +156,23 @@ public abstract class PDFPageOutput extends PDFGraphicsOutput {
 	 * @since 1.3
 	 */
 	public void beginStructContent(final StructureRef target) {
+		this.beginStructContent(target, null);
+	}
+
+	/**
+	 * Routes subsequently painted content to a declared structure element and
+	 * supplies its logical-order key. MCIDs and the parent tree remain in paint
+	 * order; the hint affects only the element's emitted {@code /K} array.
+	 * The hint applies only when {@code target} is an element declared by this
+	 * writer. For a {@code null} target or a reference owned by another writer,
+	 * neither the current routing element nor its active ordering hint changes;
+	 * the call still balances a matching {@link #endStructContent()}.
+	 *
+	 * @param target a structure element declared by this writer, or {@code null}
+	 * @param order  the logical-order hint, or {@code null} for paint order
+	 * @since 1.3
+	 */
+	public void beginStructContent(final StructureRef target, final StructureOrder order) {
 	}
 
 	/**

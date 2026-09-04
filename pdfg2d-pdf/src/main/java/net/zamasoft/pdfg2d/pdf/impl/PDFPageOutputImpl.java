@@ -185,11 +185,17 @@ class PDFPageOutputImpl extends PDFPageOutput {
 
 	@Override
 	public void beginStructContent(final net.zamasoft.pdfg2d.pdf.StructureRef target) {
+		this.beginStructContent(target, null);
+	}
+
+	@Override
+	public void beginStructContent(final net.zamasoft.pdfg2d.pdf.StructureRef target,
+			final net.zamasoft.pdfg2d.pdf.StructureOrder order) {
 		final var structure = this.getPDFWriterImpl().structure;
 		if (structure != null) {
-			// A null target still pushes a restore frame in the builder so this
-			// call always balances endStructContent (no conditional bracketing).
-			structure.beginContent(target);
+			// A null or foreign target leaves routing/order untouched but still
+			// pushes a frame, so callers can bracket without a conditional.
+			structure.beginContent(target, order);
 		}
 	}
 

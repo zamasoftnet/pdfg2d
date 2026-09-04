@@ -96,29 +96,45 @@ public record GsubTable(ScriptList scriptList, FeatureList featureList, LookupLi
 	 * @return the ligature substitution subtables (possibly empty)
 	 */
 	public java.util.List<LigatureSubstFormat1> collectLigatures() {
-		final var result = new java.util.ArrayList<LigatureSubstFormat1>();
+		return this.collectLigatures(TAG_LIGA);
+	}
+
+	/**
+	 * Collects the {@link LigatureSubstFormat1} subtables of every feature
+	 * record with the given tag, across scripts and languages. Shared lookups
+	 * are deduplicated, and subtables are returned in ascending lookup-list
+	 * index order.
+	 *
+	 * @param tag the packed 4-byte feature tag
+	 * @return the ligature substitution subtables (possibly empty)
+	 */
+	public java.util.List<LigatureSubstFormat1> collectLigatures(final int tag) {
 		final var records = this.featureList.featureRecords();
 		final var features = this.featureList.features();
-		// The liga lookup is commonly shared by several script/language feature
-		// records; collect each lookup once.
-		final var seenLookups = new java.util.HashSet<Integer>();
+		final var byLookup = new java.util.TreeMap<Integer, java.util.List<LigatureSubstFormat1>>();
 		for (int i = 0; i < records.length; i++) {
-			if (records[i].tag() != TAG_LIGA) {
+			if (records[i].tag() != tag) {
 				continue;
 			}
 			final var feature = features[i];
 			for (int li = 0; li < feature.getLookupCount(); li++) {
 				final int lookupIndex = feature.getLookupListIndex(li);
-				if (!seenLookups.add(lookupIndex)) {
+				if (byLookup.containsKey(lookupIndex)) {
 					continue;
 				}
+				final var subs = new java.util.ArrayList<LigatureSubstFormat1>();
 				final var lookup = this.lookupList.lookups()[lookupIndex];
 				for (int si = 0; si < lookup.getSubtableCount(); si++) {
 					if (lookup.getSubtable(si) instanceof LigatureSubstFormat1 ls) {
-						result.add(ls);
+						subs.add(ls);
 					}
 				}
+				byLookup.put(lookupIndex, subs);
 			}
+		}
+		final var result = new java.util.ArrayList<LigatureSubstFormat1>();
+		for (final var subs : byLookup.values()) {
+			result.addAll(subs);
 		}
 		return result;
 	}

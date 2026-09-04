@@ -1,16 +1,19 @@
 package net.zamasoft.pdfg2d.font;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
+import java.util.ArrayList;
 
 import org.junit.jupiter.api.Test;
 
 import net.zamasoft.pdfg2d.font.table.CmapTable;
 import net.zamasoft.pdfg2d.font.table.GposTable;
 import net.zamasoft.pdfg2d.font.table.GsubTable;
+import net.zamasoft.pdfg2d.font.table.LigatureSubstFormat1;
 import net.zamasoft.pdfg2d.font.table.SinglePos;
 import net.zamasoft.pdfg2d.font.table.Table;
 
@@ -21,6 +24,7 @@ import net.zamasoft.pdfg2d.font.table.Table;
  * kerning between two slashes.
  */
 public class OpenTypeLayoutTest {
+	private static final int TAG_LIGA = 0x6c696761, TAG_DLIG = 0x646c6967;
 
 	private static OpenTypeFont font() throws Exception {
 		return new FontFile(new File("src/test/resources/data/test.otf")).getFont();
@@ -49,6 +53,29 @@ public class OpenTypeLayoutTest {
 				}
 			}
 			assertTrue(found, "The fi ligature (f + i) must be discoverable through the retained coverage");
+		}
+	}
+
+	@Test
+	public void testGsubLigaturesCanBeCollectedByFeatureTag() throws Exception {
+		try (final var otf = font()) {
+			final var gsub = (GsubTable) otf.getTable(Table.GSUB);
+			assertNotNull(gsub, "The test font must have a GSUB table");
+
+			assertEquals(gsub.collectLigatures(TAG_LIGA), gsub.collectLigatures(),
+					"the no-argument method must retain its liga-only contract");
+
+			final var expectedDlig = new ArrayList<LigatureSubstFormat1>();
+			final var lookup = gsub.getLookupList().lookups()[33];
+			for (int i = 0; i < lookup.getSubtableCount(); ++i) {
+				final var subtable = lookup.getSubtable(i);
+				if (subtable instanceof LigatureSubstFormat1 ligature) {
+					expectedDlig.add(ligature);
+				}
+			}
+			assertFalse(expectedDlig.isEmpty(), "lookup 33 must contain dlig ligature substitutions");
+			assertEquals(expectedDlig, gsub.collectLigatures(TAG_DLIG),
+					"dlig must be collected in lookup-list order");
 		}
 	}
 

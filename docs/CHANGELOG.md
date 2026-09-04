@@ -3,6 +3,30 @@
 pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.md`](./PROPOSALS.md)、
 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md) を参照。
 
+## 2026-09-04 — 双方向テキストの論理出力 API（ActualText・`/K` 論理順・鏡像 CID alias）
+
+- foliojet の段落単位 UBA（視覚順で glyph run を描く）に対し、抽出・アクセシビリティへ**論理順**を
+  渡すための API を追加（設計は copperpdf4 `docs/bidi-logical-output-spike.md`）。API 未使用時の出力は
+  バイト同一。
+- 汎用 GC: `GC.beginTextReplacement(String logicalText)`（`State`、既定 no-op）。閉じるまでに描いた内容を
+  意味上その文字列で置き換える。`RecorderGC` は `BeginTextReplacement`/`EndTextReplacement` を記録し、
+  Form への再生では 1 回再現、ラスタ再生では破棄（ラスタ化テキストは非検索）。
+- PDF: `PDFGraphicsOutput.beginActualText/endActualText` が `/Span <</ActualText <UTF-16>>> BDC … EMC` を書く
+  （PDF 1.5 未満と入れ子は no-op）。`PDFGC.beginTextReplacement` はこれで実装し、タグ付きマーク・Artifact・
+  レイヤーの BDC/EMC と正しく入れ子になる。**既定では no-op**——`PDFParams.withActualTextReplacement(true)` で
+  opt-in。foliojet 側の実測（PyMuPDF/pypdfium2）で、PDFium は ActualText 無しの方が視覚順 glyph から論理順を
+  正しく復元し、行単位 ActualText を与えると視覚順に崩れることが分かったため（同日追記）。
+- タグ付き PDF: `StructureOrder(blockOrdinal, logicalStart, tieBreaker)` と
+  `PDFPageOutput.beginStructContent(StructureRef, StructureOrder)`。MCID 番号と ParentTree は描画順のまま、
+  各構造要素の `/K` だけを（order, 描画順）で並べる。Elem/MCR/OBJR を共通の ordered slot で扱うので
+  Link の OBJR も相対順を保つ。ヒント無しなら従来どおり。
+- フォント: `Font.toGID(int displayCodePoint, int logicalCodePoint, FontFeatureSet)`（既定は表示側の
+  `toGID`）。埋め込み CID subset は既存の `semanticVariant` 鍵で（表示 GID, 論理文字）ごとに別 CID を採番し
+  ToUnicode を論理文字にする（鏡像括弧を pdf.js のように ActualText を無視する抽出器でも正しく）。Identity
+  CID は CID=GID なので alias 不可（表示 GID のまま。bidi 文書には埋め込み subset を推奨）。
+- テスト: `TextReplacementTest`、`StructureOrderTest`、`OpenTypeEmbeddedCIDFontSubsetTest`（alias）、identity
+  フォントの alias 不可。
+
 ## 2026-07-12 — タグ付き PDF の上流接続（foliojet）
 
 - foliojet が HTML 構造をタグ付き PDF の論理構造ツリーへ流し込むようになった

@@ -5,6 +5,7 @@ import java.io.Serializable;
 
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
+import net.zamasoft.pdfg2d.gc.font.FontFeatureSet;
 import net.zamasoft.pdfg2d.gc.text.Text;
 
 /**
@@ -42,6 +43,22 @@ public interface Font extends Serializable {
 	 */
 	public default int toGID(final int c, final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
 		return this.toGID(c);
+	}
+
+	/**
+	 * Converts a display character to a glyph while retaining a possibly
+	 * different logical Unicode value for extraction. Back-ends that cannot
+	 * assign separate semantic aliases default to the ordinary display glyph.
+	 *
+	 * @param displayCodePoint the code point whose glyph is displayed
+	 * @param logicalCodePoint the code point represented semantically
+	 * @param features         the feature settings (never {@code null})
+	 * @return the glyph ID used for drawing
+	 * @since 1.3
+	 */
+	public default int toGID(final int displayCodePoint, final int logicalCodePoint,
+			final FontFeatureSet features) {
+		return this.toGID(displayCodePoint, features);
 	}
 
 	/**
@@ -104,13 +121,32 @@ public interface Font extends Serializable {
 
 	/**
 	 * Returns the ligature for a sequence of glyphs.
-	 * Returns 0 if no ligature exists.
+	 * Returns a negative value if no ligature exists.
 	 * 
 	 * @param gid the glyph ID
 	 * @param cid the character ID
-	 * @return the ligature glyph ID, or 0
+	 * @return the ligature glyph ID, or a negative value
 	 */
 	public int getLigature(int gid, int cid);
+
+	/**
+	 * Returns the ligature for a sequence of glyphs with OpenType feature
+	 * settings applied. The default preserves the existing implementation's
+	 * ligature behaviour, except that an explicitly disabled {@code liga}
+	 * feature suppresses it.
+	 *
+	 * @param gid      the glyph ID
+	 * @param cid      the character ID
+	 * @param features the feature settings (never {@code null})
+	 * @return the ligature glyph ID, or a negative value
+	 * @since 1.3
+	 */
+	public default int getLigature(final int gid, final int cid, final FontFeatureSet features) {
+		if (features.value(0x6c696761) == 0) { // 'liga'
+			return -1;
+		}
+		return this.getLigature(gid, cid);
+	}
 
 	/**
 	 * Draws the text run to the graphics context.
