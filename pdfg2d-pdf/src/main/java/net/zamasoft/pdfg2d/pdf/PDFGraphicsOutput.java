@@ -8,6 +8,7 @@ import net.zamasoft.pdfg2d.gc.paint.CMYKColor;
 import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.pdfg2d.gc.paint.Color.Type;
 import net.zamasoft.pdfg2d.gc.paint.RGBColor;
+import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.util.ColorUtils;
 
 /**
@@ -58,6 +59,15 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 	 */
 	public PDFWriter getPdfWriter() {
 		return this.pdfWriter;
+	}
+
+	private CMYKColor toCMYK(final Color color) throws IOException {
+		if (color.getColorType() == Type.CMYK) {
+			return (CMYKColor) color;
+		}
+		final var cmyk = ((PDFWriterImpl) this.pdfWriter).colorConverter()
+				.toCMYK(color.getRed(), color.getGreen(), color.getBlue());
+		return CMYKColor.create(cmyk[CMYKColor.C], cmyk[CMYKColor.M], cmyk[CMYKColor.Y], cmyk[CMYKColor.K]);
 	}
 
 	/**
@@ -249,7 +259,7 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 		final var named = color.getColorType() == Type.SPOT || color.getColorType() == Type.DEVICEN;
 		final var processedColor = named ? color : switch (params.effectiveColorMode()) {
 			case GRAY -> (color.getColorType() != Type.GRAY) ? ColorUtils.toGray(color) : color;
-			case CMYK -> (color.getColorType() != Type.CMYK) ? ColorUtils.toCMYK(color) : color;
+			case CMYK -> this.toCMYK(color);
 			default -> color;
 		};
 
@@ -338,7 +348,7 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 		}
 		final var processedColor = switch (params.effectiveColorMode()) {
 			case GRAY -> (color.getColorType() != Type.GRAY) ? ColorUtils.toGray(color) : color;
-			case CMYK -> (color.getColorType() != Type.CMYK) ? ColorUtils.toCMYK(color) : color;
+			case CMYK -> this.toCMYK(color);
 			default -> color;
 		};
 

@@ -16,9 +16,57 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * @since 1.3
  */
 final class OutputIntentWriter {
+	private static final String ECI_PROFILE_RESOURCE = "ISOcoated_v2_300_eci.icc";
+	private static final String SRGB_PROFILE_RESOURCE = "sRGB_IEC61966-2-1_no_black_scaling.icc";
+
+	private static volatile OutputIntent defaultCmykIntent;
+	private static volatile OutputIntent defaultRgbIntent;
 
 	private OutputIntentWriter() {
 		// static use only
+	}
+
+	/** 同梱ICCを一度だけ読み込み、既定のCMYK出力インテントを返します。 */
+	static OutputIntent defaultCmykIntent() throws IOException {
+		var intent = defaultCmykIntent;
+		if (intent == null) {
+			synchronized (OutputIntentWriter.class) {
+				intent = defaultCmykIntent;
+				if (intent == null) {
+					intent = new OutputIntent("FOGRA39", "ISO Coated v2 300% (ECI)",
+							OutputIntent.ICC_REGISTRY,
+							"Offset printing, ISO 12647-2:2004/Amd 1, paper type 1/2 (coated), TAC 300%",
+							PDFWriterImpl.loadResource(ECI_PROFILE_RESOURCE), 4);
+					defaultCmykIntent = intent;
+				}
+			}
+		}
+		return intent;
+	}
+
+	/** CMYK変換に使う、明示指定または既定の出力インテントICCを返します。 */
+	static byte[] cmykProfile(final PDFParams params) throws IOException {
+		final var intent = params.outputIntent();
+		if (intent != null && intent.colorComponents() == 4 && intent.iccProfile() != null) {
+			return intent.iccProfile();
+		}
+		return defaultCmykIntent().iccProfile();
+	}
+
+	/** 同梱ICCを一度だけ読み込み、既定のRGB出力インテントを返します。 */
+	private static OutputIntent defaultRgbIntent() throws IOException {
+		var intent = defaultRgbIntent;
+		if (intent == null) {
+			synchronized (OutputIntentWriter.class) {
+				intent = defaultRgbIntent;
+				if (intent == null) {
+					intent = new OutputIntent("sRGB IEC61966-2.1", null, null, null,
+							PDFWriterImpl.loadResource(SRGB_PROFILE_RESOURCE), 3);
+					defaultRgbIntent = intent;
+				}
+			}
+		}
+		return intent;
 	}
 
 	/**
@@ -43,20 +91,15 @@ final class OutputIntentWriter {
 		mainFlow.writeName(pdfVersion.isPdfX() ? "GTS_PDFX" : "GTS_PDFA1");
 		mainFlow.lineBreak();
 
-		// Resolve the intent: explicit configuration wins; otherwise a
-		// built-in profile is chosen so that the intent's color space
-		// matches the device color space actually emitted (PDF/A-1
-		// requires DeviceRGB/DeviceCMYK content to be backed by an
-		// output intent of the same type).
+		// 明示指定を常に優先する。PDF/Xでは内容の色モードにかかわらず、
+		// 印刷条件を表すCMYK出力インテントが必要になる。
 		var intent = params.outputIntent();
 		if (intent == null) {
-			if (pdfVersion == PDFParams.Version.V_PDFX1A
+			if (pdfVersion.isPdfX()
 					|| params.effectiveColorMode() == PDFParams.ColorMode.CMYK) {
-				intent = new OutputIntent("Probe Profile", null, null, "Probe CMYK profile",
-						PDFWriterImpl.loadResource("Probev1_ICCv2.icc"), 4);
+				intent = defaultCmykIntent();
 			} else {
-				intent = new OutputIntent("sRGB IEC61966-2.1", null, null, null,
-						PDFWriterImpl.loadResource("sRGB_IEC61966-2-1_no_black_scaling.icc"), 3);
+				intent = defaultRgbIntent();
 			}
 		}
 

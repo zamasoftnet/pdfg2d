@@ -1,0 +1,11 @@
+ISO Coated v2 300% (ECI) -- ISOcoated_v2_300_eci.icc
+Source: European Color Initiative (ECI), package ECI_Offset_2008, https://www.eci.org/
+Characterization data: FOGRA39L (ISO 12647-2:2004/Amd 1, paper type 1 and 2, coated), total area coverage 300%.
+Copyright: PrintOpen 5.2.0 - (c) Copyright 2000-2006 Heidelberger Druckmaschinen AG. All Rights Reserved. (profile 'cprt' tag)
+
+License (as published by ECI and recorded in the Debian icc-profiles package copyright file):
+  "This profile is made available by ECI European Color Initiative, with permission of Heidelberger Druckmaschinen AG,
+   and may be used, embedded, exchanged, and shared without restriction. It may not be altered or sold without written
+   permission of ECI European Color Initiative."
+
+pdfg2d bundles this profile unaltered as the default PDF/X output intent (DestOutputProfile). It is not sold separately.

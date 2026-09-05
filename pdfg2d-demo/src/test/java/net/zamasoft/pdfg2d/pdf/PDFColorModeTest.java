@@ -118,21 +118,18 @@ public class PDFColorModeTest {
             inspector.run();
             final var commands = inspector.getCommands();
 
-            // Check for CMYK fill
-            // Red (255, 0, 0) -> Cyan=0, Magenta=1, Yellow=1, Black=0
-            // Color space should have 4 components
+			// ICC/FOGRA39の正確な値はJDK/LCMSのpatchで揺れるため、
+			// 赤に必要なインキ量の性質だけを検査する。
             boolean found = commands.stream().anyMatch(cmd -> {
-                // System.out.println("CMYK cmd: " +
-                // java.util.Arrays.toString(cmd.currentColor));
                 if (cmd.currentColor != null && cmd.currentColor.length == 4) {
-                    return Math.abs(cmd.currentColor[0] - 0.0f) < 0.01f && // C
-                            Math.abs(cmd.currentColor[1] - 1.0f) < 0.01f && // M
-                            Math.abs(cmd.currentColor[2] - 1.0f) < 0.01f && // Y
-                            Math.abs(cmd.currentColor[3] - 0.0f) < 0.01f; // K
+					return cmd.currentColor[0] < .05f &&
+							cmd.currentColor[1] > .85f &&
+							cmd.currentColor[2] > .85f &&
+							cmd.currentColor[3] < .05f;
                 }
                 return false;
             });
-            assertTrue(found, "Should contain CMYK equivalent of Red (0, 1, 1, 0) drawing operation");
+			assertTrue(found, "Should contain the ICC CMYK equivalent of red");
         }
     }
 }

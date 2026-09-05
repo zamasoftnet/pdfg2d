@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HexFormat;
 
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
@@ -35,6 +36,13 @@ final class XMPMetadataWriter {
 
 	private XMPMetadataWriter() {
 		// static use only
+	}
+
+	/** trailerの第1ファイルIDをXMPのUUID表記へ変換します。 */
+	private static String documentId(final byte[] fileId) {
+		final var hex = HexFormat.of().formatHex(fileId);
+		return "uuid:" + hex.substring(0, 8) + '-' + hex.substring(8, 12) + '-'
+				+ hex.substring(12, 16) + '-' + hex.substring(16, 20) + '-' + hex.substring(20);
 	}
 
 	/** Escapes text for use in XML element content. */
@@ -111,12 +119,13 @@ final class XMPMetadataWriter {
 	 * @param create      creation timestamp in epoch milliseconds
 	 * @param modify      modification timestamp in epoch milliseconds, or
 	 *                    {@code -1} to omit
+	 * @param fileId      trailerの第1ファイルID(16バイト)
 	 * @throws IOException if an I/O error occurs
 	 */
 	static void write(final PDFFragmentOutputImpl xmpmetaFlow, final PDFParams.Version version, final int pdfuaPart,
 			final String author, final String creator, final String producer, final String title,
 			final String keywords, final long create, final long modify,
-			final net.zamasoft.pdfg2d.pdf.FacturX facturX) throws IOException {
+			final net.zamasoft.pdfg2d.pdf.FacturX facturX, final byte[] fileId) throws IOException {
 		xmpmetaFlow.startHash();
 
 		xmpmetaFlow.writeName("Type");
@@ -179,7 +188,7 @@ final class XMPMetadataWriter {
 			}
 
 			// Adobe PDF schema
-			if (keywords != null || producer != null) {
+			if (version.isPdfX() || keywords != null || producer != null) {
 				sb.append("  <rdf:Description rdf:about=\"\"")
 						.append(" xmlns:pdf=\"http://ns.adobe.com/pdf/1.3/\">\n");
 				if (keywords != null) {
@@ -187,6 +196,9 @@ final class XMPMetadataWriter {
 				}
 				if (producer != null) {
 					sb.append("   <pdf:Producer>").append(xml(producer)).append("</pdf:Producer>\n");
+				}
+				if (version.isPdfX()) {
+					sb.append("   <pdf:Trapped>False</pdf:Trapped>\n");
 				}
 				sb.append("  </rdf:Description>\n");
 			}
@@ -212,13 +224,28 @@ final class XMPMetadataWriter {
 				sb.append("   <xmp:CreatorTool>").append(xml(creator)).append("</xmp:CreatorTool>\n");
 			}
 			final var dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX");
-			sb.append("   <xmp:CreateDate>").append(dateFormat.format(new Date(create)))
+			final var createDate = dateFormat.format(new Date(create));
+			sb.append("   <xmp:CreateDate>").append(createDate)
 					.append("</xmp:CreateDate>\n");
 			if (modify != -1L) {
 				sb.append("   <xmp:ModifyDate>").append(dateFormat.format(new Date(modify)))
 						.append("</xmp:ModifyDate>\n");
 			}
+			if (version.isPdfX()) {
+				sb.append("   <xmp:MetadataDate>").append(createDate).append("</xmp:MetadataDate>\n");
+			}
 			sb.append("  </rdf:Description>\n");
+
+			// XMP Media Management schema (PDF/X-4必須プロパティ)
+			if (version.isPdfX()) {
+				sb.append("  <rdf:Description rdf:about=\"\"")
+						.append(" xmlns:xmpMM=\"http://ns.adobe.com/xap/1.0/mm/\">\n");
+				sb.append("   <xmpMM:DocumentID>").append(documentId(fileId))
+						.append("</xmpMM:DocumentID>\n");
+				sb.append("   <xmpMM:VersionID>1</xmpMM:VersionID>\n");
+				sb.append("   <xmpMM:RenditionClass>default</xmpMM:RenditionClass>\n");
+				sb.append("  </rdf:Description>\n");
+			}
 
 			// Factur-X / ZUGFeRD electronic-invoice schema. The fx: properties
 			// tell an e-invoice reader which embedded file holds the structured

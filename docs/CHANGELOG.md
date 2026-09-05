@@ -3,6 +3,55 @@
 pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.md`](./PROPOSALS.md)、
 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md) を参照。
 
+## 2026-09-05 — PDF/X 色管理 I3（画像・/DefaultRGB・APP14）
+
+- CMYK出力（PDF/X-1aと`output.color=cmyk`）で、RGBの読み込み画像・生成画像を出力インテントのICCで
+  全画素変換し、`/DeviceCMYK`・8bit・4バイト/画素（C,M,Y,K、反転なし）のFlateで書く。グレー画像は
+  `/DeviceGray`のまま。無彩色のK単色規則は画像には適用しない。
+- 4成分JPEGはAdobe APP14を解析し、transform 0（Adobe反転CMYK）は素通し＋`/Decode [1 0 ×4]`、
+  transform 2（YCCK）と4成分JPXは再エンコード、APP14無しは素通しで`/Decode`を書かない。
+- PDF/X-4（PRESERVE）ではRGB画像を全部`[/ICCBased sRGB]`にし（画像固有のICCはそのプロファイルを
+  別ストリームで埋める）、頁・Form・Pattern・マスクのResourcesに`/DefaultRGB [/ICCBased sRGB]`を置く。
+  PDF/Xの特色alternateは出力インテントの成分数（CMYK）へ再整列する。通常PDF・PDF/Aは従来どおり。
+- `PdfXPreflight` にR7の画像部分、R8（X-1aの透明）、R13（Optional Content）を追加し、
+  `unimplementedRules()` を空にした。`PdfXImageTest` が版×画像種別（PNG/JPEG/APP14/YCCK/生成）で
+  色空間・画素配列・`/Decode`・`/DefaultRGB`を検査する。
+- レビュー反映（同日）: 再圧縮画像のタグは常に共有sRGB（入力ICCの埋め込みは画素と食い違うため撤去）。
+  `output.color=gray`はRGB画像を1成分（alphaがあればgray+alpha）へ変換して`/DeviceGray`にする。
+  gray画像のFlate書き出しが`ColorModel.getGreen()`の線形→sRGB LUT（128→188）を通していたのを生サンプルに修正。
+  Gray/CMYK+alphaの非可逆圧縮で辞書と符号の成分数が食い違う経路を修正。PDF/X-4でも`/OCProperties`の`/AS`を
+  書かない。`/DefaultRGB`はPDF/XかつPRESERVEのときだけ。preflightにX-1aのICCBased全面拒否、
+  `/N`の値域、ExtGState `/SMask /G`とShading Patternの`/ExtGState`の巡回、R13の`/AS`を追加。
+- PDF/X-4（PRESERVE）のRGBシェーディング（軸/放射のFunction、Type 4メッシュ）の`/ColorSpace`を
+  `[/ICCBased sRGB]`に直タグ化した（`PDFWriterImpl.pdfXRGBProfileRef()`）。設計D3の残項目。
+- PDF/Xで明示された出力インテントを`PDFWriterImpl`が完全に検証する（ICCが無い・解析できない・prtrでない・
+  CMYKでない→`IllegalArgumentException`）。foliojet4の0x380Eと同じ前提をpdfg2d直接利用にも課す。
+- `maxImageWidth/Height`によるCMYK画像の縮小をraster成分ごとの補間（`AffineTransformOp`）にし、RGB往復で版構成が
+  変わる（灰のK単色が4色になる）のを止めた。
+
+## 2026-09-05 — PDF/X 色管理 I2（ベクタ・シェーディング・特色）
+
+- CMYK出力時のRGBベクタ色、軸/放射シェーディング、Type 4メッシュ頂点、
+  Separation/DeviceNのalternateを、出力インテント（未指定時は同梱FOGRA39）のICCで変換する。
+- 単色の厳密な無彩色と、全停止色が無彩色のグラデーションはK単色にする。混色グラデーションと
+  メッシュは補間の濁りを避けるため、停止色・頂点ごとのK単色化を行わず純ICC変換する。
+- 同名のSeparation/DeviceNを異なるalternateで再定義した場合は生成時に拒否する。
+- `PdfXPreflight` にR7のベクタ部分（内容ストリーム、シェーディング、特色alternate）とR9を追加した。
+  画像XObjectの色空間と透明グループの`/CS`はI3で追加する。
+
+## 2026-09-05 — PDF/X 色管理 I1（FOGRA39・必須XMP・回帰プリフライト）
+
+- PDF/X全版とCMYK出力の既定OutputIntentを ISO Coated v2 300% (ECI)（FOGRA39、`/N 4`）へ変更。
+  明示指定のOutputIntentは従来どおり優先する。検証用 `Probev1_ICCv2.icc` と未参照の
+  `default_cmyk.icc` は撤去した。同梱プロファイルの利用条件は
+  [`ISOcoated_v2_300_eci.LICENSE.txt`](../pdfg2d-pdf/src/main/resources/net/zamasoft/pdfg2d/pdf/impl/ISOcoated_v2_300_eci.LICENSE.txt)
+  を参照。
+- PDF/XのXMPへ `pdf:Trapped`、`xmp:MetadataDate`、`xmpMM:DocumentID`/`VersionID`/
+  `RenditionClass` を追加。DocumentIDはtrailerの第1 `/ID`から導出し、Title・作成日時・更新日時は
+  Info辞書と同じ値を使う。
+- `pdfg2d-pdf` に `java-test-fixtures` とPDFBox 3ベースの `PdfXPreflight` を追加。
+  I1ではR1〜R6・R10〜R12を実装し、`pdfg2d-demo` からpositive/negativeを規則別に検査する。
+
 ## 2026-09-05 — 縦組み横倒し変換の一本化・U+2500 の縦罫線連結・Batik 子コンテキストの変換復元
 
 - `FontUtils.createSidewaysTransform(FontSource, size)`: 縦組みで横書きフォントを横倒しにする変換(π/2 回転+

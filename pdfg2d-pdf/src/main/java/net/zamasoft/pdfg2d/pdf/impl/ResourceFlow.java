@@ -39,7 +39,8 @@ class ResourceFlow {
 	 * @param flow the fragment output into which the resource dictionary is written
 	 * @throws IOException if an I/O error occurs while writing the initial entries
 	 */
-	public ResourceFlow(final PDFFragmentOutputImpl flow, final BiConsumer<String, String> resourceUse)
+	public ResourceFlow(final PDFFragmentOutputImpl flow, final BiConsumer<String, String> resourceUse,
+			final ObjectRef defaultRGBProfileRef)
 			throws IOException {
 		this.resourceUse = resourceUse;
 		flow.startHash();
@@ -53,6 +54,14 @@ class ResourceFlow {
 		flow.endArray();
 		flow.lineBreak();
 		this.out = flow.forkFragment();
+		if (defaultRGBProfileRef != null) {
+			final var colorSpaces = this.getFlow("ColorSpace");
+			colorSpaces.writeName("DefaultRGB");
+			colorSpaces.startArray();
+			colorSpaces.writeName("ICCBased");
+			colorSpaces.writeObjectRef(defaultRGBProfileRef);
+			colorSpaces.endArray();
+		}
 		flow.endHash();
 	}
 

@@ -15,6 +15,7 @@ dependencies {
     implementation 'de.rototor.pdfbox:graphics2d:3.0.5'
     // veraPDF (greenfield parser) for automated PDF/A conformance validation
     testImplementation 'org.verapdf:validation-model:1.26.5'
+    testImplementation(testFixtures(project(':pdfg2d-pdf')))
 }
 
 publishing {

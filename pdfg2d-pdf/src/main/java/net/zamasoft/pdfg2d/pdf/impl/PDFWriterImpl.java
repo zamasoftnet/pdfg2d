@@ -1,5 +1,7 @@
 package net.zamasoft.pdfg2d.pdf.impl;
 
+import java.awt.color.ColorSpace;
+import java.awt.color.ICC_Profile;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.FilterOutputStream;
@@ -23,6 +25,7 @@ import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.FontStore;
 import net.zamasoft.pdfg2d.gc.font.FontManager;
 import net.zamasoft.pdfg2d.gc.image.Image;
+import net.zamasoft.pdfg2d.gc.paint.CMYKColor;
 import net.zamasoft.pdfg2d.gc.paint.Color;
 import net.zamasoft.zstream.io.FragmentedOutput;
 import net.zamasoft.zstream.io.util.FragmentOutputAdapter;
@@ -39,6 +42,7 @@ import net.zamasoft.pdfg2d.pdf.PDFOutput.Destination;
 import net.zamasoft.pdfg2d.pdf.PDFPageOutput;
 import net.zamasoft.pdfg2d.pdf.PDFWriter;
 import net.zamasoft.pdfg2d.pdf.action.Action;
+import net.zamasoft.pdfg2d.pdf.color.ColorConverter;
 import net.zamasoft.pdfg2d.pdf.font.FontManagerImpl;
 import net.zamasoft.pdfg2d.pdf.gc.PDFGroupImage;
 import net.zamasoft.pdfg2d.pdf.params.EncryptionParams;
@@ -78,6 +82,9 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	final PDFParams params;
 
 	private FontManagerImpl fontManager = null;
+
+	/** Writer単位で遅延生成する、出力インテント用のCMYK変換器。 */
+	private ColorConverter colorConverter = null;
 
 	/** XRef Table. */
 	protected final XRefImpl xref;
@@ -279,6 +286,34 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	 * 出力開始前の妥当性検証です(2026-08-01)。ここで弾かれる組合せは
 	 * 1バイトも書かずにIllegalArgumentExceptionで失敗する。
 	 */
+	/**
+	 * PDF/Xの明示的な出力インテントを完全に検証します(fail closed)。出力
+	 * インテントは印刷条件を表すので、DestOutputProfileは解析できるCMYKの
+	 * 出力用(class prtr)プロファイルでなければなりません。foliojet4は
+	 * 入出力プロパティの段階で同じ検査(ERROR 0x380E)をしますが、pdfg2dを
+	 * 直接使う呼び出しにも同じ前提を課します(codexレビュー2026-09-05)。
+	 */
+	private static void validatePdfXOutputIntent(final OutputIntent intent) {
+		final var data = intent.iccProfile();
+		if (data == null) {
+			throw new IllegalArgumentException(
+					"PDF/X requires a DestOutputProfile: set the ICC profile of the output intent.");
+		}
+		final ICC_Profile profile;
+		try {
+			profile = ICC_Profile.getInstance(data);
+		} catch (final IllegalArgumentException e) {
+			throw new IllegalArgumentException("PDF/X output intent ICC profile cannot be parsed.", e);
+		}
+		if (profile.getProfileClass() != ICC_Profile.CLASS_OUTPUT) {
+			throw new IllegalArgumentException("PDF/X output intent ICC profile must be an output (prtr) profile.");
+		}
+		if (profile.getColorSpaceType() != ColorSpace.TYPE_CMYK || profile.getNumComponents() != 4
+				|| intent.colorComponents() != 4) {
+			throw new IllegalArgumentException("PDF/X output intent ICC profile must be CMYK (4 components).");
+		}
+	}
+
 	private static void validate(final PDFParams params) {
 		final var pdfVersion = params.version();
 		// PDF/A-1 forbids JavaScript actions and PDF/X forbids actions
@@ -286,6 +321,9 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		// the combination up front rather than emitting a non-conformant file.
 		if (params.openAction() != null && (pdfVersion.isPdfA() || pdfVersion.isPdfX())) {
 			throw new IllegalArgumentException("OpenAction is not allowed in PDF/A or PDF/X.");
+		}
+		if (pdfVersion.isPdfX() && params.outputIntent() != null) {
+			validatePdfXOutputIntent(params.outputIntent());
 		}
 		final var encryptionParams = params.encryption();
 		if (encryptionParams != null) {
@@ -400,8 +438,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		// PDF/X-4以降はICC-managed RGBを許す——RGBプロファイル未指定の
 		// PRESERVEには既定のsRGBプロファイルを補う(2026-08-18)。これが
 		// 無いとeffectiveColorMode()がCMYKへ倒れ、素朴なRGB→CMYK変換で
-		// 全体が暗くなるうえ、出力インテントも検証用のProbe CMYKスタブに
-		// なっていた(書籍の表紙で実測。X-1aは仕様上CMYKのままが正)
+		// 全体が暗くなる(書籍の表紙で実測。X-1aは仕様上CMYKのままが正)
 		if (resolvedParams.version() != null && resolvedParams.version().isPdfX()
 				&& resolvedParams.version() != PDFParams.Version.V_PDFX1A
 				&& resolvedParams.colorMode() == PDFParams.ColorMode.PRESERVE
@@ -587,6 +624,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 		// Objects
 		this.objectsFlow = this.mainFlow.forkFragment();
+		if (this.params.version().isPdfX()
+				&& this.params.effectiveColorMode() == PDFParams.ColorMode.PRESERVE) {
+			this.useGeneratedImageRGBProfile();
+		}
 		this.fonts = new FontFlow(this.nameToResourceRef, this.objectsFlow, this.xref);
 		this.images = new ImageFlow(this, this.nameToResourceRef, this.objectsFlow, this.xref, this.params);
 	}
@@ -733,6 +774,19 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		return bytes.clone();
 	}
 
+	/**
+	 * 出力インテントのCMYK ICC変換器を返します。
+	 *
+	 * @return このwriterが所有する変換器
+	 * @throws IOException 既定ICCプロファイルを読み込めない場合
+	 */
+	public ColorConverter colorConverter() throws IOException {
+		if (this.colorConverter == null) {
+			this.colorConverter = new ColorConverter(OutputIntentWriter.cmykProfile(this.params));
+		}
+		return this.colorConverter;
+	}
+
 	ObjectRef ensurePageResourceRef() {
 		if (this.pageResourceRef == null) {
 			this.pageResourceRef = this.xref.nextObjectRef();
@@ -749,7 +803,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 		final var resourceFlow = this.mainFlow.forkFragment();
 		resourceFlow.startObject(this.pageResourceRef);
-		this.pageResourceFlow = new ResourceFlow(resourceFlow, this::useResource);
+		this.pageResourceFlow = new ResourceFlow(resourceFlow, this::useResource,
+				this.defaultRGBProfileRef());
 		resourceFlow.endObject();
 	}
 
@@ -820,6 +875,28 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 	/** Shared bundled-sRGB stream referenced directly by generated image XObjects. */
 	private ObjectRef generatedImageRGBProfileRef = null;
+
+	/**
+	 * PDF/XでRGBを残す文書だけがResourcesに/DefaultRGBを置きます。通常PDFと
+	 * PDF/Aは従来どおり(生成画像のsRGBプロファイル参照があっても足さない)。
+	 */
+	private ObjectRef defaultRGBProfileRef() {
+		return this.params.version().isPdfX()
+				&& this.params.effectiveColorMode() == PDFParams.ColorMode.PRESERVE
+						? this.generatedImageRGBProfileRef
+						: null;
+	}
+
+	/**
+	 * PDF/XでRGBを残す文書の共有sRGBプロファイル参照を返します(それ以外は
+	 * {@code null})。文書を開いたときに作成済みなので、別オブジェクトの
+	 * 書き出し中(シェーディング辞書の途中など)でも安全に参照できます。
+	 *
+	 * @return {@code [/ICCBased ref]} に使う参照、または{@code null}
+	 */
+	public ObjectRef pdfXRGBProfileRef() {
+		return this.defaultRGBProfileRef();
+	}
 
 	@Override
 	public ObjectRef useGeneratedImageRGBProfile() throws IOException {
@@ -933,7 +1010,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 
 		objectsFlow.writeName("Resources");
-		final var newResourceFlow = new ResourceFlow(objectsFlow, this::useResource);
+		final var newResourceFlow = new ResourceFlow(objectsFlow, this::useResource,
+				this.defaultRGBProfileRef());
 		objectsFlow.lineBreak();
 
 		// Convert coordinate system from PDF default (bottom-left) to user default
@@ -1004,7 +1082,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		objectsFlow.lineBreak();
 
 		objectsFlow.writeName("Resources");
-		final var newResourceFlow = new ResourceFlow(objectsFlow, this::useResource);
+		final var newResourceFlow = new ResourceFlow(objectsFlow, this::useResource,
+				this.defaultRGBProfileRef());
 		objectsFlow.lineBreak();
 
 		objectsFlow.writeName("TilingType");
@@ -1177,12 +1256,20 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		flow.writeInt(4);
 		flow.lineBreak();
 		flow.writeName("ColorSpace");
-		flow.writeName(switch (effectiveType) {
-			case GRAY -> "DeviceGray";
-			case RGB -> "DeviceRGB";
-			case CMYK -> "DeviceCMYK";
-			default -> throw new IllegalStateException();
-		});
+		final var meshRGBProfileRef = effectiveType == Color.Type.RGB ? this.pdfXRGBProfileRef() : null;
+		if (meshRGBProfileRef != null) {
+			flow.startArray();
+			flow.writeName("ICCBased");
+			flow.writeObjectRef(meshRGBProfileRef);
+			flow.endArray();
+		} else {
+			flow.writeName(switch (effectiveType) {
+				case GRAY -> "DeviceGray";
+				case RGB -> "DeviceRGB";
+				case CMYK -> "DeviceCMYK";
+				default -> throw new IllegalStateException();
+			});
+		}
 		flow.lineBreak();
 		flow.writeName("BitsPerCoordinate");
 		flow.writeInt(32);
@@ -1220,8 +1307,14 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	/** Separation colorant names to their color space object references. */
 	private Map<String, ObjectRef> separationRefs = null;
 
+	/** Separation colorant names to the alternate used by their tint transform. */
+	private Map<String, Color> separationAlternates = null;
+
 	/** DeviceN colorant-set keys to color space resource names. */
 	private Map<String, String> deviceNNames = null;
+
+	/** DeviceN colorant-set keys to the alternates used by their tint transform. */
+	private Map<String, Color[]> deviceNAlternates = null;
 
 	/** ICCBased RGB color space resource name, or {@code null}. */
 	private String iccBasedRGBName = null;
@@ -1281,18 +1374,27 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	 * @param alternate the alternate color as given by the caller
 	 * @return the aligned alternate
 	 */
-	private net.zamasoft.pdfg2d.gc.paint.Color alignAlternate(final net.zamasoft.pdfg2d.gc.paint.Color alternate) {
+	private Color toCMYK(final Color color) throws IOException {
+		if (color.getColorType() == Color.Type.CMYK) {
+			return color;
+		}
+		final var cmyk = this.colorConverter().toCMYK(color.getRed(), color.getGreen(), color.getBlue());
+		return CMYKColor.create(cmyk[CMYKColor.C], cmyk[CMYKColor.M], cmyk[CMYKColor.Y], cmyk[CMYKColor.K]);
+	}
+
+	private Color alignAlternate(final Color alternate) throws IOException {
 		var alt = switch (this.params.effectiveColorMode()) {
 			case GRAY -> net.zamasoft.pdfg2d.util.ColorUtils.toGray(alternate);
-			case CMYK -> net.zamasoft.pdfg2d.util.ColorUtils.toCMYK(alternate);
+			case CMYK -> this.toCMYK(alternate);
 			default -> alternate;
 		};
-		if (this.params.version().isPdfA()) {
+		if (this.params.version().isPdfA() || this.params.version().isPdfX()) {
 			final var intent = this.params.outputIntent();
 			final var components = (intent != null) ? intent.colorComponents()
-					: (this.params.effectiveColorMode() == PDFParams.ColorMode.CMYK ? 4 : 3);
+					: (this.params.version().isPdfX()
+							|| this.params.effectiveColorMode() == PDFParams.ColorMode.CMYK ? 4 : 3);
 			alt = switch (components) {
-				case 4 -> net.zamasoft.pdfg2d.util.ColorUtils.toCMYK(alt);
+				case 4 -> this.toCMYK(alt);
 				case 1 -> net.zamasoft.pdfg2d.util.ColorUtils.toGray(alt);
 				default -> net.zamasoft.pdfg2d.gc.paint.RGBColor.create(alt.getRed(), alt.getGreen(),
 						alt.getBlue());
@@ -1301,18 +1403,59 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		return alt;
 	}
 
+	private static boolean sameAlternate(final Color first, final Color second) {
+		final var firstType = first.getColorType() == Color.Type.RGBA ? Color.Type.RGB : first.getColorType();
+		final var secondType = second.getColorType() == Color.Type.RGBA ? Color.Type.RGB : second.getColorType();
+		if (firstType != secondType) {
+			return false;
+		}
+		final var components = switch (firstType) {
+			case GRAY -> 1;
+			case CMYK -> 4;
+			default -> 3;
+		};
+		for (var i = 0; i < components; ++i) {
+			final float firstComponent;
+			final float secondComponent;
+			if (firstType == Color.Type.RGB) {
+				firstComponent = switch (i) {
+					case 0 -> first.getRed();
+					case 1 -> first.getGreen();
+					default -> first.getBlue();
+				};
+				secondComponent = switch (i) {
+					case 0 -> second.getRed();
+					case 1 -> second.getGreen();
+					default -> second.getBlue();
+				};
+			} else {
+				firstComponent = first.getComponent(i);
+				secondComponent = second.getComponent(i);
+			}
+			if (Float.floatToIntBits(firstComponent) != Float.floatToIntBits(secondComponent)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	@Override
 	public String useSeparation(final String colorantName, final net.zamasoft.pdfg2d.gc.paint.Color alternate)
 			throws IOException {
+		final var alt = this.alignAlternate(alternate);
 		if (this.separationNames == null) {
 			this.separationNames = new HashMap<>();
+			this.separationAlternates = new HashMap<>();
 		}
 		var name = this.separationNames.get(colorantName);
 		if (name != null) {
+			final var previous = this.separationAlternates.get(colorantName);
+			if (!sameAlternate(previous, alt)) {
+				throw new IllegalStateException("Separation '" + colorantName
+						+ "' has conflicting alternates: " + previous + " and " + alt);
+			}
 			return name;
 		}
-
-		final var alt = this.alignAlternate(alternate);
 
 		final String altSpace;
 		final float[] white;
@@ -1372,6 +1515,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		flow.endObject();
 
 		this.separationNames.put(colorantName, name);
+		this.separationAlternates.put(colorantName, alt);
 		if (this.separationRefs == null) {
 			this.separationRefs = new HashMap<>();
 		}
@@ -1386,14 +1530,6 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			keyBuilder.append(colorant.name()).append((char) 0);
 		}
 		final var key = keyBuilder.toString();
-		if (this.deviceNNames == null) {
-			this.deviceNNames = new HashMap<>();
-		}
-		var name = this.deviceNNames.get(key);
-		if (name != null) {
-			return name;
-		}
-
 		// Align each alternate with the process space, then bring all of them
 		// to one common space (CMYK when mixed) for the tint transform range.
 		final var alts = new net.zamasoft.pdfg2d.gc.paint.Color[colorants.length];
@@ -1404,8 +1540,26 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 		if (mixed) {
 			for (var i = 0; i < alts.length; ++i) {
-				alts[i] = net.zamasoft.pdfg2d.util.ColorUtils.toCMYK(alts[i]);
+				alts[i] = this.toCMYK(alts[i]);
 			}
+		}
+
+		if (this.deviceNNames == null) {
+			this.deviceNNames = new HashMap<>();
+			this.deviceNAlternates = new HashMap<>();
+		}
+		var name = this.deviceNNames.get(key);
+		if (name != null) {
+			final var previous = this.deviceNAlternates.get(key);
+			for (var i = 0; i < alts.length; ++i) {
+				if (!sameAlternate(previous[i], alts[i])) {
+					final var colorantNames = Arrays.stream(colorants).map(c -> c.name()).toList();
+					throw new IllegalStateException("DeviceN " + colorantNames
+							+ " has conflicting alternates: " + Arrays.toString(previous)
+							+ " and " + Arrays.toString(alts));
+				}
+			}
+			return name;
 		}
 
 		// The output channels of the tint transform. CMYK channels are ink
@@ -1533,6 +1687,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		sink.endObject();
 
 		this.deviceNNames.put(key, name);
+		this.deviceNAlternates.put(key, alts.clone());
 		return name;
 	}
 
@@ -1582,13 +1737,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		objectsFlow.endHash();
 		objectsFlow.lineBreak();
 		objectsFlow.writeName("Resources");
-		objectsFlow.startHash();
-		objectsFlow.writeName("Pattern");
-		objectsFlow.startHash();
-		objectsFlow.writeName(shadingPatternName);
-		objectsFlow.writeObjectRef(patternRef);
-		objectsFlow.endHash();
-		objectsFlow.endHash();
+		final var maskResources = new ResourceFlow(objectsFlow, this::useResource,
+				this.defaultRGBProfileRef());
+		maskResources.put("Pattern", shadingPatternName, patternRef);
+		maskResources.close();
 		objectsFlow.lineBreak();
 		try (final var out = objectsFlow.startStreamFromHash(PDFFragmentOutput.Mode.ASCII)) {
 			final var content = "/Pattern cs /" + shadingPatternName + " scn\n0 0 " + (float) width + " "
@@ -1838,7 +1990,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			if (this.xmpmetaFlow != null) {
 				XMPMetadataWriter.write(this.xmpmetaFlow, this.params.version(),
 						taggedParams != null ? taggedParams.pdfuaPart() : 0, author, creator, producer, title,
-						keywords, create, modify, info.getFacturX());
+						keywords, create, modify, info.getFacturX(), this.fileid[0]);
 			}
 			// Catalog - Page Info
 			this.pages.close();
@@ -2117,9 +2269,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			}
 		}
 		flow.endArray();
-		// PDF/A forbids the usage application dictionaries (/AS); without
-		// them the per-OCG /Usage states are informational only.
-		if (!this.params.version().isPdfA()) {
+		// PDF/A and PDF/X-4 (ISO 15930-7 6.24) forbid the usage application
+		// dictionaries (/AS); without them the per-OCG /Usage states are
+		// informational only.
+		if (!this.params.version().isPdfA() && !this.params.version().isPdfX()) {
 			this.writeOCUsageApplications(flow);
 		}
 		flow.endHash();

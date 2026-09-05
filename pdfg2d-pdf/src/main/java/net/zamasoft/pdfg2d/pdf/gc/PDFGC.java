@@ -37,6 +37,7 @@ import net.zamasoft.pdfg2d.pdf.PDFGraphicsOutput;
 import net.zamasoft.pdfg2d.pdf.PDFOutput;
 import net.zamasoft.pdfg2d.pdf.PDFWriter;
 import net.zamasoft.pdfg2d.pdf.font.PDFFontSource.Type;
+import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.g2d.gc.G2DGC;
 import net.zamasoft.pdfg2d.g2d.image.RasterImageImpl;
@@ -1637,7 +1638,7 @@ public class PDFGC implements GC, Closeable {
 	 */
 	protected void shadingFunction(final PDFOutput sout, final Color[] colors, final double[] fractions)
 			throws IOException {
-		PaintResources.writeShadingFunction(sout, this.getPdfWriter().getParams(), colors, fractions);
+		PaintResources.writeShadingFunction(sout, (PDFWriterImpl) this.getPdfWriter(), colors, fractions);
 	}
 
 	/**
@@ -1694,10 +1695,6 @@ public class PDFGC implements GC, Closeable {
 		if (this.strokePaint != null && !this.strokePaint.equals(this.xstrokePaint)) {
 			switch (this.strokePaint.getPaintType()) {
 				case COLOR -> {
-					if (this.xstrokePaint != null && this.xstrokePaint.getPaintType() != Paint.Type.COLOR) {
-						out.writeName("DeviceRGB");
-						out.writeOperator("CS");
-					}
 					out.writeStrokeColor((Color) this.strokePaint);
 				}
 				case PATTERN, LINEAR_GRADIENT, RADIAL_GRADIENT, CONIC_GRADIENT -> {
@@ -1717,10 +1714,6 @@ public class PDFGC implements GC, Closeable {
 		if (this.fillPaint != null && !this.fillPaint.equals(this.xfillPaint)) {
 			switch (this.fillPaint.getPaintType()) {
 				case COLOR -> {
-					if (this.xfillPaint != null && this.xfillPaint.getPaintType() != Paint.Type.COLOR) {
-						out.writeName("DeviceRGB");
-						out.writeOperator("cs");
-					}
 					out.writeFillColor((Color) this.fillPaint);
 				}
 				case PATTERN, LINEAR_GRADIENT, RADIAL_GRADIENT, CONIC_GRADIENT -> {

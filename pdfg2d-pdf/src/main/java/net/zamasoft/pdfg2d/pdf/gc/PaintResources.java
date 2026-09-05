@@ -18,7 +18,10 @@ import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.paint.Pattern;
 import net.zamasoft.pdfg2d.gc.paint.RadialGradient;
 import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
+import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFOutput;
+import net.zamasoft.pdfg2d.pdf.color.ColorConverter;
+import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.util.ColorUtils;
 
@@ -294,9 +297,13 @@ final class PaintResources {
 			return name;
 		}
 
-		final var colorType = shadingColorType(pout.getPdfWriter().getParams(), gradient.colors());
-		final var mesh = createConicMesh(gradient, at, pout.getWidth(), pout.getHeight(), colorType, false);
 		try {
+			final var colorType = shadingColorType(pout.getPdfWriter().getParams(), gradient.colors());
+			final var converter = colorType == Color.Type.CMYK
+					? ((PDFWriterImpl) pout.getPdfWriter()).colorConverter()
+					: null;
+			final var mesh = createConicMesh(gradient, at, pout.getWidth(), pout.getHeight(), colorType, false,
+					converter, allStopsNeutral(gradient.colors()));
 			name = pout.getPdfWriter().createType4ShadingPattern(pout.getHeight(), at, colorType,
 					mesh.decode(), mesh.vertexData());
 		} catch (IOException e) {
@@ -307,7 +314,8 @@ final class PaintResources {
 	}
 
 	private static ConicMesh createConicMesh(final ConicGradient gradient, final AffineTransform patternMatrix,
-			final double width, final double height, final Color.Type colorType, final boolean alphaOnly) {
+			final double width, final double height, final Color.Type colorType, final boolean alphaOnly,
+			final ColorConverter converter, final boolean neutralGradient) {
 		if (!Double.isFinite(gradient.cx()) || !Double.isFinite(gradient.cy())
 				|| !Double.isFinite(gradient.startAngle()) || !Double.isFinite(width) || !Double.isFinite(height)
 				|| !(width > 0) || !(height > 0)) {
@@ -371,22 +379,23 @@ final class PaintResources {
 		final var data = new ByteArrayOutputStream();
 		if (n == 1) {
 			writeConicSegment(data, gradient, decode, colorType, alphaOnly, radius,
-					0, 1, gradient.colors()[0], gradient.colors()[0]);
+					0, 1, gradient.colors()[0], gradient.colors()[0], converter, neutralGradient);
 		} else {
 			final double first = gradient.fractions()[0];
 			if (first > 0) {
 				writeConicSegment(data, gradient, decode, colorType, alphaOnly, radius,
-						0, first, gradient.colors()[0], gradient.colors()[0]);
+						0, first, gradient.colors()[0], gradient.colors()[0], converter, neutralGradient);
 			}
 			for (var i = 0; i < n - 1; ++i) {
 				writeConicSegment(data, gradient, decode, colorType, alphaOnly, radius,
 						gradient.fractions()[i], gradient.fractions()[i + 1],
-						gradient.colors()[i], gradient.colors()[i + 1]);
+						gradient.colors()[i], gradient.colors()[i + 1], converter, neutralGradient);
 			}
 			final double last = gradient.fractions()[n - 1];
 			if (last < 1) {
 				writeConicSegment(data, gradient, decode, colorType, alphaOnly, radius,
-						last, 1, gradient.colors()[n - 1], gradient.colors()[n - 1]);
+						last, 1, gradient.colors()[n - 1], gradient.colors()[n - 1], converter,
+						neutralGradient);
 			}
 		}
 		return new ConicMesh(decode, data.toByteArray());
@@ -394,7 +403,8 @@ final class PaintResources {
 
 	private static void writeConicSegment(final ByteArrayOutputStream out, final ConicGradient gradient,
 			final double[] decode, final Color.Type colorType, final boolean alphaOnly, final double outerRadius,
-			final double start, final double end, final Color startColor, final Color endColor) {
+			final double start, final double end, final Color startColor, final Color endColor,
+			final ColorConverter converter, final boolean neutralGradient) {
 		final double extent = end - start;
 		final int steps = extent == 0 ? 1 : Math.max(1, (int) Math.ceil(extent / MAX_CONIC_STEP));
 		for (var i = 0; i < steps; ++i) {
@@ -405,7 +415,7 @@ final class PaintResources {
 			final Color color0 = interpolate(startColor, endColor, ratio0);
 			final Color color1 = interpolate(startColor, endColor, ratio1);
 			writeConicSector(out, gradient, decode, colorType, alphaOnly, outerRadius,
-					fraction0, fraction1, color0, color1);
+					fraction0, fraction1, color0, color1, converter, neutralGradient);
 		}
 	}
 
@@ -423,7 +433,8 @@ final class PaintResources {
 
 	private static void writeConicSector(final ByteArrayOutputStream out, final ConicGradient gradient,
 			final double[] decode, final Color.Type colorType, final boolean alphaOnly, final double outerRadius,
-			final double fraction0, final double fraction1, final Color color0, final Color color1) {
+			final double fraction0, final double fraction1, final Color color0, final Color color1,
+			final ColorConverter converter, final boolean neutralGradient) {
 		final double angle0 = gradient.startAngle() + 2 * Math.PI * fraction0;
 		final double angle1 = gradient.startAngle() + 2 * Math.PI * fraction1;
 		final double ix0 = gradient.cx() + Math.sin(angle0) * CONIC_INNER_RADIUS;
@@ -435,16 +446,17 @@ final class PaintResources {
 		final double ox1 = gradient.cx() + Math.sin(angle1) * outerRadius;
 		final double oy1 = gradient.cy() - Math.cos(angle1) * outerRadius;
 
-		writeMeshVertex(out, decode, colorType, alphaOnly, ix0, iy0, color0);
-		writeMeshVertex(out, decode, colorType, alphaOnly, ox0, oy0, color0);
-		writeMeshVertex(out, decode, colorType, alphaOnly, ox1, oy1, color1);
-		writeMeshVertex(out, decode, colorType, alphaOnly, ix0, iy0, color0);
-		writeMeshVertex(out, decode, colorType, alphaOnly, ox1, oy1, color1);
-		writeMeshVertex(out, decode, colorType, alphaOnly, ix1, iy1, color1);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ix0, iy0, color0, converter, neutralGradient);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ox0, oy0, color0, converter, neutralGradient);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ox1, oy1, color1, converter, neutralGradient);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ix0, iy0, color0, converter, neutralGradient);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ox1, oy1, color1, converter, neutralGradient);
+		writeMeshVertex(out, decode, colorType, alphaOnly, ix1, iy1, color1, converter, neutralGradient);
 	}
 
 	private static void writeMeshVertex(final ByteArrayOutputStream out, final double[] decode,
-			final Color.Type colorType, final boolean alphaOnly, final double x, final double y, final Color color) {
+			final Color.Type colorType, final boolean alphaOnly, final double x, final double y, final Color color,
+			final ColorConverter converter, final boolean neutralGradient) {
 		out.write(0); // no edge reuse: every triangle contains three explicit vertices
 		writeUInt32(out, quantize32(x, decode[0], decode[1]));
 		writeUInt32(out, quantize32(y, decode[2], decode[3]));
@@ -461,11 +473,13 @@ final class PaintResources {
 				writeUInt16(out, quantize16(color.getBlue()));
 			}
 			case CMYK -> {
-				final var cmyk = ColorUtils.toCMYK(color);
-				writeUInt16(out, quantize16(cmyk.getComponent(CMYKColor.C)));
-				writeUInt16(out, quantize16(cmyk.getComponent(CMYKColor.M)));
-				writeUInt16(out, quantize16(cmyk.getComponent(CMYKColor.Y)));
-				writeUInt16(out, quantize16(cmyk.getComponent(CMYKColor.K)));
+				final var cmyk = neutralGradient
+						? new float[] { 0, 0, 0, 1 - color.getRed() }
+						: converter.toCMYKNoNeutralRule(color.getRed(), color.getGreen(), color.getBlue());
+				writeUInt16(out, quantize16(cmyk[CMYKColor.C]));
+				writeUInt16(out, quantize16(cmyk[CMYKColor.M]));
+				writeUInt16(out, quantize16(cmyk[CMYKColor.Y]));
+				writeUInt16(out, quantize16(cmyk[CMYKColor.K]));
 			}
 			default -> throw new GraphicsException("Unsupported conic mesh color type: " + colorType);
 		}
@@ -508,14 +522,33 @@ final class PaintResources {
 	 * </p>
 	 *
 	 * @param sout      the shading dictionary output
-	 * @param params    the PDF generation parameters (drives the color space)
+	 * @param writer    the writer (drives the color space, the CMYK converter and
+	 *                  the PDF/X sRGB profile for RGB shadings)
 	 * @param colors    the gradient stop colors
 	 * @param fractions the gradient stop offsets in [0,1]
 	 * @throws IOException if an I/O error occurs
 	 */
-	static void writeShadingFunction(final PDFOutput sout, final PDFParams params, final Color[] colors,
+	static void writeShadingFunction(final PDFOutput sout, final PDFWriterImpl writer, final Color[] colors,
 			final double[] fractions) throws IOException {
-		writeShadingFunction(sout, shadingColorType(params, colors), colors, fractions);
+		final var params = writer.getParams();
+		final var colorType = shadingColorType(params, colors);
+		writeShadingFunction(sout, colorType, colors, fractions,
+				colorType == Color.Type.CMYK ? writer.colorConverter() : null,
+				colorType == Color.Type.CMYK && allStopsNeutral(colors),
+				colorType == Color.Type.RGB ? writer.pdfXRGBProfileRef() : null);
+	}
+
+	private static boolean allStopsNeutral(final Color[] colors) {
+		if (colors.length == 0) {
+			return false;
+		}
+		for (final var color : colors) {
+			final var red = color.getRed();
+			if (red != color.getGreen() || red != color.getBlue()) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static Color.Type shadingColorType(final PDFParams params, final Color[] colors) {
@@ -544,14 +577,29 @@ final class PaintResources {
 	 */
 	static void writeShadingFunction(final PDFOutput sout, final Color.Type colorType, final Color[] colors,
 			final double[] fractions) throws IOException {
+		writeShadingFunction(sout, colorType, colors, fractions, null, false, null);
+	}
+
+	private static void writeShadingFunction(final PDFOutput sout, final Color.Type colorType,
+			final Color[] colors, final double[] fractions, final ColorConverter converter,
+			final boolean neutralGradient, final ObjectRef rgbProfileRef) throws IOException {
 		sout.writeName("ColorSpace");
-		final var colorSpaceName = switch (colorType) {
-			case GRAY -> "DeviceGray";
-			case RGB -> "DeviceRGB";
-			case CMYK -> "DeviceCMYK";
-			default -> throw new IllegalStateException("Unexpected color type: " + colorType);
-		};
-		sout.writeName(colorSpaceName);
+		if (colorType == Color.Type.RGB && rgbProfileRef != null) {
+			// PDF/X-4 (PRESERVE): RGB shadings are tagged with the shared sRGB
+			// profile directly rather than relying on /DefaultRGB (design D3)
+			sout.startArray();
+			sout.writeName("ICCBased");
+			sout.writeObjectRef(rgbProfileRef);
+			sout.endArray();
+		} else {
+			final var colorSpaceName = switch (colorType) {
+				case GRAY -> "DeviceGray";
+				case RGB -> "DeviceRGB";
+				case CMYK -> "DeviceCMYK";
+				default -> throw new IllegalStateException("Unexpected color type: " + colorType);
+			};
+			sout.writeName(colorSpaceName);
+		}
 		sout.lineBreak();
 
 		sout.writeName("Extend");
@@ -584,13 +632,13 @@ final class PaintResources {
 
 			sout.writeName("C0");
 			sout.startArray();
-			writeColor(sout, colorType, colors[0]);
+			writeColor(sout, colorType, colors[0], converter, neutralGradient);
 			sout.endArray();
 			sout.lineBreak();
 
 			sout.writeName("C1");
 			sout.startArray();
-			writeColor(sout, colorType, colors[1]);
+			writeColor(sout, colorType, colors[1], converter, neutralGradient);
 			sout.endArray();
 			sout.lineBreak();
 		} else {
@@ -680,13 +728,13 @@ final class PaintResources {
 
 				sout.writeName("C0");
 				sout.startArray();
-				writeColor(sout, colorType, c0);
+				writeColor(sout, colorType, c0, converter, neutralGradient);
 				sout.endArray();
 				sout.lineBreak();
 
 				sout.writeName("C1");
 				sout.startArray();
-				writeColor(sout, colorType, c1);
+				writeColor(sout, colorType, c1, converter, neutralGradient);
 				sout.endArray();
 				sout.lineBreak();
 				sout.endHash();
@@ -774,7 +822,8 @@ final class PaintResources {
 		final String shadingName;
 		try {
 			if (paint instanceof ConicGradient cg) {
-				final var mesh = createConicMesh(cg, at, pout.getWidth(), pout.getHeight(), Color.Type.GRAY, true);
+				final var mesh = createConicMesh(cg, at, pout.getWidth(), pout.getHeight(), Color.Type.GRAY, true,
+						null, false);
 				shadingName = pout.getPdfWriter().createType4ShadingPattern(pout.getHeight(), at, Color.Type.GRAY,
 						mesh.decode(), mesh.vertexData());
 			} else {
@@ -857,14 +906,6 @@ final class PaintResources {
 		return name;
 	}
 
-	/**
-	 * Writes color components converted to the target color space.
-	 *
-	 * @param sout      the output stream
-	 * @param colorType the target color space type
-	 * @param color     the color object
-	 * @throws IOException if an I/O error occurs
-	 */
 	/** Gradient stops: named-color stops contribute their alternate's type. */
 	private static Color.Type stopType(final Color color) {
 		return switch (color.getColorType()) {
@@ -874,16 +915,19 @@ final class PaintResources {
 		};
 	}
 
-	private static void writeColor(final PDFOutput sout, final Color.Type colorType, final Color color)
-			throws IOException {
+	/** Writes color components converted to the target color space. */
+	private static void writeColor(final PDFOutput sout, final Color.Type colorType, final Color color,
+			final ColorConverter converter, final boolean neutralGradient) throws IOException {
 		// Gradient interpolation happens in a process color space; spot and
 		// DeviceN stops are flattened to their tinted alternates.
 		if (color.getColorType() == Color.Type.SPOT) {
-			writeColor(sout, colorType, ((net.zamasoft.pdfg2d.gc.paint.SpotColor) color).effectiveColor());
+			writeColor(sout, colorType, ((net.zamasoft.pdfg2d.gc.paint.SpotColor) color).effectiveColor(),
+					converter, neutralGradient);
 			return;
 		}
 		if (color.getColorType() == Color.Type.DEVICEN) {
-			writeColor(sout, colorType, ((net.zamasoft.pdfg2d.gc.paint.DeviceNColor) color).effectiveColor());
+			writeColor(sout, colorType, ((net.zamasoft.pdfg2d.gc.paint.DeviceNColor) color).effectiveColor(),
+					converter, neutralGradient);
 			return;
 		}
 		switch (colorType) {
@@ -900,11 +944,20 @@ final class PaintResources {
 				sout.writeReal(color.getBlue());
 			}
 			case CMYK -> {
-				final var cmyk = ColorUtils.toCMYK(color);
-				sout.writeReal(cmyk.getComponent(CMYKColor.C));
-				sout.writeReal(cmyk.getComponent(CMYKColor.M));
-				sout.writeReal(cmyk.getComponent(CMYKColor.Y));
-				sout.writeReal(cmyk.getComponent(CMYKColor.K));
+				if (color.getColorType() == Color.Type.CMYK && !neutralGradient) {
+					sout.writeReal(color.getComponent(CMYKColor.C));
+					sout.writeReal(color.getComponent(CMYKColor.M));
+					sout.writeReal(color.getComponent(CMYKColor.Y));
+					sout.writeReal(color.getComponent(CMYKColor.K));
+				} else {
+					final var cmyk = neutralGradient
+							? new float[] { 0, 0, 0, 1 - color.getRed() }
+							: converter.toCMYKNoNeutralRule(color.getRed(), color.getGreen(), color.getBlue());
+					sout.writeReal(cmyk[CMYKColor.C]);
+					sout.writeReal(cmyk[CMYKColor.M]);
+					sout.writeReal(cmyk[CMYKColor.Y]);
+					sout.writeReal(cmyk[CMYKColor.K]);
+				}
 			}
 			default -> throw new IllegalStateException("Unexpected color type: " + colorType);
 		}

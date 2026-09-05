@@ -1,7 +1,12 @@
 package net.zamasoft.pdfg2d.pdf.impl;
 
 import net.zamasoft.pdfg2d.util.ImageInputStreamProxy;
+import java.awt.Transparency;
+import java.awt.color.ColorSpace;
+import java.awt.image.ComponentColorModel;
+import java.awt.image.DataBuffer;
 import java.awt.geom.AffineTransform;
+import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorModel;
 import java.awt.image.IndexColorModel;
@@ -43,7 +48,6 @@ import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.image.util.TransformedImage;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.PDFFragmentOutput;
-import net.zamasoft.pdfg2d.pdf.PDFWriter;
 import net.zamasoft.pdfg2d.pdf.gc.PDFImage;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.pdf.util.codec.ASCII85OutputStream;
@@ -66,7 +70,7 @@ class ImageFlow {
 
 	private final Logger LOG = Logger.getLogger(ImageFlow.class.getName());
 
-	private final PDFWriter pdfWriter;
+	private final PDFWriterImpl pdfWriter;
 
 	private final Map<String, ObjectRef> nameToResourceRef;
 
@@ -154,6 +158,125 @@ class ImageFlow {
 	}
 
 	/**
+	 * Returns the Adobe APP14 color transform, or {@code -1} when no Adobe APP14
+	 * marker is present. The stream position is restored before returning.
+	 */
+	private static int adobeApp14Transform(final ImageInputStream in) throws IOException {
+		final long originalPosition = in.getStreamPosition();
+		try {
+			in.seek(0);
+			if (in.readUnsignedShort() != 0xFFD8) {
+				return -1;
+			}
+			for (;;) {
+				int prefix;
+				do {
+					prefix = in.read();
+					if (prefix == -1) {
+						return -1;
+					}
+				} while (prefix != 0xFF);
+
+				int marker;
+				do {
+					marker = in.read();
+					if (marker == -1) {
+						return -1;
+					}
+				} while (marker == 0xFF);
+
+				if (marker == 0xD9 || marker == 0xDA) {
+					return -1;
+				}
+				if (marker == 0x01 || marker == 0xD8 || (marker >= 0xD0 && marker <= 0xD7)) {
+					continue;
+				}
+
+				final int length = in.readUnsignedShort();
+				if (length < 2) {
+					return -1;
+				}
+				if (marker == 0xEE && length >= 14) {
+					final byte[] identifier = new byte[5];
+					in.readFully(identifier);
+					if (identifier[0] == 'A' && identifier[1] == 'd' && identifier[2] == 'o'
+							&& identifier[3] == 'b' && identifier[4] == 'e') {
+						in.skipBytes(6);
+						return in.readUnsignedByte();
+					}
+				}
+				in.seek(in.getStreamPosition() + length - 2L
+						- (marker == 0xEE && length >= 14 ? 5L : 0L));
+			}
+		} finally {
+			in.seek(originalPosition);
+		}
+	}
+
+	private static int imageColorComponents(final ImageReader reader) throws IOException {
+		var type = reader.getRawImageType(0);
+		if (type == null) {
+			final var types = reader.getImageTypes(0);
+			if (types != null && types.hasNext()) {
+				type = types.next();
+			}
+		}
+		return type == null ? -1 : type.getColorModel().getNumColorComponents();
+	}
+
+	/**
+	 * Scales an image sample-wise (bilinear on the raster) without any color
+	 * conversion, so CMYK plates stay separated.
+	 */
+	private static BufferedImage scaleComponents(final BufferedImage source, final int width, final int height) {
+		final var cm = source.getColorModel();
+		final var target = new BufferedImage(cm, cm.createCompatibleWritableRaster(width, height),
+				cm.isAlphaPremultiplied(), null);
+		final var op = new AffineTransformOp(AffineTransform.getScaleInstance((double) width / source.getWidth(),
+				(double) height / source.getHeight()), AffineTransformOp.TYPE_BILINEAR);
+		op.filter(source.getRaster(), target.getRaster());
+		source.flush();
+		return target;
+	}
+
+	/**
+	 * Converts an image to 1-component gray (gray+alpha when the source has
+	 * alpha) using the same luminance as {@link ColorUtils#toGray}. Samples are
+	 * written raw, so no gamma conversion of {@code CS_GRAY} is involved.
+	 */
+	private static BufferedImage toGrayImage(final BufferedImage source) {
+		final var width = source.getWidth();
+		final var height = source.getHeight();
+		final var cm = source.getColorModel();
+		final var hasAlpha = cm.hasAlpha();
+		final BufferedImage gray;
+		if (hasAlpha) {
+			final var grayModel = new ComponentColorModel(ColorSpace.getInstance(ColorSpace.CS_GRAY), true, false,
+					Transparency.TRANSLUCENT, DataBuffer.TYPE_BYTE);
+			gray = new BufferedImage(grayModel, grayModel.createCompatibleWritableRaster(width, height), false, null);
+		} else {
+			gray = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+		}
+		final var raster = source.getRaster();
+		final var out = gray.getRaster();
+		final var pixel = raster.getDataElements(0, 0, null);
+		final var sample = new int[hasAlpha ? 2 : 1];
+		for (var y = 0; y < height; ++y) {
+			for (var x = 0; x < width; ++x) {
+				raster.getDataElements(x, y, pixel);
+				final var gr = ColorUtils.toGray(cm.getRed(pixel) / 255f, cm.getGreen(pixel) / 255f,
+						cm.getBlue(pixel) / 255f);
+				sample[0] = (int) (gr * 255f);
+				if (hasAlpha) {
+					sample[1] = cm.getAlpha(pixel);
+				}
+				out.setPixel(x, y, sample);
+			}
+		}
+		return gray;
+	}
+
+	/**
 	 * Constructs a new ImageFlow.
 	 *
 	 * @param pdfWriter         the owning writer, used for shared document resources
@@ -167,7 +290,7 @@ class ImageFlow {
 	 *                          mode, version, etc.)
 	 * @throws IOException if an I/O error occurs during initialization
 	 */
-	public ImageFlow(final PDFWriter pdfWriter, final Map<String, ObjectRef> nameToResourceRef,
+	public ImageFlow(final PDFWriterImpl pdfWriter, final Map<String, ObjectRef> nameToResourceRef,
 			final PDFFragmentOutputImpl objectsFlow,
 			final XRefImpl xref, final PDFParams params) throws IOException {
 		this.pdfWriter = pdfWriter;
@@ -364,29 +487,50 @@ class ImageFlow {
 			final boolean softMaskSupport = pdfVersion.allowsTransparency();
 			final boolean jpeg2000Support = pdfVersion.v >= PDFParams.Version.V_1_5.v;
 			PDFParams.ImageCompression imageType = PDFParams.ImageCompression.FLATE;
+			String sourceFormatName = null;
 
-			if (ir != null && colorMode == PDFParams.ColorMode.PRESERVE) {
-				final String formatName = ir.getFormatName();
+			if (ir != null) {
+				sourceFormatName = ir.getFormatName();
+			}
+			if (sourceFormatName != null && colorMode == PDFParams.ColorMode.PRESERVE) {
 				if (this.params.jpegImage() == PDFParams.JPEGImage.RAW) {
 					// Detection of original image format
-					if (formatName.equalsIgnoreCase("jpeg")) {
+					if (sourceFormatName.equalsIgnoreCase("jpeg")) {
 						imageType = PDFParams.ImageCompression.JPEG;
 					} else if (jpeg2000Support) {
-						if (formatName.equalsIgnoreCase("jpeg 2000")) {
+						if (sourceFormatName.equalsIgnoreCase("jpeg 2000")) {
 							imageType = PDFParams.ImageCompression.JPEG2000;
 						}
 					}
-				} else if (imageCompression == PDFParams.ImageCompression.JPEG && formatName.equalsIgnoreCase("jpeg")) {
+				} else if (imageCompression == PDFParams.ImageCompression.JPEG
+						&& sourceFormatName.equalsIgnoreCase("jpeg")) {
 					imageType = PDFParams.ImageCompression.JPEG;
 				} else if (imageCompression == PDFParams.ImageCompression.JPEG2000) {
-					if (formatName.equalsIgnoreCase("jpeg 2000")) {
+					if (sourceFormatName.equalsIgnoreCase("jpeg 2000")) {
 						imageType = PDFParams.ImageCompression.JPEG2000;
 					}
 				}
 			}
-			final int sourceJpegComponents = imageType == PDFParams.ImageCompression.JPEG
+			final int sourceJpegComponents = sourceFormatName != null
+					&& sourceFormatName.equalsIgnoreCase("jpeg")
 					? jpegComponentCount(imageIn)
 					: -1;
+			final int sourceColorComponents = sourceJpegComponents >= 0 ? sourceJpegComponents
+					: (ir == null ? -1 : imageColorComponents(ir));
+			final int adobeTransform = sourceJpegComponents == 4 ? adobeApp14Transform(imageIn) : -1;
+			boolean forceFlate = false;
+			if (colorMode == PDFParams.ColorMode.CMYK && sourceJpegComponents == 4
+					&& this.params.jpegImage() == PDFParams.JPEGImage.RAW) {
+				// CMYK is already in the document process space; preserve the JPEG bytes.
+				imageType = PDFParams.ImageCompression.JPEG;
+			}
+			if ((imageType == PDFParams.ImageCompression.JPEG && adobeTransform == 2)
+					|| (imageType == PDFParams.ImageCompression.JPEG2000 && sourceColorComponents == 4)) {
+				// YCCK needs ImageIO's conversion to CMYK. Four-component JPX is decoded
+				// as well because its color interpretation cannot be checked safely here.
+				imageType = PDFParams.ImageCompression.FLATE;
+				forceFlate = true;
+			}
 
 			boolean iccErrorHuck = false;
 			boolean iccGray = false;
@@ -458,62 +602,79 @@ class ImageFlow {
 				}
 				if (resize) {
 					final var type = image.getType();
+					final var resizedColorModel = image.getColorModel();
 					if (maxWidth > 0 && width > maxWidth)
 						width = maxWidth;
 					if (maxHeight > 0 && height > maxHeight)
 						height = maxHeight;
 
-					final var scaled = image.getScaledInstance(width, height, java.awt.Image.SCALE_SMOOTH);
-					try {
-						image.flush();
-						image = switch (type) {
-							case BufferedImage.TYPE_BYTE_BINARY, BufferedImage.TYPE_BYTE_INDEXED ->
-								new BufferedImage(width, height, type, (IndexColorModel) image.getColorModel());
-							case BufferedImage.TYPE_3BYTE_BGR, BufferedImage.TYPE_4BYTE_ABGR,
-									BufferedImage.TYPE_4BYTE_ABGR_PRE, BufferedImage.TYPE_INT_ARGB,
-									BufferedImage.TYPE_INT_ARGB_PRE, BufferedImage.TYPE_INT_BGR,
-									BufferedImage.TYPE_INT_RGB, BufferedImage.TYPE_USHORT_555_RGB,
-									BufferedImage.TYPE_USHORT_565_RGB, BufferedImage.TYPE_BYTE_GRAY,
-									BufferedImage.TYPE_USHORT_GRAY ->
-								new BufferedImage(width, height, type);
-							default ->
-								new BufferedImage(width, height,
-										image.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB
-												: BufferedImage.TYPE_INT_RGB);
-						};
-						final var g2d = image.createGraphics();
-						g2d.drawImage(scaled, 0, 0, null);
-						g2d.dispose();
-					} finally {
-						scaled.flush();
+					if (resizedColorModel.getNumColorComponents() == 4) {
+						// CMYK は RGB を経由せず成分ごとに補間する。getScaledInstance は
+						// RGB 往復で版構成を変える(灰 K 単色が 4 色になる。codex レビュー 2026-09-05)
+						image = scaleComponents(image, width, height);
+					} else {
+						final var scaled = image.getScaledInstance(width, height, java.awt.Image.SCALE_SMOOTH);
+						try {
+							image.flush();
+							image = switch (type) {
+								case BufferedImage.TYPE_BYTE_BINARY, BufferedImage.TYPE_BYTE_INDEXED ->
+									new BufferedImage(width, height, type, (IndexColorModel) resizedColorModel);
+								case BufferedImage.TYPE_3BYTE_BGR, BufferedImage.TYPE_4BYTE_ABGR,
+										BufferedImage.TYPE_4BYTE_ABGR_PRE, BufferedImage.TYPE_INT_ARGB,
+										BufferedImage.TYPE_INT_ARGB_PRE, BufferedImage.TYPE_INT_BGR,
+										BufferedImage.TYPE_INT_RGB, BufferedImage.TYPE_USHORT_555_RGB,
+										BufferedImage.TYPE_USHORT_565_RGB, BufferedImage.TYPE_BYTE_GRAY,
+										BufferedImage.TYPE_USHORT_GRAY ->
+									new BufferedImage(width, height, type);
+								default -> new BufferedImage(resizedColorModel,
+										resizedColorModel.createCompatibleWritableRaster(width, height),
+										resizedColorModel.isAlphaPremultiplied(), null);
+							};
+							final var g2d = image.createGraphics();
+							g2d.drawImage(scaled, 0, 0, null);
+							g2d.dispose();
+						} finally {
+							scaled.flush();
+						}
 					}
 					imageType = PDFParams.ImageCompression.FLATE;
 				}
 
-				// Apply grayscale filter if requested
-				if (colorMode == PDFParams.ColorMode.GRAY && image.getType() != BufferedImage.TYPE_BYTE_GRAY
-						&& image.getType() != BufferedImage.TYPE_USHORT_GRAY) {
-					final var raster = image.getRaster();
-					final var cm = image.getColorModel();
-					final var pixel = raster.getDataElements(0, 0, null);
-					for (var y = 0; y < height; ++y) {
-						for (var x = 0; x < width; ++x) {
-							raster.getDataElements(x, y, pixel);
-							final var r = cm.getRed(pixel) / 255.0f;
-							final var g = cm.getGreen(pixel) / 255.0f;
-							final var b = cm.getBlue(pixel) / 255.0f;
-							final var gr = ColorUtils.toGray(r, g, b);
-							final var octet = (int) (gr * 255.0f);
-							image.setRGB(x, y, (cm.getAlpha(pixel) << 24) | (octet << 16) | (octet << 8) | octet);
-						}
-					}
+				// Apply grayscale filter if requested. The result is a 1-component
+				// image so the XObject becomes /DeviceGray; graying the samples of
+				// an RGB image in place left /DeviceRGB behind (a PDF/X violation)
+				// and re-quantized indexed images to their colored palette
+				if (colorMode == PDFParams.ColorMode.GRAY && image.getColorModel().getNumColorComponents() != 1) {
+					final var converted = toGrayImage(image);
+					image.flush();
+					image = converted;
+				}
+
+				final var colorComponents = image.getColorModel().getNumColorComponents();
+				if (colorMode == PDFParams.ColorMode.CMYK && colorComponents == 3) {
+					final var converted = this.pdfWriter.colorConverter().toCMYKImage(image);
+					image.flush();
+					image = converted;
+					imageType = PDFParams.ImageCompression.FLATE;
+					forceFlate = true;
+				} else if (colorMode == PDFParams.ColorMode.CMYK && colorComponents == 4) {
+					imageType = PDFParams.ImageCompression.FLATE;
+					forceFlate = true;
 				}
 			}
-			final ObjectRef generatedRGBProfileRef = generated
-					&& pdfVersion.v >= PDFParams.Version.V_1_3.v
-					&& image.getColorModel().getNumComponents() != 1
-							? this.pdfWriter.useGeneratedImageRGBProfile()
-							: null;
+			final boolean pdfXPreservesRGB = pdfVersion.isPdfX()
+					&& colorMode == PDFParams.ColorMode.PRESERVE;
+			final int outputColorComponents = image == null ? sourceColorComponents
+					: image.getColorModel().getNumColorComponents();
+			ObjectRef imageRGBProfileRef = null;
+			if (outputColorComponents == 3 && (pdfXPreservesRGB
+					|| (generated && pdfVersion.v >= PDFParams.Version.V_1_3.v))) {
+				// 再圧縮経路はColorModelのgetRed/Green/Blue()でsRGBへ変換した値を
+				// 書くので、タグも常に共有のsRGBにする。入力画像固有のICCを
+				// 埋めると画素とタグが食い違い、表示時に二重変換される
+				// (codexレビュー2026-09-05)。素通しJPEGのAPP2も転記しない(D3の非目標)
+				imageRGBProfileRef = this.pdfWriter.useGeneratedImageRGBProfile();
+			}
 			pdfImage = new PDFImage(name, orgWidth, orgHeight);
 			try {
 				final var imageRef = this.xref.nextObjectRef();
@@ -550,17 +711,17 @@ class ImageFlow {
 						this.objectsFlow.breakBefore();
 
 						final short deviceColor;
-						if (sourceJpegComponents == 1 || (iccErrorHuck && iccGray)) {
+						if (sourceColorComponents == 1 || (iccErrorHuck && iccGray)) {
 							deviceColor = DEVICE_GRAY;
-						} else if (sourceJpegComponents == 4) {
+						} else if (sourceColorComponents == 4) {
 							deviceColor = DEVICE_CMYK;
-						} else if (sourceJpegComponents == 3) {
+						} else if (sourceColorComponents == 3) {
 							deviceColor = DEVICE_RGB;
 						} else {
 							final Iterator<?> itr = ir.getImageTypes(0);
 							final ImageTypeSpecifier its = (ImageTypeSpecifier) itr.next();
 							final ColorModel cm = its.getColorModel();
-							switch (cm.getNumComponents()) {
+							switch (cm.getNumColorComponents()) {
 								case 1:
 									deviceColor = DEVICE_GRAY;
 									break;
@@ -582,12 +743,20 @@ class ImageFlow {
 								this.objectsFlow.writeName("DeviceCMYK");
 								break;
 							default:
-								this.objectsFlow.writeName("DeviceRGB");
+								if (imageRGBProfileRef != null) {
+									this.objectsFlow.startArray();
+									this.objectsFlow.writeName("ICCBased");
+									this.objectsFlow.writeObjectRef(imageRGBProfileRef);
+									this.objectsFlow.endArray();
+								} else {
+									this.objectsFlow.writeName("DeviceRGB");
+								}
 								break;
 						}
 						this.objectsFlow.breakBefore();
 
-						if (deviceColor == DEVICE_CMYK) {
+						if (deviceColor == DEVICE_CMYK && imageType == PDFParams.ImageCompression.JPEG
+								&& adobeTransform == 0) {
 							this.objectsFlow.writeName("Decode");
 							this.objectsFlow.startArray();
 							this.objectsFlow.writeInt(1);
@@ -657,8 +826,15 @@ class ImageFlow {
 					try {
 						cm = image.getColorModel();
 
-						if (!generated && (width + height) > this.params.imageCompressionLossless()) {
+						if (!forceFlate && !generated
+								&& (width + height) > this.params.imageCompressionLossless()) {
 							imageType = imageCompression;
+						}
+						if (imageType != PDFParams.ImageCompression.FLATE && cm.hasAlpha()
+								&& cm.getNumColorComponents() == 4) {
+							// The alpha-stripped copy handed to the encoder is gray or RGB;
+							// a /DeviceCMYK dictionary would not match a 3-channel JPEG
+							imageType = PDFParams.ImageCompression.FLATE;
 						}
 						ImageWriter iw;
 						ImageWriteParam iwParams;
@@ -705,14 +881,17 @@ class ImageFlow {
 						this.objectsFlow.writeInt(8);
 						this.objectsFlow.breakBefore();
 
-						final boolean deviceGray = (cm.getNumComponents() == 1);
+						final boolean deviceGray = cm.getNumColorComponents() == 1;
+						final boolean deviceCMYK = cm.getNumColorComponents() == 4;
 						this.objectsFlow.writeName("ColorSpace");
 						if (deviceGray) {
 							this.objectsFlow.writeName("DeviceGray");
-						} else if (generatedRGBProfileRef != null) {
+						} else if (deviceCMYK) {
+							this.objectsFlow.writeName("DeviceCMYK");
+						} else if (imageRGBProfileRef != null) {
 							this.objectsFlow.startArray();
 							this.objectsFlow.writeName("ICCBased");
-							this.objectsFlow.writeObjectRef(generatedRGBProfileRef);
+							this.objectsFlow.writeObjectRef(imageRGBProfileRef);
 							this.objectsFlow.endArray();
 						} else {
 							this.objectsFlow.writeName("DeviceRGB");
@@ -773,7 +952,9 @@ class ImageFlow {
 							case JPEG, JPEG2000 -> {
 								var ximage = image;
 								if (cm.hasAlpha()) {
-									ximage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+									ximage = new BufferedImage(width, height,
+											cm.getNumColorComponents() == 1 ? BufferedImage.TYPE_BYTE_GRAY
+													: BufferedImage.TYPE_INT_RGB);
 									final var g = ximage.createGraphics();
 									g.drawImage(image, 0, 0, null);
 									g.dispose();
@@ -817,9 +998,26 @@ class ImageFlow {
 								final var fastOut = new FastBufferedOutputStream(out, this.objectsFlow.getBuffer());
 								final var pixel = raster.getDataElements(0, 0, null);
 								if (deviceGray) {
+									// getGreen() would map CS_GRAY through the linear->sRGB
+									// LUT (128 -> 188, measured JDK 21); write the raw sample
+									final var components = new float[cm.getNumComponents()];
 									for (var y = 0; y < height; ++y) {
 										for (var x = 0; x < width; ++x) {
-											fastOut.write(cm.getGreen(raster.getDataElements(x, y, pixel)));
+											raster.getDataElements(x, y, pixel);
+											cm.getNormalizedComponents(pixel, components, 0);
+											fastOut.write(Math.round(components[0] * 255));
+										}
+									}
+								} else if (deviceCMYK) {
+									final var components = new float[cm.getNumComponents()];
+									for (var y = 0; y < height; ++y) {
+										for (var x = 0; x < width; ++x) {
+											raster.getDataElements(x, y, pixel);
+											cm.getNormalizedComponents(pixel, components, 0);
+											fastOut.write(Math.round(components[0] * 255));
+											fastOut.write(Math.round(components[1] * 255));
+											fastOut.write(Math.round(components[2] * 255));
+											fastOut.write(Math.round(components[3] * 255));
 										}
 									}
 								} else {
