@@ -7,7 +7,6 @@ import java.util.logging.Logger;
 
 import net.zamasoft.pdfg2d.font.DrawableFont;
 import net.zamasoft.pdfg2d.font.FontMetricsImpl;
-import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.ImageFont;
 import net.zamasoft.pdfg2d.font.ShapedFont;
 import net.zamasoft.pdfg2d.gc.GC;
@@ -179,8 +178,6 @@ final class PDFTextRenderer {
 			}
 
 			final var direction = fontStyle.getDirection();
-			AffineTransform rotate = null;
-			double center = 0;
 			boolean verticalFont = false;
 			switch (direction) {
 				case LTR, RTL -> {
@@ -199,12 +196,11 @@ final class PDFTextRenderer {
 							gc.q();
 							localContext = true;
 						}
-						rotate = AffineTransform.getRotateInstance(Math.PI / 2, drawX, drawY);
+						final var rotate = AffineTransform.getTranslateInstance(drawX, drawY);
+						rotate.concatenate(FontUtils.createSidewaysTransform(source, size));
+						rotate.translate(-drawX, -drawY);
 						gc.out.writeTransform(rotate);
 						gc.out.writeOperator("cm");
-						final var bbox = source.getBBox();
-						center = ((bbox.lly() + bbox.ury()) * size / FontSource.DEFAULT_UNITS_PER_EM) / 2.0;
-						drawY += center;
 					}
 				}
 				default -> throw new IllegalStateException("Unexpected direction: " + direction);

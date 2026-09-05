@@ -83,6 +83,22 @@ public final class FontUtils {
 	}
 
 	/**
+	 * 縦組みで横書きフォントを横倒しにする変換を作成します。
+	 * 90度回転後の字面が行の中央に来るよう、フォントのBBox中央で補正します。
+	 *
+	 * @param source   フォントソース
+	 * @param fontSize フォントサイズ
+	 * @return 横倒し用の変換
+	 */
+	public static AffineTransform createSidewaysTransform(final FontSource source, final double fontSize) {
+		final var transform = AffineTransform.getRotateInstance(Math.PI / 2.0);
+		final var bbox = source.getBBox();
+		final var dy = ((bbox.lly() + bbox.ury()) * fontSize / FontSource.DEFAULT_UNITS_PER_EM) / 2.0;
+		transform.translate(0, dy);
+		return transform;
+	}
+
+	/**
 	 * Adds text to the path. Emoji characters are excluded.
 	 * 
 	 * @param path      the path to add content to
@@ -105,6 +121,8 @@ public final class FontUtils {
 		final var at = AffineTransform.getScaleInstance(s, s);
 
 		final var verticalFont = direction == Direction.TB && font.getFontSource().getDirection() == direction;
+		final var sideways = direction == Direction.TB && !verticalFont
+				? createSidewaysTransform(font.getFontSource(), fontSize) : null;
 		AffineTransform oblique = null;
 		final var style = fontStyle.getStyle();
 		if (style != Style.NORMAL && !font.getFontSource().isItalic() && fontStyle.getSynthesisStyle()) {
@@ -149,7 +167,7 @@ public final class FontUtils {
 				}
 			}
 		} else {
-			// Horizontal writing
+			// 横書き。縦組みではローカルX方向のペン送りを回転してY方向へ向ける。
 			int pgid = 0;
 			for (int i = 0; i < glyphCount; ++i) {
 				final int gid = glyphIds[i];
@@ -166,6 +184,9 @@ public final class FontUtils {
 					at.preConcatenate(AffineTransform.getTranslateInstance(dx, 0));
 				}
 				final var at2 = new AffineTransform(transform);
+				if (sideways != null) {
+					at2.concatenate(sideways);
+				}
 				var shape = ((ShapedFont) font).getShapeByGID(gid);
 				if (shape != null) {
 					// 字面の視覚シフト(palt xPlacement——増分⑤): ペン(at)は
@@ -305,11 +326,8 @@ public final class FontUtils {
 				}
 			} else {
 				if (direction == Direction.TB) {
-					// Rotated horizontal
-					gc.transform(AffineTransform.getRotateInstance(Math.PI / 2.0));
-					final var bbox = font.getFontSource().getBBox();
-					final var dy = ((bbox.lly() + bbox.ury()) * fontSize / FontSource.DEFAULT_UNITS_PER_EM) / 2.0;
-					gc.transform(AffineTransform.getTranslateInstance(0, dy));
+					// 横書きフォントを縦組みの行へ横倒しにする
+					gc.transform(createSidewaysTransform(font.getFontSource(), fontSize));
 				}
 				// Horizontal writing
 				int pgid = 0;

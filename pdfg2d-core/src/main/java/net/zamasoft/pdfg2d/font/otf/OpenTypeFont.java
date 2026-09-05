@@ -175,26 +175,39 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	}
 
 	/**
-	 * 必須縦字形を適用し、フォントがEM DASH(U+2014)の縦字形を持たない
-	 * 場合だけHORIZONTAL BAR(U+2015)の縦字形を代用します。
+	 * 必須縦字形を適用し、横線の縦字形を持たないフォントでは対応する
+	 * 縦線の字形を代用します。
 	 *
-	 * <p>Unicode Vertical_Orientationで両方とも縦組み時に回転対象ですが、
-	 * 日本語フォントの一部はU+2015だけをvert/vrt2へ収録しています。
-	 * PDFのCIDテキストは輪郭へ後処理の回転を掛けられないため、subset登録前の
-	 * グリフ選択で補完します。ToUnicodeには元のU+2014を保持します。</p>
+	 * <p>EM DASH(U+2014)はHORIZONTAL BAR(U+2015)の縦字形を、BOX DRAWINGS
+	 * LIGHT HORIZONTAL(U+2500)はLIGHT VERTICAL(U+2502)の横組み字形(縦線)を使います。
+	 * U+2502も無い場合は{@link #verticalShapeFlags(int, int)}で元の横線を
+	 * 回転します。ToUnicodeには代用前の文字を保持します。</p>
 	 */
 	protected final int substituteVertical(final int codePoint, final int gid) {
 		final int vertical = this.substituteVertical(gid);
-		if (!this.isVertical() || codePoint != 0x2014 || vertical != gid) {
+		if (!this.isVertical() || vertical != gid) {
+			return vertical;
+		}
+		final int fallbackCodePoint = switch (codePoint) {
+			case 0x2014 -> 0x2015;
+			case 0x2500 -> 0x2502;
+			default -> 0;
+		};
+		if (fallbackCodePoint == 0) {
 			return vertical;
 		}
 		final var source = (OpenTypeFontSource) this.getFontSource();
-		final int bar = source.getCmapFormat().mapCharCode(0x2015);
-		if (bar == 0) {
+		final int fallbackGid = source.getCmapFormat().mapCharCode(fallbackCodePoint);
+		if (fallbackGid == 0) {
 			return vertical;
 		}
-		final int verticalBar = this.substituteVertical(bar);
-		return verticalBar != bar ? verticalBar : vertical;
+		if (codePoint == 0x2500) {
+			// U+2502の横組み字形は縦線なので、縦組みではそのまま縦罫線になる。
+			// U+2502の縦字形(vert)はフォントが横棒へ回したものなので使わない。
+			return fallbackGid;
+		}
+		final int verticalFallbackGid = this.substituteVertical(fallbackGid);
+		return verticalFallbackGid != fallbackGid ? verticalFallbackGid : vertical;
 	}
 
 	/**
@@ -215,7 +228,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	 * @return the (possibly modified) glyph outline
 	 */
 	protected final Shape adjustShape(Shape shape, final int gid) {
-		return this.adjustShape(shape, gid, this.verticalShapeFlags(this.toChar(gid)));
+		return this.adjustShape(shape, gid, this.verticalShapeFlags(this.toChar(gid), gid));
 	}
 
 	/** Bit flag for the optional vertical-origin translation. */
@@ -225,18 +238,23 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	protected static final int VERTICAL_SHAPE_ROTATE = 2;
 
 	/**
-	 * Returns the outline transformation flags needed for one source character.
-	 * Keeping this value with an embedded subset CID makes shared horizontal and
-	 * vertical font programs independent of whichever Type0 wrapper is written
-	 * first.
+	 * 元の文字と選択済みグリフから、縦組み用の輪郭変換フラグを返します。
+	 * 埋め込みサブセットのCIDへこの値を保持することで、縦横共有の物理フォントを
+	 * Type0ラッパーの出力順に依存させません。
+	 *
+	 * @param codePoint 元の文字
+	 * @param gid       縦字形代用後のグリフID
+	 * @return 輪郭変換フラグ
 	 */
-	protected final int verticalShapeFlags(final int cid) {
+	protected final int verticalShapeFlags(final int codePoint, final int gid) {
 		if (!this.isVertical()) {
 			return 0;
 		}
 		int flags = ADJUST_VERTICAL ? VERTICAL_SHAPE_ADJUST : 0;
-		if (cid == 0xFF0D || cid == 0xFF1C || cid == 0xFF1E || cid == 0x2212 || cid == 0x226A
-				|| cid == 0x226B) {
+		final boolean rotateBoxDrawing = codePoint == 0x2500 && gid != 0
+				&& ((OpenTypeFontSource) this.getFontSource()).getCmapFormat().mapCharCode(codePoint) == gid;
+		if (codePoint == 0xFF0D || codePoint == 0xFF1C || codePoint == 0xFF1E || codePoint == 0x2212
+				|| codePoint == 0x226A || codePoint == 0x226B || rotateBoxDrawing) {
 			flags |= VERTICAL_SHAPE_ROTATE;
 		}
 		return flags;
@@ -505,7 +523,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	}
 
 	/**
-	 * 縦組みで連続するEM DASH/HORIZONTAL BARの字面間の空きを詰めます。
+	 * 縦組みで連続するダッシュ・横罫線の字面間の空きを詰めます。
 	 * 固定値ではなく、実際の縦字形の輪郭端と縦advanceから求めるため、
 	 * フォントごとのサイドベアリング差に追従します。
 	 */
@@ -531,7 +549,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	}
 
 	private static boolean isDash(final int codePoint) {
-		return codePoint == 0x2014 || codePoint == 0x2015;
+		return codePoint == 0x2014 || codePoint == 0x2015 || codePoint == 0x2500 || codePoint == 0x2501;
 	}
 
 	@Override

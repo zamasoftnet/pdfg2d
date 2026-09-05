@@ -25,7 +25,8 @@ import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 public class OpenTypeEmbeddedCIDFontSubsetTest {
 	private static final File FONT = new File("../pdfg2d-demo/src/main/resources/ipaexm.ttf");
 
-	private record RenderedFont(String pdf, int ordinaryCid, int aliasCid, int verticalDashCid) {
+	private record RenderedFont(String pdf, int ordinaryCid, int aliasCid, int verticalDashCid,
+			int boxDrawingCid) {
 	}
 
 	private record Pair(OpenTypeEmbeddedCIDFont horizontal, OpenTypeEmbeddedCIDFont vertical,
@@ -33,8 +34,12 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 	}
 
 	private static Pair pair() throws Exception {
-		final var horizontalSource = new OpenTypeEmbeddedCIDFontSource(FONT, 0, Direction.LTR);
-		final var verticalSource = new OpenTypeEmbeddedCIDFontSource(FONT, 0, Direction.TB);
+		return pair(FONT);
+	}
+
+	private static Pair pair(final File font) throws Exception {
+		final var horizontalSource = new OpenTypeEmbeddedCIDFontSource(font, 0, Direction.LTR);
+		final var verticalSource = new OpenTypeEmbeddedCIDFontSource(font, 0, Direction.TB);
 		final var subset = horizontalSource.createSubset();
 		final var horizontal = (OpenTypeEmbeddedCIDFont) horizontalSource.createFont("H", null, subset);
 		final var vertical = (OpenTypeEmbeddedCIDFont) verticalSource.createFont("V", null, subset);
@@ -69,14 +74,15 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 		final int ordinaryCid = horizontal.toGID(')', ')', FontFeatureSet.EMPTY);
 		final int aliasCid = horizontal.toGID(')', '(', FontFeatureSet.EMPTY);
 		final int verticalDashCid = vertical.toGID(0x2014);
+		final int boxDrawingCid = vertical.toGID(0x2500);
 		drawCids(page, horizontal, ordinaryCid, aliasCid);
-		drawCids(page, vertical, verticalDashCid);
+		drawCids(page, vertical, verticalDashCid, boxDrawingCid);
 
 		page.close();
 		pdf.close();
 		builder.close();
 		return new RenderedFont(bytes.toString(StandardCharsets.ISO_8859_1), ordinaryCid, aliasCid,
-				verticalDashCid);
+				verticalDashCid, boxDrawingCid);
 	}
 
 	private static String objectBody(final String pdf, final int objectNumber) {
@@ -213,6 +219,42 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 	}
 
 	@Test
+	public void verticalBoxDrawingHorizontalClosesBothGaps() throws Exception {
+		// IPAexはU+2500の縦字形(vert)を持ち、字面が1emいっぱいなので詰め量は0が正しい。
+		// 検証するのは「送り幅+詰め量=字面の高さ」(隙間が無い)であって符号ではない。
+		final var pair = pair();
+		final int cid = pair.vertical.toGID(0x2500);
+		final int[] cids = { cid, pair.vertical.toGID(0x2500), pair.vertical.toGID(0x2500) };
+		assertArrayEquals(new int[] { cid, cid, cid }, cids);
+		final var bounds = pair.vertical.getShape(cid).getBounds2D();
+		assertTrue(bounds.getHeight() > bounds.getWidth(), "U+2500 must use a vertical outline");
+		for (int i = 1; i < cids.length; ++i) {
+			// PDFのTJ配列では詰め量が負値(または0)になり、送り幅から字面間の空きだけを除く。
+			final int adjustment = -pair.vertical.getKerning(cids[i - 1], cids[i]);
+			assertTrue(adjustment <= 0, "consecutive U+2500 glyphs must not be spread apart");
+			assertEquals(bounds.getHeight(), pair.vertical.getAdvance(cids[i - 1]) + adjustment, 1.0);
+		}
+		assertEquals(0x2500, pair.vertical.toChar(cid));
+	}
+
+	@Test
+	public void verticalBoxDrawingHorizontalFallsBackToVerticalRule() throws Exception {
+		// IPAexのサブセットからU+2500のvertだけを外した試験用フォント(fontToolsで生成、
+		// src/test/resources)。縦字形が無いのでU+2502の横組み字形(縦線)へ代用する。
+		// ToUnicodeと意味変種は元のU+2500を保つ。
+		final var pair = pair(new File("src/test/resources/ipaexm-novert2500.ttf"));
+		final int cid = pair.vertical.toGID(0x2500);
+		final var bounds = pair.vertical.getShape(cid).getBounds2D();
+		assertTrue(bounds.getHeight() > bounds.getWidth() * 4, "U+2500 must fall back to a vertical rule outline");
+		final int adjustment = -pair.vertical.getKerning(cid, cid);
+		assertTrue(adjustment <= 0, "consecutive U+2500 glyphs must not be spread apart");
+		assertEquals(bounds.getHeight(), pair.vertical.getAdvance(cid) + adjustment, 1.0);
+		assertEquals(0x2500, pair.vertical.toChar(cid));
+		assertEquals(0x2500, pair.subset.signature()[cid * 3 + 2],
+				"the vertical box-drawing fallback must keep a distinct semantic variant");
+	}
+
+	@Test
 	public void displayGlyphCanHaveDistinctLogicalUnicodeAliases() throws Exception {
 		final var pair = pair();
 		final int displayCid = pair.horizontal.toGID(')', ')', FontFeatureSet.EMPTY);
@@ -239,6 +281,7 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 		assertEquals((int) ')', horizontal.get(rendered.ordinaryCid).intValue());
 		assertEquals((int) '(', horizontal.get(rendered.aliasCid).intValue());
 		assertEquals(0x2014, vertical.get(rendered.verticalDashCid).intValue());
+		assertEquals(0x2500, vertical.get(rendered.boxDrawingCid).intValue());
 		assertNotEquals(rendered.ordinaryCid, rendered.aliasCid);
 		assertEquals(1, count(rendered.pdf, "/FontFile3"),
 				"horizontal aliases and the vertical semantic variant must share one physical subset");

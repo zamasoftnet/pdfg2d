@@ -10,6 +10,11 @@ dependencies {
     // 代替テキストへ退行して版面が崩れる(bbc-news/bbc-japanで実測)
     implementation 'com.twelvemonkeys.imageio:imageio-webp:3.13.1'
     implementation 'com.drewnoakes:metadata-extractor:2.20.0'
+
+    // Batikが作る子Graphics2Dの状態復元をこのモジュールで回帰検査する。
+    testImplementation project(':pdfg2d-svg')
+    testImplementation 'org.apache.xmlgraphics:batik-bridge:1.19'
+    testImplementation 'org.apache.xmlgraphics:batik-anim:1.19'
 }
 
 publishing {

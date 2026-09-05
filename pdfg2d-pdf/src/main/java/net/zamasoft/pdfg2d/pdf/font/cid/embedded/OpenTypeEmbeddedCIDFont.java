@@ -102,10 +102,11 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		}
 		final int directVertical = this.substituteVertical(fgid);
 		fgid = this.substituteVertical(displayCodePoint, fgid);
-		final boolean emDashFallback = displayCodePoint == 0x2014 && directVertical != fgid;
-		final int semanticVariant = logicalCodePoint != displayCodePoint || emDashFallback
+		final boolean verticalFallback = (displayCodePoint == 0x2014 || displayCodePoint == 0x2500)
+				&& directVertical != fgid;
+		final int semanticVariant = logicalCodePoint != displayCodePoint || verticalFallback
 				? logicalCodePoint : 0;
-		final int gid = this.subset.register(fgid, this.verticalShapeFlags(displayCodePoint), semanticVariant,
+		final int gid = this.subset.register(fgid, this.verticalShapeFlags(displayCodePoint, fgid), semanticVariant,
 				this.getHAdvance(fgid), this.getVAdvance(fgid), this.isVertical());
 		if (this.gidToCid.get(gid) < 0) {
 			this.gidToCid.set(gid, logicalCodePoint);

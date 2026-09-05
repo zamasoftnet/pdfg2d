@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import net.zamasoft.pdfg2d.font.BBox;
 import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.g2d.util.G2DUtils;
 import net.zamasoft.pdfg2d.gc.GC;
@@ -20,6 +19,7 @@ import net.zamasoft.pdfg2d.gc.GC.TextMode;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.font.FontMetrics;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Direction;
+import net.zamasoft.pdfg2d.gc.font.util.FontUtils;
 import net.zamasoft.pdfg2d.gc.text.Text;
 import net.zamasoft.pdfg2d.pdf.PDFGraphicsOutput;
 
@@ -152,11 +152,8 @@ public class PDFFontUtils {
 		TextMode textMode = gc.getTextMode();
 
 		if (direction == Direction.TB) {
-			// Sideways rotation
-			gc.transform(AffineTransform.getRotateInstance(Math.PI / 2.0));
-			BBox bbox = fontSource.getBBox();
-			gc.transform(AffineTransform.getTranslateInstance(0,
-					((bbox.lly() + bbox.ury()) * fontSize / FontSource.DEFAULT_UNITS_PER_EM) / 2f));
+			// 横書きフォントを縦組みの行へ横倒しにする
+			gc.transform(FontUtils.createSidewaysTransform(fontSource, fontSize));
 		}
 		if (xadvances != null && xadvances.get(0) != 0) {
 			gc.transform(AffineTransform.getTranslateInstance(xadvances.get(0), 0));

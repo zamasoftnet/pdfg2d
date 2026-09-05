@@ -39,6 +39,7 @@ import java.util.Map;
 import net.zamasoft.pdfg2d.g2d.image.RasterImageImpl;
 import net.zamasoft.pdfg2d.g2d.util.G2DUtils;
 import net.zamasoft.pdfg2d.gc.GC;
+import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.font.FontFamilyList;
 import net.zamasoft.pdfg2d.gc.font.FontPolicyList;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Style;
@@ -81,6 +82,16 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 
 	protected AffineTransform transform = new AffineTransform();
 
+	/**
+	 * このGraphics2D用に直近の{@link GC#begin()}を呼んだ時点の変換。
+	 * <p>
+	 * {@link GC#resetState()}はBridgeGraphics2Dの構築時ではなく、直近の
+	 * {@code begin()}へ戻る。従って子コンテキストで絶対変換を復元するときは、
+	 * この基準変換からの差分だけをGCへ適用する。
+	 * </p>
+	 */
+	protected AffineTransform baseTransform = new AffineTransform();
+
 	protected Shape clip = null;
 
 	protected Composite composite;
@@ -113,6 +124,11 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 		return this.gc;
 	}
 
+	/**
+	 * GCを直近の{@link GC#begin()}へ戻し、このGraphics2Dの絶対状態を復元する。
+	 * {@code resetState()}は構築時の状態へは戻らないため、変換は保存点からの
+	 * 差分({@code baseTransform^-1 * transform})として適用する。
+	 */
 	private void restoreState() {
 		this.gc.resetState();
 		final var gcolor = G2DUtils.fromAwtColor(this.foreground);
@@ -135,9 +151,18 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 		} else {
 			throw new IllegalStateException("Unsupported stroke type: " + this.stroke.getClass().getName());
 		}
-		if (this.transform != null) {
-			this.gc.transform(this.transform);
+		final AffineTransform relativeTransform;
+		if (this.baseTransform.equals(this.transform)) {
+			relativeTransform = new AffineTransform();
+		} else {
+			try {
+				relativeTransform = this.baseTransform.createInverse();
+			} catch (NoninvertibleTransformException e) {
+				throw new GraphicsException("Cannot restore a transform from a non-invertible base", e);
+			}
+			relativeTransform.concatenate(this.transform);
 		}
+		this.gc.transform(relativeTransform);
 		if (this.clip != null) {
 			Shape s = this.clip;
 			if (this.transform != null) {
@@ -560,6 +585,7 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 			BridgeGraphics2D g = (BridgeGraphics2D) this.clone();
 			// 子の状態変更(特にクリップ)をdispose()で復元できるように
 			// GC状態を保存する(gcStateフィールドのコメント参照)
+			g.baseTransform = new AffineTransform(this.transform);
 			g.gcState = this.gc.begin();
 			return g;
 		} catch (CloneNotSupportedException e) {
@@ -705,6 +731,7 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	protected Object clone() throws CloneNotSupportedException {
 		BridgeGraphics2D clone = (BridgeGraphics2D) super.clone();
 		clone.transform = new AffineTransform(clone.transform);
+		clone.baseTransform = new AffineTransform(clone.baseTransform);
 		// GC状態ハンドルは複製しない(closeの責務は元のインスタンスにある)
 		clone.gcState = null;
 		return clone;

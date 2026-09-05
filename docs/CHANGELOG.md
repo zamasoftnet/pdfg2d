@@ -3,6 +3,20 @@
 pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.md`](./PROPOSALS.md)、
 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md) を参照。
 
+## 2026-09-05 — 縦組み横倒し変換の一本化・U+2500 の縦罫線連結・Batik 子コンテキストの変換復元
+
+- `FontUtils.createSidewaysTransform(FontSource, size)`: 縦組みで横書きフォントを横倒しにする変換(π/2 回転+
+  BBox 中央補正)を 1 か所に集約し、`drawText`・`addTextPath`・`PDFTextRenderer`・`PDFFontUtils` が共有する。
+  `addTextPath` にはこの変換が無く、text-shadow/text-stroke の輪郭が縦組みで run 原点から横倒しのまま描かれていた
+  (copperpdf4 利用者報告)。
+- `OpenTypeFont.isDash` に U+2500/U+2501 を追加(縦組みの罫線素片の連結)。縦字形の無いフォントでは U+2502 の
+  **横組み字形(縦線)**を代用し、無ければ輪郭を回転。ToUnicode は元の U+2500。試験資材
+  `pdfg2d-pdf/src/test/resources/ipaexm-novert2500.ttf`(IPAex から U+2500 の vert を外した 3.7KB のサブセット)。
+- `BridgeGraphics2D.restoreState()`: `create()` した子コンテキストで絶対変換を再適用して CTM が二重化していた
+  (`resetState()` は直近の `begin()` へしか戻らない)。`baseTransform` を保持して差分だけ適用。背景画像の SVG で
+  `<text>` と `<g clip-path>` の中身が外側 clip の外へ落ちて消えていた。回帰 `G2DGCClippedSVGTest`
+  (`pdfg2d-pdf` に `pdfg2d-svg` の test 依存を追加)。
+
 ## 2026-09-04 — 双方向テキストの論理出力 API（ActualText・`/K` 論理順・鏡像 CID alias）
 
 - foliojet の段落単位 UBA（視覚順で glyph run を描く）に対し、抽出・アクセシビリティへ**論理順**を
