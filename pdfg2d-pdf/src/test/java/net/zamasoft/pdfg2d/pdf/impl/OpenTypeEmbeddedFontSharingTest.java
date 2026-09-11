@@ -74,7 +74,10 @@ public class OpenTypeEmbeddedFontSharingTest {
 		assertTrue(pdf.contains("/Encoding /Identity-H"));
 		assertTrue(pdf.contains("/Encoding /Identity-V"));
 		assertTrue(pdf.contains("/W "));
-		assertTrue(pdf.contains("/W2 "));
+		// Only horizontal A keeps the provisional 880; the vertical comma and
+		// CID 0 use the IPAex default origin 879 and must be omitted from W2.
+		assertTrue(pdf.matches("(?s).*/DW2\\s*\\[\\s*879\\s+-1000\\s*\\].*"));
+		assertTrue(pdf.matches("(?s).*/W2\\s*\\[\\s*1\\s*\\[\\s*-1000\\s+[0-9.]+\\s+880\\s*\\]\\s*\\].*"));
 
 		// With uncompressed CMaps, verify that each Type0 wrapper maps only its
 		// own CID and that changing registration order changes CID numbers, not
@@ -82,6 +85,7 @@ public class OpenTypeEmbeddedFontSharingTest {
 		assertEquals(1, count(pdf, "<0001> <0001> <0041>"));
 		assertEquals(1, count(pdf, "<0002> <0002> <3001>"));
 		final var reverse = render(true, true, true);
+		assertTrue(reverse.matches("(?s).*/W2\\s*\\[\\s*2\\s*\\[\\s*-1000\\s+[0-9.]+\\s+880\\s*\\]\\s*\\].*"));
 		assertEquals(1, count(reverse, "<0002> <0002> <0041>"));
 		assertEquals(1, count(reverse, "<0001> <0001> <3001>"));
 	}

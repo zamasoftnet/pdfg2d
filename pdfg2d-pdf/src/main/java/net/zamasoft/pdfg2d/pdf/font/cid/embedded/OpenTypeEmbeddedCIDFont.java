@@ -54,7 +54,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		this.fontRef = fontRef;
 		this.name = name;
 		this.subset = subset;
-		this.subset.initialize(this.getHAdvance(0), this.getVAdvance(0), this.isVertical());
+		this.subset.initialize(this.getHAdvance(0), this.getVAdvance(0), super.getVerticalOrigin(0), this.isVertical());
 	}
 
 	public String getName() {
@@ -107,7 +107,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		final int semanticVariant = logicalCodePoint != displayCodePoint || verticalFallback
 				? logicalCodePoint : 0;
 		final int gid = this.subset.register(fgid, this.verticalShapeFlags(displayCodePoint, fgid), semanticVariant,
-				this.getHAdvance(fgid), this.getVAdvance(fgid), this.isVertical());
+				this.getHAdvance(fgid), this.getVAdvance(fgid), super.getVerticalOrigin(fgid), this.isVertical());
 		if (this.gidToCid.get(gid) < 0) {
 			this.gidToCid.set(gid, logicalCodePoint);
 		}
@@ -242,6 +242,11 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		return this.subset.width(gid);
 	}
 
+	@Override
+	public short getVerticalOrigin(final int gid) {
+		return this.subset.origin(gid);
+	}
+
 	public void drawTo(GC gc, Text text) throws IOException, GraphicsException {
 		if (gc instanceof PDFGC) {
 			final var direction = ((OpenTypeEmbeddedCIDFontSource) this.getFontSource()).getDirection();
@@ -260,7 +265,8 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 				this.subset.subsetName(), vertical, this.gidToCid.toArray());
 		if (!this.subset.isWritten()) {
 			CIDUtils.writeEmbeddedFontProgram(out, xref, source, this, this.subset.descendantRef(),
-					this.subset.subsetName(), this.subset.widths(), this.subset.heights(), this.subset.signature());
+					this.subset.subsetName(), this.subset.widths(), this.subset.heights(), this.subset.origins(),
+					this.subset.signature());
 			this.subset.markWritten();
 		}
 		this.gidToCid = null;

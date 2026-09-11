@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
+import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 import net.zamasoft.pdfg2d.pdf.XRef;
 import net.zamasoft.pdfg2d.pdf.font.cid.CIDUtils;
@@ -28,6 +29,7 @@ public final class OpenTypeEmbeddedCIDFontSubset implements Serializable {
 	private final IntList cidToSemanticVariant = new IntList();
 	private final ShortList widths = new ShortList(Short.MIN_VALUE);
 	private final ShortList heights = new ShortList(Short.MIN_VALUE);
+	private final ShortList origins = new ShortList((short) FontSource.DEFAULT_VERTICAL_ORIGIN);
 	private int glyphCount = 1;
 	private boolean initialized;
 
@@ -39,24 +41,27 @@ public final class OpenTypeEmbeddedCIDFontSubset implements Serializable {
 		// Created by OpenTypeEmbeddedCIDFontSource for one PDF document.
 	}
 
-	void initialize(final short width, final short height, final boolean verticalMetrics) {
+	void initialize(final short width, final short height, final short origin, final boolean verticalMetrics) {
 		if (!this.initialized) {
 			this.cidToSourceGid.set(0, 0);
 			this.widths.set(0, width);
 			this.heights.set(0, height);
+			this.origins.set(0, verticalMetrics ? origin : (short) FontSource.DEFAULT_VERTICAL_ORIGIN);
 			this.initialized = true;
 		} else if (verticalMetrics) {
 			this.heights.set(0, height);
+			this.origins.set(0, origin);
 		}
 	}
 
 	int register(final int sourceGid, final int shapeFlags, final int semanticVariant, final short width,
-			final short height, final boolean verticalMetrics) {
+			final short height, final short origin, final boolean verticalMetrics) {
 		final var key = new GlyphKey(sourceGid, shapeFlags, semanticVariant);
 		final var existing = this.glyphs.get(key);
 		if (existing != null) {
 			if (verticalMetrics) {
 				this.heights.set(existing, height);
+				this.origins.set(existing, origin);
 			}
 			return existing;
 		}
@@ -67,6 +72,7 @@ public final class OpenTypeEmbeddedCIDFontSubset implements Serializable {
 		this.cidToSemanticVariant.set(cid, semanticVariant);
 		this.widths.set(cid, width);
 		this.heights.set(cid, height);
+		this.origins.set(cid, verticalMetrics ? origin : (short) FontSource.DEFAULT_VERTICAL_ORIGIN);
 		return cid;
 	}
 
@@ -86,6 +92,10 @@ public final class OpenTypeEmbeddedCIDFontSubset implements Serializable {
 		return this.heights.get(cid);
 	}
 
+	short origin(final int cid) {
+		return this.origins.get(cid);
+	}
+
 	int glyphCount() {
 		return this.glyphCount;
 	}
@@ -96,6 +106,10 @@ public final class OpenTypeEmbeddedCIDFontSubset implements Serializable {
 
 	short[] heights() {
 		return this.heights.toArray();
+	}
+
+	short[] origins() {
+		return this.origins.toArray();
 	}
 
 	int[] signature() {

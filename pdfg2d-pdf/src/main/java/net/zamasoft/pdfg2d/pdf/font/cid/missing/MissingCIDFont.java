@@ -103,7 +103,7 @@ class MissingCIDFont extends CIDFont implements PDFEmbeddedFont, ShapedFont {
 		} else {
 			w2 = null;
 		}
-		CIDUtils.writeEmbeddedFont(out, xref, source, this, this.fontRef, w, w2, unicodeArray);
+		CIDUtils.writeEmbeddedFont(out, xref, source, this, this.fontRef, w, w2, null, unicodeArray);
 	}
 
 	public BBox getBBox() {

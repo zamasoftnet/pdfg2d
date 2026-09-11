@@ -31,6 +31,8 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 
 	protected final ShortList heights;
 
+	private final ShortList origins;
+
 	protected final IntList unicodes = new IntList();
 
 	protected OpenTypeCIDIdentityFont(OpenTypeCIDIdentityFontSource metaFont, String name, ObjectRef fontRef) {
@@ -39,8 +41,10 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 		this.name = name;
 		if (this.isVertical()) {
 			this.heights = new ShortList(Short.MIN_VALUE);
+			this.origins = new ShortList(Short.MIN_VALUE);
 		} else {
 			this.heights = null;
+			this.origins = null;
 		}
 	}
 
@@ -120,6 +124,7 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 			this.widths.set(glyphIds[i], this.getHAdvance(glyphIds[i]));
 			if (this.isVertical()) {
 				this.heights.set(glyphIds[i], this.getVAdvance(glyphIds[i]));
+				this.origins.set(glyphIds[i], this.getVerticalOrigin(glyphIds[i]));
 			}
 			this.unicodes.set(glyphIds[i], chars[i]);
 		}
@@ -134,7 +139,8 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 		} else {
 			w2 = null;
 		}
-		CIDUtils.writeIdentityFont(out, xref, source, this.fontRef, w, w2, this.unicodes.toArray());
+		CIDUtils.writeIdentityFont(out, xref, source, this.fontRef, w, w2,
+				this.origins == null ? null : this.origins.toArray(), this.unicodes.toArray());
 	}
 
 	public short getKerning(int scid, int cid) {

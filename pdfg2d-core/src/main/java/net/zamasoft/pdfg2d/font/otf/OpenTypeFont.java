@@ -4,30 +4,30 @@ import java.awt.Shape;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
 import java.io.IOException;
-
 import java.util.HashMap;
 import java.util.List;
 
-import net.zamasoft.pdfg2d.font.table.ColrTable;
-import net.zamasoft.pdfg2d.font.table.CpalTable;
-import net.zamasoft.pdfg2d.font.table.FeatureTags;
-import net.zamasoft.pdfg2d.font.table.GposTable;
-import net.zamasoft.pdfg2d.font.table.GsubTable;
-import net.zamasoft.pdfg2d.font.table.PairPos;
-import net.zamasoft.pdfg2d.font.table.ScriptTags;
-import net.zamasoft.pdfg2d.font.table.SinglePos;
-import net.zamasoft.pdfg2d.font.table.SingleSubst;
-import net.zamasoft.pdfg2d.font.table.Table;
-import net.zamasoft.pdfg2d.font.table.XmtxTable;
 import net.zamasoft.pdfg2d.font.ColorGlyphFont;
 import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.ShapedFont;
-import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
+import net.zamasoft.pdfg2d.font.table.ColrTable;
+import net.zamasoft.pdfg2d.font.table.CpalTable;
+import net.zamasoft.pdfg2d.font.table.GlyfTable;
+import net.zamasoft.pdfg2d.font.table.GposTable;
+import net.zamasoft.pdfg2d.font.table.GsubTable;
+import net.zamasoft.pdfg2d.font.table.PairPos;
+import net.zamasoft.pdfg2d.font.table.SinglePos;
+import net.zamasoft.pdfg2d.font.table.SingleSubst;
+import net.zamasoft.pdfg2d.font.table.Table;
+import net.zamasoft.pdfg2d.font.table.VorgTable;
+import net.zamasoft.pdfg2d.font.table.XmtxTable;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Direction;
 import net.zamasoft.pdfg2d.gc.font.util.FontUtils;
+import net.zamasoft.pdfg2d.gc.paint.RGBAColor;
 import net.zamasoft.pdfg2d.gc.text.Text;
+import net.zamasoft.pdfg2d.util.ShortList;
 
 /**
  * Abstract base class for an OpenType (TrueType/CFF) font.
@@ -45,14 +45,14 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 
 	protected static final int DEFAULT_VERTICAL_ORIGIN = net.zamasoft.pdfg2d.font.FontSource.DEFAULT_VERTICAL_ORIGIN;
 
-	protected static final boolean ADJUST_VERTICAL = false;
-
 	protected final OpenTypeFontSource source;
 
 	/** Required vertical substitutions (vrt2/vert), empty in horizontal mode. */
 	protected final List<SingleSubst> vSubsts;
 
 	protected final XmtxTable vmtx, hmtx;
+
+	private final ShortList verticalOrigins = new ShortList(Short.MIN_VALUE);
 
 	/**
 	 * GSUB {@code liga} pairs: key {@code (firstGid << 32) | secondGid} to
@@ -227,12 +227,9 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	 * @param gid   the glyph ID
 	 * @return the (possibly modified) glyph outline
 	 */
-	protected final Shape adjustShape(Shape shape, final int gid) {
+	protected final Shape adjustShape(final Shape shape, final int gid) {
 		return this.adjustShape(shape, gid, this.verticalShapeFlags(this.toChar(gid), gid));
 	}
-
-	/** Bit flag for the optional vertical-origin translation. */
-	protected static final int VERTICAL_SHAPE_ADJUST = 1;
 
 	/** Bit flag for glyphs whose outline is manually rotated in vertical text. */
 	protected static final int VERTICAL_SHAPE_ROTATE = 2;
@@ -250,7 +247,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		if (!this.isVertical()) {
 			return 0;
 		}
-		int flags = ADJUST_VERTICAL ? VERTICAL_SHAPE_ADJUST : 0;
+		int flags = 0;
 		final boolean rotateBoxDrawing = codePoint == 0x2500 && gid != 0
 				&& ((OpenTypeFontSource) this.getFontSource()).getCmapFormat().mapCharCode(codePoint) == gid;
 		if (codePoint == 0xFF0D || codePoint == 0xFF1C || codePoint == 0xFF1E || codePoint == 0x2212
@@ -261,7 +258,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	}
 
 	/** Applies an explicitly recorded vertical outline transformation. */
-	protected final Shape adjustShape(Shape shape, final int sourceGid, final int flags) {
+	protected final Shape adjustShape(final Shape shape, final int sourceGid, final int flags) {
 		return this.adjustShape(shape, flags, this.getVAdvance(sourceGid));
 	}
 
@@ -269,17 +266,6 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	protected final Shape adjustShape(Shape shape, final int flags, final short verticalAdvance) {
 		if (flags == 0) {
 			return shape;
-		}
-		if ((flags & VERTICAL_SHAPE_ADJUST) != 0) {
-			final double advance = verticalAdvance;
-			final var bound = shape.getBounds2D();
-			final double bottom = bound.getY() + bound.getHeight() + DEFAULT_VERTICAL_ORIGIN;
-			if (bottom > advance) {
-				// Adjust to avoid collision
-				final var path = new GeneralPath(shape);
-				path.transform(AffineTransform.getTranslateInstance(0, advance - bottom));
-				shape = path;
-			}
 		}
 		if ((flags & VERTICAL_SHAPE_ROTATE) != 0) {
 			final var path = new GeneralPath(shape);
@@ -316,6 +302,43 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		}
 		final var source = (OpenTypeFontSource) this.getFontSource();
 		return (short) (this.vmtx.getAdvanceWidth(gid) * FontSource.DEFAULT_UNITS_PER_EM / source.getUnitsPerEm());
+	}
+
+	@Override
+	public short getVerticalOrigin(final int gid) {
+		if (!this.isVertical()) {
+			return FontSource.DEFAULT_VERTICAL_ORIGIN;
+		}
+		synchronized (this.verticalOrigins) {
+			final short cached = this.verticalOrigins.get(gid);
+			if (cached != Short.MIN_VALUE) {
+				return cached;
+			}
+			final short origin = this.computeVerticalOrigin(gid);
+			this.verticalOrigins.set(gid, origin);
+			return origin;
+		}
+	}
+
+	private short computeVerticalOrigin(final int gid) {
+		final var font = this.source.getOpenTypeFont();
+		final var glyph = font.getGlyph(gid);
+		if (glyph == null || glyph.isBlank()) {
+			return FontSource.DEFAULT_VERTICAL_ORIGIN;
+		}
+		final var upm = this.source.getUnitsPerEm();
+		final var glyf = (GlyfTable) font.getTable(Table.GLYF);
+		final double origin;
+		if (glyf != null) {
+			// TrueType bounds and side bearings are both in source font units.
+			origin = glyf.getDescription(gid).getYMaximum() + this.vmtx.getLeftSideBearing(gid);
+		} else {
+			final var vorg = (VorgTable) font.getTable(Table.VORG);
+			origin = vorg != null ? vorg.getVertOrigunY(gid)
+					: -glyph.path().getBounds2D().getMinY() * upm / FontSource.DEFAULT_UNITS_PER_EM
+							+ this.vmtx.getLeftSideBearing(gid);
+		}
+		return (short) (origin * FontSource.DEFAULT_UNITS_PER_EM / upm);
 	}
 
 	@Override
@@ -538,10 +561,11 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		}
 		final var a = first.getBounds2D();
 		final var b = second.getBounds2D();
-		// 2字目の原点は1字目の縦advance後。字面が離れる量だけをkerning
-		// (呼出側がadvanceから減算する正値)として返す。輪郭と縦advanceは
-		// どちらも1000 units-per-emへ正規化済みなので、そのまま混合できる。
-		final double gap = this.getAdvance(firstGid) + b.getMinY() - a.getMaxY();
+		// Origins and outlines share the normalized em; the caller subtracts
+		// this positive gap from the first glyph's advance.
+		final double gap = this.getAdvance(firstGid)
+				+ (this.getVerticalOrigin(secondGid) + b.getMinY())
+				- (this.getVerticalOrigin(firstGid) + a.getMaxY());
 		if (!(gap > 0)) {
 			return 0;
 		}

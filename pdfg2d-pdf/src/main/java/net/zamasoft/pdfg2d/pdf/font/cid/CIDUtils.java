@@ -178,60 +178,108 @@ public final class CIDUtils {
 	 * Writes the DW2 (default vertical metrics) and W2 (vertical widths) arrays
 	 * for a vertical CID font.
 	 *
-	 * @param out    the PDF output stream
-	 * @param warray the width array containing per-glyph vertical widths
+	 * Arrays are indexed by CID; Short.MIN_VALUE marks unused entries. Vertical
+	 * advances are positive and are negated for PDF. A null origin array uses 880.
+	 *
+	 * @param out the PDF output stream
+	 * @param w0 horizontal widths, required for every used vertical advance
+	 * @param advanceY positive vertical advances, or null for horizontal fonts
+	 * @param vy vertical origins, or null for the conventional origin
 	 * @throws IOException if an I/O error occurs
+	 * @throws IllegalArgumentException if a used CID has no horizontal width
 	 */
-	public static void writeWArray2(PDFOutput out, WArray warray) throws IOException {
+	public static void writeW2(final PDFOutput out, final short[] w0, final short[] advanceY,
+			final short[] vy) throws IOException {
+		if (advanceY == null || advanceY.length == 0) {
+			return;
+		}
+		final var counts = new java.util.TreeMap<Short, Integer>();
+		for (int cid = 0; cid < advanceY.length; ++cid) {
+			if (advanceY[cid] == Short.MIN_VALUE) {
+				continue;
+			}
+			if (w0 == null || cid >= w0.length || w0[cid] == Short.MIN_VALUE) {
+				throw new IllegalArgumentException("Missing horizontal width for CID " + cid);
+			}
+			if (vy != null && cid < vy.length && vy[cid] != Short.MIN_VALUE) {
+				counts.merge(vy[cid], 1, Integer::sum);
+			}
+		}
+		short originDefault = DEFAULT_VERTICAL_ORIGIN;
+		int maxCount = 0;
+		for (final var entry : counts.entrySet()) {
+			if (entry.getValue() > maxCount) {
+				originDefault = entry.getKey();
+				maxCount = entry.getValue();
+			}
+		}
+		final short advanceDefault = WArray.buildFromWidths(new ArrayShortMapIterator(advanceY)).getDefaultWidth();
 		out.writeName("DW2");
 		out.startArray();
-		out.writeInt(DEFAULT_VERTICAL_ORIGIN);
-		out.writeInt(-warray.getDefaultWidth());
+		out.writeInt(originDefault);
+		out.writeInt(-advanceDefault);
 		out.endArray();
 		out.lineBreak();
-		final var widths = warray.getWidths();
 		out.writeName("W2");
 		out.startArray();
-		if (widths.length > 0) {
+		int cid = 0;
+		while (cid < advanceY.length) {
+			if (!hasExplicitVerticalMetrics(cid, advanceY, vy, advanceDefault, originDefault)) {
+				++cid;
+				continue;
+			}
+			final int first = cid++;
+			while (cid < advanceY.length
+					&& hasExplicitVerticalMetrics(cid, advanceY, vy, advanceDefault, originDefault)
+					&& sameVerticalMetrics(first, cid, w0, advanceY, vy)) {
+				++cid;
+			}
 			out.lineBreak();
-			for (final var w : widths) {
-				final var shorts = w.widths();
-				if (shorts.length == 1) {
-					out.writeInt(w.firstCode());
-					out.writeInt(w.lastCode());
-					out.writeInt(-shorts[0]);
-					out.writeInt(DEFAULT_H);
-					out.writeInt(DEFAULT_VERTICAL_ORIGIN);
-				} else {
-					if (shorts.length <= (w.lastCode() - w.firstCode())) {
-						out.writeInt(w.firstCode());
-						out.startArray();
-						for (int j = 0; j < shorts.length - 1; ++j) {
-							out.writeInt(-shorts[j]);
-							out.writeInt(DEFAULT_H);
-							out.writeInt(DEFAULT_VERTICAL_ORIGIN);
-						}
-						out.endArray();
-						out.writeInt(w.firstCode() + (shorts.length - 1));
-						out.writeInt(w.lastCode());
-						out.writeInt(-shorts[shorts.length - 1]);
-						out.writeInt(DEFAULT_H);
-						out.writeInt(DEFAULT_VERTICAL_ORIGIN);
-					} else {
-						out.writeInt(w.firstCode());
-						out.startArray();
-						for (int j = 0; j < shorts.length; ++j) {
-							out.writeInt(-shorts[j]);
-							out.writeInt(DEFAULT_H);
-							out.writeInt(DEFAULT_VERTICAL_ORIGIN);
-						}
-						out.endArray();
+			out.writeInt(first);
+			if (cid > first + 1) {
+				out.writeInt(cid - 1);
+				writeVerticalMetric(out, first, w0, advanceY, vy);
+			} else {
+				out.startArray();
+				writeVerticalMetric(out, first, w0, advanceY, vy);
+				while (cid < advanceY.length
+						&& hasExplicitVerticalMetrics(cid, advanceY, vy, advanceDefault, originDefault)) {
+					// Leave a repeated triple for the next range entry.
+					if (cid + 1 < advanceY.length
+							&& hasExplicitVerticalMetrics(cid + 1, advanceY, vy, advanceDefault, originDefault)
+							&& sameVerticalMetrics(cid, cid + 1, w0, advanceY, vy)) {
+						break;
 					}
+					writeVerticalMetric(out, cid++, w0, advanceY, vy);
 				}
-				out.lineBreak();
+				out.endArray();
 			}
 		}
 		out.endArray();
+	}
+
+	private static boolean hasExplicitVerticalMetrics(final int cid, final short[] advances, final short[] origins,
+			final short advanceDefault, final short originDefault) {
+		return advances[cid] != Short.MIN_VALUE
+				&& (origins == null || cid < origins.length && origins[cid] != Short.MIN_VALUE)
+				&& (advances[cid] != advanceDefault || verticalOrigin(cid, origins) != originDefault);
+	}
+
+	private static short verticalOrigin(final int cid, final short[] origins) {
+		return origins == null ? DEFAULT_VERTICAL_ORIGIN : origins[cid];
+	}
+
+	private static boolean sameVerticalMetrics(final int first, final int second, final short[] widths,
+			final short[] advances, final short[] origins) {
+		return widths[first] == widths[second] && advances[first] == advances[second]
+				&& verticalOrigin(first, origins) == verticalOrigin(second, origins);
+	}
+
+	private static void writeVerticalMetric(final PDFOutput out, final int cid, final short[] widths,
+			final short[] advances, final short[] origins) throws IOException {
+		out.writeInt(-advances[cid]);
+		out.writeReal(widths[cid] / 2.0);
+		out.writeInt(verticalOrigin(cid, origins));
 	}
 
 	/**
@@ -245,11 +293,13 @@ public final class CIDUtils {
 	 * @param w            horizontal glyph widths indexed by GID
 	 * @param w2           vertical glyph widths indexed by GID, or {@code null} for
 	 *                     horizontal-only fonts
+	 * @param vy           vertical origins indexed by GID, or {@code null} for 880
 	 * @param unicodeArray mapping from GID to Unicode code point
 	 * @throws IOException if an I/O error occurs
 	 */
-	public static void writeIdentityFont(PDFFragmentOutput out, XRef xref, CIDFontSource source, ObjectRef fontRef,
-			short[] w, short[] w2, int[] unicodeArray) throws IOException {
+	public static void writeIdentityFont(final PDFFragmentOutput out, final XRef xref, final CIDFontSource source,
+			final ObjectRef fontRef, final short[] w, final short[] w2, final short[] vy, final int[] unicodeArray)
+			throws IOException {
 		// Main font
 		String fontName = source.getFontName();
 		out.startObject(fontRef);
@@ -321,10 +371,7 @@ public final class CIDUtils {
 			WArray warray = WArray.buildFromWidths(new ArrayShortMapIterator(w));
 			CIDUtils.writeWArray(out, warray);
 		}
-		if (w2 != null && w2.length > 0) {
-			WArray warray = WArray.buildFromWidths(new ArrayShortMapIterator(w2));
-			CIDUtils.writeWArray2(out, warray);
-		}
+		CIDUtils.writeW2(out, w, w2, vy);
 
 		out.endHash();
 		out.endObject();
@@ -551,17 +598,17 @@ public final class CIDUtils {
 	/** Writes an embedded font using one private descendant and program. */
 	public static void writeEmbeddedFont(final PDFFragmentOutput out, final XRef xref, final CIDFontSource source,
 			final PDFEmbeddedFont font, final ObjectRef fontRef, final short[] w, final short[] w2,
-			final int[] unicodeArray) throws IOException {
+			final short[] vy, final int[] unicodeArray) throws IOException {
 		final ObjectRef descendantRef = xref.nextObjectRef();
 		final String subsetName = createEmbeddedSubsetName(w, w2, unicodeArray, font.getPSName());
 		writeEmbeddedFontType0(out, xref, fontRef, descendantRef, subsetName, w2 != null, unicodeArray);
-		writeEmbeddedFontProgram(out, xref, source, font, descendantRef, subsetName, w, w2, unicodeArray);
+		writeEmbeddedFontProgram(out, xref, source, font, descendantRef, subsetName, w, w2, vy, unicodeArray);
 	}
 
 	/** Writes the descendant CIDFont, descriptor, CIDSet, and FontFile3 once. */
 	public static void writeEmbeddedFontProgram(final PDFFragmentOutput out, final XRef xref,
 			final CIDFontSource source, final PDFEmbeddedFont font, final ObjectRef descendantRef,
-			final String subsetName, final short[] w, final short[] w2, final int[] glyphSignature)
+			final String subsetName, final short[] w, final short[] w2, final short[] vy, final int[] glyphSignature)
 			throws IOException {
 		final BBox subsetBBox = CFFGenerator.calculateSubsetBBox(font);
 		final FontSubsetCache.Key subsetKey = new FontSubsetCache.Key(w, w2, glyphSignature);
@@ -597,10 +644,7 @@ public final class CIDUtils {
 			WArray warray = WArray.buildFromWidths(new ArrayShortMapIterator(w));
 			CIDUtils.writeWArray(out, warray);
 		}
-		if (w2 != null && w2.length > 0) {
-			WArray warray = WArray.buildFromWidths(new ArrayShortMapIterator(w2));
-			CIDUtils.writeWArray2(out, warray);
-		}
+		CIDUtils.writeW2(out, w, w2, vy);
 
 		out.endHash();
 		out.endObject();

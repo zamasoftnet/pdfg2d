@@ -89,7 +89,7 @@ class SystemEmbeddedCIDFont extends CIDFont implements PDFEmbeddedFont, ShapedFo
 		SystemEmbeddedCIDFontSource metaFont = (SystemEmbeddedCIDFontSource) this.source;
 		int[] unicodea = this.unicodes.toArray();
 		this.unicodes = null;
-		CIDUtils.writeEmbeddedFont(out, xref, metaFont, this, this.fontRef, this.advances.toArray(), null, unicodea);
+		CIDUtils.writeEmbeddedFont(out, xref, metaFont, this, this.fontRef, this.advances.toArray(), null, null, unicodea);
 	}
 
 	public BBox getBBox() {

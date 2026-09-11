@@ -182,6 +182,28 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 	}
 
 	@Test
+	public void verticalOriginsSurviveEitherRegistrationOrderIncludingNotdef() throws Exception {
+		for (final boolean verticalFirst : new boolean[] { true, false }) {
+			final var pair = pair(new File("../pdfg2d-core/src/test/resources/pgothic-vert-subset.ttf"));
+			final var first = verticalFirst ? pair.vertical : pair.horizontal;
+			final var second = verticalFirst ? pair.horizontal : pair.vertical;
+			// A has no vertical alternate: both directions share one CID.
+			final int cid = first.toGID('A');
+			assertEquals(verticalFirst ? 829 : 880, first.getVerticalOrigin(cid));
+			final int[] signature = pair.subset.signature();
+			assertEquals(cid, second.toGID('A'));
+			assertEquals(829, pair.vertical.getVerticalOrigin(cid));
+			assertEquals(829, pair.horizontal.getVerticalOrigin(cid));
+			assertArrayEquals(signature, pair.subset.signature(), "origins do not identify outlines");
+
+			final var subset = new OpenTypeEmbeddedCIDFontSubset();
+			subset.initialize((short) 1000, (short) 1000, (short) (verticalFirst ? 879 : 880), verticalFirst);
+			subset.initialize((short) 1000, (short) 1000, (short) (verticalFirst ? 880 : 879), !verticalFirst);
+			assertEquals(879, subset.origin(0), "horizontal initialization must not overwrite CID 0");
+		}
+	}
+
+	@Test
 	public void sharedOutlineKeepsDirectionLocalUnicodeInEitherOrder() throws Exception {
 		assertEquals(java.util.List.of(1, 1, (int) 'A', (int) 'B'),
 				java.util.Arrays.stream(directionMappings(false)).boxed().toList());

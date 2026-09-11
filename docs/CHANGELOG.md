@@ -3,6 +3,20 @@
 pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.md`](./PROPOSALS.md)、
 実装済み機能の一覧は [`FEATURES.md`](./FEATURES.md) を参照。
 
+## 2026-09-12 — 縦組みの字形ごとの縦原点
+
+- `Font.getVerticalOrigin(gid)` を追加。OpenTypeの縦書きではCFFのVORG、または
+  TrueTypeのglyf境界／CFF輪郭とvmtxの上側ベアリングから、1000単位の縦原点を求める。
+  横書き・縦メトリクスのない書体・空字形は既定の880を使う。
+- 埋め込みsubsetとIdentityフォントに縦原点を搬送し、`CIDUtils.writeW2`で字形ごとの
+  縦送り・横幅の半分（実数）・縦原点を書く。DW2は最頻値とし、既定値のCIDはW2から省く。
+  縦横で共有するsubsetの縦原点は縦書き登録だけが更新する。旧`writeWArray2`を撤去。
+- `FontUtils.drawText`と`addTextPath`に字形ごとの原点を適用し、比例縦送りの開き括弧が
+  次の文字と重なる問題を修正。ImageFontの位置と回転フラグ値2は維持し、無効な平行移動救済を撤去。
+  異なるダッシュ間のkerningにも原点差を反映する。
+- 対応範囲は設計のV1〜V3。foliojet4側と実物・製品回帰検証（V4）は別担当へ引き継ぐ。
+  検証結果・制約は[`VERTICAL_ORIGIN_STAGE_REPORT.md`](./VERTICAL_ORIGIN_STAGE_REPORT.md)を参照。
+
 ## 2026-09-05 — PDF/X 色管理 I3（画像・/DefaultRGB・APP14）
 
 - CMYK出力（PDF/X-1aと`output.color=cmyk`）で、RGBの読み込み画像・生成画像を出力インテントのICCで

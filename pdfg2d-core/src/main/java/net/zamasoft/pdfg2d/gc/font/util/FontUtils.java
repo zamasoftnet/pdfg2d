@@ -137,7 +137,7 @@ public final class FontUtils {
 		if (verticalFont) {
 			// Vertical writing mode
 			// Vertical font
-			at.preConcatenate(AffineTransform.getTranslateInstance(-fontSize / 2.0, fontSize * 0.88));
+			at.preConcatenate(AffineTransform.getTranslateInstance(-fontSize / 2.0, 0));
 			int pgid = 0;
 			for (int i = 0; i < glyphCount; ++i) {
 				final var gid = glyphIds[i];
@@ -156,9 +156,7 @@ public final class FontUtils {
 				if (shape != null) {
 					final var at2 = new AffineTransform(transform);
 					final var width = (fontSize - fm.getWidth(gid)) / 2.0;
-					if (width != 0) {
-						at2.translate(width, 0);
-					}
+					at2.translate(width, font.getVerticalOrigin(gid) * fontSize / FontSource.DEFAULT_UNITS_PER_EM);
 					at2.concatenate(at);
 					if (oblique != null) {
 						shape = oblique.createTransformedShape(shape);
@@ -288,13 +286,12 @@ public final class FontUtils {
 			if (verticalFont) {
 				// Vertical writing mode
 				// Vertical font
-				gc.transform(AffineTransform.getTranslateInstance(-fontSize / 2.0, fontSize * 0.88));
+				gc.transform(AffineTransform.getTranslateInstance(-fontSize / 2.0, 0));
 				int pgid = 0;
 				for (int i = 0; i < glyphCount; ++i) {
-					var at2 = at;
 					final var gid = glyphIds[i];
 					if (i == 0 && xadvances != null && xadvances.get(0) != 0) {
-						gc.transform(AffineTransform.getTranslateInstance(0, xadvances.get(0)));
+						at.preConcatenate(AffineTransform.getTranslateInstance(0, xadvances.get(0)));
 					} else if (i > 0) {
 						double dy = fm.getAdvance(pgid) + letterSpacing;
 						dy -= fm.getKerning(pgid, gid);
@@ -304,14 +301,13 @@ public final class FontUtils {
 						at.preConcatenate(AffineTransform.getTranslateInstance(0, dy));
 					}
 					pgid = gid;
-					if (font instanceof ShapedFont) {
-						var shape = ((ShapedFont) font).getShapeByGID(gid);
+					if (font instanceof ShapedFont shapedFont) {
+						var shape = shapedFont.getShapeByGID(gid);
 						if (shape != null) {
 							final var width = (fontSize - fm.getWidth(gid)) / 2.0;
-							if (width != 0) {
-								at2 = AffineTransform.getTranslateInstance(width, 0);
-								at2.concatenate(at);
-							}
+							final var at2 = AffineTransform.getTranslateInstance(width,
+									font.getVerticalOrigin(gid) * fontSize / FontSource.DEFAULT_UNITS_PER_EM);
+							at2.concatenate(at);
 							if (oblique != null) {
 								shape = oblique.createTransformedShape(shape);
 							}
@@ -321,6 +317,9 @@ public final class FontUtils {
 							path.append(shape.getPathIterator(at2), false);
 						}
 					} else {
+						final var at2 = AffineTransform.getTranslateInstance(0,
+								FontSource.DEFAULT_VERTICAL_ORIGIN * fontSize / FontSource.DEFAULT_UNITS_PER_EM);
+						at2.concatenate(at);
 						((ImageFont) font).drawGlyphForGid(gc, gid, at2);
 					}
 				}

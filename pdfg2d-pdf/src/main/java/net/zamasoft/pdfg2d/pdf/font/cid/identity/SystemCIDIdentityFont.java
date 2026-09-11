@@ -62,7 +62,7 @@ class SystemCIDIdentityFont extends CIDFont {
 
 	public void writeTo(PDFFragmentOutput out, XRef xref) throws IOException {
 		SystemCIDIdentityFontSource source = (SystemCIDIdentityFontSource) this.source;
-		CIDUtils.writeIdentityFont(out, xref, source, this.fontRef, this.advances.toArray(), null,
+		CIDUtils.writeIdentityFont(out, xref, source, this.fontRef, this.advances.toArray(), null, null,
 				this.unicodes.toArray());
 	}
 }

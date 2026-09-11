@@ -111,6 +111,18 @@ public interface Font extends Serializable {
 	public short getWidth(int gid);
 
 	/**
+	 * Returns the glyph's vertical origin in horizontal design space, normalized
+	 * to 1000 units per em. The ID belongs to this font (a subset CID for embedded
+	 * fonts). Fonts without vertical metrics use the conventional origin of 880.
+	 *
+	 * @param gid the glyph ID
+	 * @return the vertical position vector coordinate
+	 */
+	public default short getVerticalOrigin(final int gid) {
+		return FontSource.DEFAULT_VERTICAL_ORIGIN;
+	}
+
+	/**
 	 * Returns the kerning value between two glyphs.
 	 * 
 	 * @param sgid the previous glyph ID
