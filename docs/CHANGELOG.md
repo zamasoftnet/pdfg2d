@@ -17,6 +17,7 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
   異なるダッシュ間のkerningにも原点差を反映する。
 - 対応範囲は設計のV1〜V3。foliojet4側と実物・製品回帰検証（V4）は別担当へ引き継ぐ。
   検証結果・制約は[`VERTICAL_ORIGIN_STAGE_REPORT.md`](./VERTICAL_ORIGIN_STAGE_REPORT.md)を参照。
+- 欠落字形の代用箱(`MissingCIDFont`)は `getGlyphBounds` を null にし、字面として測らせない。約物の詰めの上限を字面で決める利用側で、書体が無い文書の配置が変わらないようにする。
 
 ## 2026-09-05 — PDF/X 色管理 I3（画像・/DefaultRGB・APP14）
 

@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.zamasoft.pdfg2d.font.BBox;
+import net.zamasoft.pdfg2d.font.GlyphBounds;
 import net.zamasoft.pdfg2d.font.ShapedFont;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
@@ -141,6 +142,17 @@ class MissingCIDFont extends CIDFont implements PDFEmbeddedFont, ShapedFont {
 
 	public String getPSName() {
 		return this.source.getFontName();
+	}
+
+	/**
+	 * A missing glyph stands in for an unknown outline, so its placeholder box
+	 * must not be measured as ink: callers that cap punctuation trims by the
+	 * ink gap fall back to the nominal amounts, and the layout of documents
+	 * whose font is missing stays as it was (2026-09-12).
+	 */
+	@Override
+	public GlyphBounds getGlyphBounds(final int gid) {
+		return null;
 	}
 
 	public Shape getShapeByGID(int gid) {
