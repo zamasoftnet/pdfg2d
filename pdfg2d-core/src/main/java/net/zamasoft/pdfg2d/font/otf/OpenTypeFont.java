@@ -9,6 +9,7 @@ import java.util.List;
 
 import net.zamasoft.pdfg2d.font.ColorGlyphFont;
 import net.zamasoft.pdfg2d.font.FontSource;
+import net.zamasoft.pdfg2d.font.GlyphBounds;
 import net.zamasoft.pdfg2d.font.ShapedFont;
 import net.zamasoft.pdfg2d.font.table.ColrTable;
 import net.zamasoft.pdfg2d.font.table.CpalTable;
@@ -53,6 +54,9 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	protected final XmtxTable vmtx, hmtx;
 
 	private final ShortList verticalOrigins = new ShortList(Short.MIN_VALUE);
+
+	/** Keys use this instance's glyph namespace, including subset CIDs. */
+	private final HashMap<Integer, GlyphBounds> glyphBounds = new HashMap<>();
 
 	/**
 	 * GSUB {@code liga} pairs: key {@code (firstGid << 32) | secondGid} to
@@ -490,6 +494,19 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 			}
 		}
 		return java.util.List.copyOf(plan);
+	}
+
+	@Override
+	public GlyphBounds getGlyphBounds(final int gid) {
+		synchronized (this.glyphBounds) {
+			// A present null records a blank glyph; computeIfAbsent would retry it.
+			if (this.glyphBounds.containsKey(gid)) {
+				return this.glyphBounds.get(gid);
+			}
+			final var bounds = ShapedFont.super.getGlyphBounds(gid);
+			this.glyphBounds.put(gid, bounds);
+			return bounds;
+		}
 	}
 
 	@Override

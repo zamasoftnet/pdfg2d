@@ -3,10 +3,11 @@ package net.zamasoft.pdfg2d.pdf.font.cid.embedded;
 import java.awt.Shape;
 import java.io.IOException;
 
-import net.zamasoft.pdfg2d.font.Glyph;
-import net.zamasoft.pdfg2d.font.table.UvsCmapFormat;
 import net.zamasoft.pdfg2d.font.BBox;
+import net.zamasoft.pdfg2d.font.Glyph;
+import net.zamasoft.pdfg2d.font.GlyphBounds;
 import net.zamasoft.pdfg2d.font.otf.OpenTypeFont;
+import net.zamasoft.pdfg2d.font.table.UvsCmapFormat;
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
 import net.zamasoft.pdfg2d.gc.font.util.FontUtils;
@@ -212,6 +213,13 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 
 	protected int toChar(int gid) {
 		return this.gidToCid.get(gid);
+	}
+
+	@Override
+	public GlyphBounds getGlyphBounds(final int gid) {
+		// The inherited cache calls this wrapper's shape method with a subset CID,
+		// preserving the rotation recorded when that CID was registered.
+		return super.getGlyphBounds(gid);
 	}
 
 	public Shape getShapeByGID(int gid) {

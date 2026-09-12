@@ -4,6 +4,7 @@ import java.awt.Shape;
 import java.io.IOException;
 
 import net.zamasoft.pdfg2d.font.Glyph;
+import net.zamasoft.pdfg2d.font.GlyphBounds;
 import net.zamasoft.pdfg2d.font.otf.OpenTypeFont;
 import net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource;
 import net.zamasoft.pdfg2d.gc.GC;
@@ -83,6 +84,12 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 
 	protected int toChar(int gid) {
 		return this.unicodes.get(gid);
+	}
+
+	@Override
+	public GlyphBounds getGlyphBounds(final int gid) {
+		// Identity CIDs are source GIDs in this instance's inherited cache.
+		return super.getGlyphBounds(gid);
 	}
 
 	public Shape getShapeByGID(int gid) {

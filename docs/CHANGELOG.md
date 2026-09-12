@@ -5,6 +5,7 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
 
 ## 2026-09-12 — 縦組みの字形ごとの縦原点
 
+- `GlyphBounds` と `ShapedFont.getGlyphBounds(gid)` を追加。1000単位・y下向き・変換前の字面をdoubleで返し、OpenType・埋め込みsubset CID・Identityで空字形を含め同期キャッシュする（[G0実装報告](./GLYPH_BOUNDS_STAGE_REPORT.md)）。
 - `Font.getVerticalOrigin(gid)` を追加。OpenTypeの縦書きではCFFのVORG、または
   TrueTypeのglyf境界／CFF輪郭とvmtxの上側ベアリングから、1000単位の縦原点を求める。
   横書き・縦メトリクスのない書体・空字形は既定の880を使う。
