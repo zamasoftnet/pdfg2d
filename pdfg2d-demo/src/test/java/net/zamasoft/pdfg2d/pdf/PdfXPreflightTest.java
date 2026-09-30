@@ -3,6 +3,7 @@ package net.zamasoft.pdfg2d.pdf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
@@ -59,11 +60,22 @@ public class PdfXPreflightTest {
 	}
 
 	private byte[] generate(final Flavour flavour) throws Exception {
+		return generate(flavour, false);
+	}
+
+	/**
+	 * @param withTransparency X-3でも透明・グループを描かせる(生成器が抑止することを見る)
+	 */
+	private byte[] generate(final Flavour flavour, final boolean withTransparency) throws Exception {
 		final var meta = new PDFMetaInfo();
 		meta.setTitle("PDF/X preflight fixture");
 		meta.setCreationDate(CREATE_DATE);
 		meta.setModDate(CREATE_DATE + 3_600_000L);
-		final var version = flavour == Flavour.X1A ? PDFParams.Version.V_PDFX1A : PDFParams.Version.V_PDFX4;
+		final var version = switch (flavour) {
+			case X1A -> PDFParams.Version.V_PDFX1A;
+			case X3 -> PDFParams.Version.V_PDFX3;
+			case X4 -> PDFParams.Version.V_PDFX4;
+		};
 		final var params = PDFParams.createDefault()
 				.withVersion(version)
 				.withCompression(PDFParams.Compression.NONE)
@@ -93,9 +105,10 @@ public class PdfXPreflightTest {
 			image.setRGB(3, 0, 0xFFFFFFFF);
 			gc.drawImage(pdf.addImage(image));
 
-			if (flavour == Flavour.X4) {
-				gc.setFillAlpha(.5f);
+			if (flavour == Flavour.X4 || withTransparency) {
+				// setFillPaint(RGBColor)はalphaを1へ戻すので、alphaは後に設定する
 				gc.setFillPaint(RGBColor.create(0, 0, 1));
+				gc.setFillAlpha(.5f);
 				gc.fill(new Rectangle2D.Double(300, 50, 100, 100));
 				gc.setFillAlpha(1);
 				final var group = pdf.createGroupImage(20, 20);
@@ -104,7 +117,9 @@ public class PdfXPreflightTest {
 					groupGC.fill(new Rectangle2D.Double(0, 0, 20, 20));
 				}
 				gc.drawImage(group);
-				pdf.createOptionalContentGroup("I3 layer", true, true, true, false);
+				if (flavour == Flavour.X4) {
+					pdf.createOptionalContentGroup("I3 layer", true, true, true, false);
+				}
 			}
 		}
 		pdf.close();
@@ -140,6 +155,58 @@ public class PdfXPreflightTest {
 	@Test
 	public void testX4Positive() throws Exception {
 		PdfXPreflight.assertConforms(generate(Flavour.X4), Flavour.X4);
+	}
+
+	@Test
+	public void testX3Positive() throws Exception {
+		PdfXPreflight.assertConforms(generate(Flavour.X3), Flavour.X3);
+	}
+
+	@Test
+	public void testX3GeneratorSuppressesTransparency() throws Exception {
+		// 不透明度と透明グループを要求しても、X-3の生成器は透明を書かない
+		PdfXPreflight.assertConforms(generate(Flavour.X3, true), Flavour.X3);
+	}
+
+	@Test
+	public void testX3KeepsIccBasedRgbThatX1aRejects() throws Exception {
+		final var pdf = generate(Flavour.X3);
+		// 識別文字列の違い(R3)だけでなく、色の規則(R7)でICCBasedが見つかること
+		assertTrue(PdfXPreflight.check(pdf, Flavour.X1A).stream()
+				.anyMatch(v -> "R7".equals(v.rule()) && v.message().contains("ICCBased")),
+				"X-3 output must carry ICCBased RGB, which X-1a rejects");
+	}
+
+	@Test
+	public void testR2RejectsIccV4OutputProfileInX3() throws Exception {
+		final var pdf = mutate(generate(Flavour.X3), document -> {
+			final var profile = (COSStream) outputIntent(document).getDictionaryObject(COSName.DEST_OUTPUT_PROFILE);
+			final byte[] bytes;
+			try (final var in = profile.createInputStream()) {
+				bytes = in.readAllBytes();
+			}
+			bytes[8] = 4;
+			try (final var out = profile.createOutputStream(COSName.FLATE_DECODE)) {
+				out.write(bytes);
+			}
+		});
+		assertOnlyRule(pdf, Flavour.X3, "R2");
+	}
+
+	@Test
+	public void testR8RejectsTransparentExtGStateInX3() throws Exception {
+		final var pdf = mutate(generate(Flavour.X3), document -> {
+			final var resources = document.getPage(0).getResources().getCOSObject();
+			var states = resources.getCOSDictionary(COSName.EXT_G_STATE);
+			if (states == null) {
+				states = new COSDictionary();
+				resources.setItem(COSName.EXT_G_STATE, states);
+			}
+			final var state = new COSDictionary();
+			state.setFloat(COSName.getPDFName("ca"), .5f);
+			states.setItem(COSName.getPDFName("GStransparent"), state);
+		});
+		assertOnlyRule(pdf, Flavour.X3, "R8");
 	}
 
 	@Test

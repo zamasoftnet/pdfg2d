@@ -480,12 +480,17 @@ class ImageFlow {
 			final PDFParams.Compression streamCompression = generated
 					? PDFParams.Compression.BINARY
 					: this.params.compression();
-			final PDFParams.ImageCompression imageCompression = generated
-					? PDFParams.ImageCompression.FLATE
-					: this.params.imageCompression();
 			final PDFParams.Version pdfVersion = this.params.version();
 			final boolean softMaskSupport = pdfVersion.allowsTransparency();
 			final boolean jpeg2000Support = pdfVersion.v >= PDFParams.Version.V_1_5.v;
+			// JPXDecode needs PDF 1.5. Below that (PDF 1.4, PDF/X-1a, PDF/X-3) a
+			// JPEG 2000 request falls back to JPEG for both pass-through and
+			// recompression.
+			final PDFParams.ImageCompression imageCompression = generated
+					? PDFParams.ImageCompression.FLATE
+					: !jpeg2000Support && this.params.imageCompression() == PDFParams.ImageCompression.JPEG2000
+							? PDFParams.ImageCompression.JPEG
+							: this.params.imageCompression();
 			PDFParams.ImageCompression imageType = PDFParams.ImageCompression.FLATE;
 			String sourceFormatName = null;
 

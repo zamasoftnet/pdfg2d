@@ -96,10 +96,8 @@ class PDFTransparencyRable extends GraphicsNodeRable8Bit {
 	 * @return true if transparency is supported
 	 */
 	private boolean supportsTransparency(final PDFParams.Version version) {
-		// PDF 1.4+ supports transparency, but PDF/A-1b and PDF/X-1a do not
-		return version.v >= PDFParams.Version.V_1_4.v
-				&& version.v != PDFParams.Version.V_PDFA1B.v
-				&& version.v != PDFParams.Version.V_PDFX1A.v;
+		// PDF 1.4+ supports transparency, but PDF/A-1b, PDF/X-1a and PDF/X-3 do not
+		return version.allowsTransparency();
 	}
 
 	/**

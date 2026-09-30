@@ -92,6 +92,12 @@ public record PDFParams(
 		V_PDFA1B(1412, "1.4", 1, "B", null),
 		/** PDF/X-1a:2003 (ISO 15930-4), based on PDF 1.4; CMYK/gray/spot only. */
 		V_PDFX1A(1421, "1.4", 0, null, "PDF/X-1a:2003"),
+		/**
+		 * PDF/X-3:2003 (ISO 15930-6), based on PDF 1.4. Structural limits
+		 * (no transparency) match PDF/X-1a; device-independent color
+		 * (ICCBased RGB) is permitted as in PDF/X-4.
+		 */
+		V_PDFX3(1423, "1.4", 0, null, "PDF/X-3:2003"),
 		V_1_5(1500, "1.5", 0, null, null),
 		V_1_6(1600, "1.6", 0, null, null),
 		/** PDF/X-4 (ISO 15930-7), based on PDF 1.6; live transparency and layers. */
@@ -185,7 +191,7 @@ public record PDFParams(
 		/**
 		 * Returns whether this version is a PDF/X prepress profile.
 		 *
-		 * @return {@code true} for PDF/X-1a, PDF/X-4 and PDF/X-6
+		 * @return {@code true} for PDF/X-1a, PDF/X-3, PDF/X-4 and PDF/X-6
 		 */
 		public boolean isPdfX() {
 			return this.pdfxVersion != null;
@@ -230,13 +236,24 @@ public record PDFParams(
 
 		/**
 		 * Returns whether transparency (soft masks, alpha, transparency
-		 * groups) is permitted. Only PDF/A-1 and PDF/X-1a forbid it among
+		 * groups) is permitted. PDF/A-1, PDF/X-1a and PDF/X-3 forbid it among
 		 * the supported profiles.
 		 *
 		 * @return {@code true} when transparency may be emitted
 		 */
 		public boolean allowsTransparency() {
-			return this.v >= V_1_4.v && this != V_PDFA1B && this != V_PDFX1A;
+			return this.v >= V_1_4.v && this != V_PDFA1B && this != V_PDFX1A && this != V_PDFX3;
+		}
+
+		/**
+		 * Returns whether this is a PDF/X profile based on PDF 1.4
+		 * (PDF/X-1a:2003 or PDF/X-3:2003). ICC profiles in such files must be
+		 * version 2, since ICC version 4 requires PDF 1.5.
+		 *
+		 * @return {@code true} for PDF/X-1a and PDF/X-3
+		 */
+		public boolean isPdfXOnPdf14() {
+			return this == V_PDFX1A || this == V_PDFX3;
 		}
 	}
 

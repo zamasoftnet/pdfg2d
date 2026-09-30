@@ -98,9 +98,34 @@ public final class PdfXPreflight {
 	/** 検査対象のPDF/Xフレーバーです。 */
 	public enum Flavour {
 		/** PDF/X-1a:2003。 */
-		X1A,
+		X1A("%PDF-1.4", "PDF/X-1a:2003", true, true),
+		/**
+		 * PDF/X-3:2003。PDF 1.4基底なので透明・Optional Content・JPXはX-1aと同じく禁止、
+		 * 色はX-4と同じく装置非依存色(ICCBased・CalRGB・Lab)を許す。
+		 */
+		X3("%PDF-1.4", "PDF/X-3:2003", true, false),
 		/** PDF/X-4。 */
-		X4
+		X4("%PDF-1.6", "PDF/X-4", false, false);
+
+		/** 期待するヘッダ行。 */
+		final String header;
+
+		/** InfoのGTS_PDFXVersion。 */
+		final String pdfxVersion;
+
+		/** PDF 1.4基底(透明・Optional Content・JPXが無い)ならtrue。 */
+		final boolean pdf14;
+
+		/** CMYK・灰・特色だけを許す(装置非依存色を禁止する)ならtrue。 */
+		final boolean deviceColorOnly;
+
+		Flavour(final String header, final String pdfxVersion, final boolean pdf14,
+				final boolean deviceColorOnly) {
+			this.header = header;
+			this.pdfxVersion = pdfxVersion;
+			this.pdf14 = pdf14;
+			this.deviceColorOnly = deviceColorOnly;
+		}
 	}
 
 	/**
@@ -129,8 +154,8 @@ public final class PdfXPreflight {
 		final var violations = new ArrayList<Violation>();
 		try (final var document = Loader.loadPDF(pdf)) {
 			violations.addAll(checkR1(pdf, document, flavour));
-			violations.addAll(checkR2(document));
-			violations.addAll(checkR3(document));
+			violations.addAll(checkR2(document, flavour));
+			violations.addAll(checkR3(document, flavour));
 			if (flavour == Flavour.X4) {
 				violations.addAll(checkR4(document));
 			}
@@ -179,7 +204,7 @@ public final class PdfXPreflight {
 
 	private static List<Violation> checkR1(final byte[] pdf, final PDDocument document, final Flavour flavour) {
 		final var violations = new ArrayList<Violation>();
-		final var expectedHeader = flavour == Flavour.X1A ? "%PDF-1.4" : "%PDF-1.6";
+		final var expectedHeader = flavour.header;
 		final var firstEnd = lineEnd(pdf, 0);
 		if (firstEnd < 0 || !expectedHeader.equals(new String(pdf, 0, firstEnd, StandardCharsets.US_ASCII))) {
 			violations.add(new Violation("R1", "ヘッダ版が" + expectedHeader + "ではありません"));
@@ -232,7 +257,7 @@ public final class PdfXPreflight {
 		return next;
 	}
 
-	private static List<Violation> checkR2(final PDDocument document) {
+	private static List<Violation> checkR2(final PDDocument document, final Flavour flavour) {
 		final var violations = new ArrayList<Violation>();
 		final var catalog = document.getDocumentCatalog().getCOSObject();
 		final var intents = catalog.getCOSArray(COSName.OUTPUT_INTENTS);
@@ -278,6 +303,10 @@ public final class PdfXPreflight {
 					if (!"CMYK".equals(colorSpace)) {
 						violations.add(new Violation("R2", "ICCプロファイル色空間がCMYKではありません"));
 					}
+					if (flavour.pdf14 && (header[8] & 0xFF) >= 4) {
+						// ICC v4はPDF 1.5以降。PDF 1.4基底のX-1a・X-3ではv2に限る
+						violations.add(new Violation("R2", "DestOutputProfileがICC v" + (header[8] & 0xFF) + "です"));
+					}
 				}
 			} catch (final IOException e) {
 				violations.add(new Violation("R2", "ICCプロファイルを読み込めません: " + e.getMessage()));
@@ -289,14 +318,18 @@ public final class PdfXPreflight {
 		return violations;
 	}
 
-	private static List<Violation> checkR3(final PDDocument document) {
+	private static List<Violation> checkR3(final PDDocument document, final Flavour flavour) {
 		final var violations = new ArrayList<Violation>();
 		final var info = asDictionary(document.getDocument().getTrailer().getDictionaryObject(COSName.INFO));
 		if (info == null) {
 			return List.of(new Violation("R3", "Info辞書がありません"));
 		}
-		if (isBlank(info.getString(GTS_PDFX_VERSION))) {
+		final var pdfxVersion = info.getString(GTS_PDFX_VERSION);
+		if (isBlank(pdfxVersion)) {
 			violations.add(new Violation("R3", "InfoのGTS_PDFXVersionがありません"));
+		} else if (!flavour.pdfxVersion.equals(pdfxVersion)) {
+			violations.add(new Violation("R3",
+					"InfoのGTS_PDFXVersionが" + flavour.pdfxVersion + "ではありません: " + pdfxVersion));
 		}
 		final var trapped = nameOrString(info.getDictionaryObject(COSName.TRAPPED));
 		if (!"True".equals(trapped) && !"False".equals(trapped)) {
@@ -643,7 +676,7 @@ public final class PdfXPreflight {
 			final List<Violation> violations) {
 		final var name = filter.getName();
 		if ("LZWDecode".equals(name) || "LZW".equals(name) || "JBIG2Decode".equals(name)
-				|| "Crypt".equals(name) || (flavour == Flavour.X1A && "JPXDecode".equals(name))) {
+				|| "Crypt".equals(name) || (flavour.pdf14 && "JPXDecode".equals(name))) {
 			violations.add(new Violation("R12", "禁止されたストリームフィルタ/" + name + "があります"));
 		}
 	}
@@ -681,7 +714,7 @@ public final class PdfXPreflight {
 			checkContents(page.getCOSObject().getDictionaryObject(COSName.CONTENTS), resources, location, context);
 			checkColorResources(resources, location, context);
 		}
-		if (flavour == Flavour.X4 && context.hasRGBObject) {
+		if (!flavour.deviceColorOnly && context.hasRGBObject) {
 			for (final var entry : context.resourceLocations) {
 				if (!hasDefaultRGB(entry.resources())) {
 					context.violations.add(new Violation("R7", entry.location()
@@ -713,7 +746,7 @@ public final class PdfXPreflight {
 						final var name = operator.getName();
 						if ("rg".equals(name) || "RG".equals(name)) {
 							context.hasRGBObject = true;
-							if (context.flavour == Flavour.X1A) {
+							if (context.flavour.deviceColorOnly) {
 								context.violations.add(new Violation("R7", location + "に" + name + "演算子があります"));
 							} else if (!hasDefaultRGB(resources)) {
 								context.violations.add(new Violation("R7", location + "に" + name
@@ -920,13 +953,13 @@ public final class PdfXPreflight {
 		final var colorSpace = resolve(base);
 		if (colorSpace instanceof COSName name) {
 			if (DEVICE_RGB.equals(name)) {
-				if (context.flavour == Flavour.X1A) {
+				if (context.flavour.deviceColorOnly) {
 					context.violations.add(new Violation("R7", location + "が/DeviceRGBです"));
 				} else if (!hasDefaultRGB(resources)) {
 					context.violations.add(new Violation("R7", location
 							+ "が/DeviceRGBですが同じResourcesに/DefaultRGBがありません"));
 				}
-			} else if (context.flavour == Flavour.X1A && (CAL_RGB.equals(name) || LAB.equals(name))) {
+			} else if (context.flavour.deviceColorOnly && (CAL_RGB.equals(name) || LAB.equals(name))) {
 				context.violations.add(new Violation("R7", location + "が/" + name.getName() + "です"));
 			} else if (!isDeviceColorSpace(name) && !COSName.PATTERN.equals(name)) {
 				checkColorSpaceName(name, resources, location, context, depth + 1);
@@ -943,15 +976,19 @@ public final class PdfXPreflight {
 			final var components = profile == null ? -1 : profile.getInt(COSName.N, -1);
 			if (profile == null || (components != 1 && components != 3 && components != 4)) {
 				context.violations.add(new Violation("R7", location + "のICCBasedプロファイル/Nが不正です"));
-			} else if (context.flavour == Flavour.X1A) {
+			} else if (context.flavour.deviceColorOnly) {
 				// ISO 15930-4 6.2.1: ICCBased colour spaces shall not be used
 				context.violations.add(new Violation("R7", location + "が" + components + "成分ICCBasedです"));
+			} else if (context.flavour.pdf14 && iccMajorVersion(profile) >= 4) {
+				// ICC v4はPDF 1.5以降。PDF 1.4基底のX-3ではv2に限る
+				context.violations.add(new Violation("R7", location + "のICCBasedプロファイルがICC v"
+						+ iccMajorVersion(profile) + "です"));
 			}
 			// ICCBasedストリームの/Alternateはreaderが無視するため検査しない。
 			return;
 		}
 		if (CAL_RGB.equals(family) || LAB.equals(family)) {
-			if (context.flavour == Flavour.X1A) {
+			if (context.flavour.deviceColorOnly) {
 				context.violations.add(new Violation("R7", location + "が/" + family.getName() + "です"));
 			}
 			return;
@@ -1201,9 +1238,9 @@ public final class PdfXPreflight {
 				|| "DL".equals(key.getName());
 	}
 
-	/** R8のPDF/X-1aで禁止される透明機能を検査します。 */
+	/** R8のPDF/X-1a・PDF/X-3(PDF 1.4基底)で禁止される透明機能を検査します。 */
 	private static List<Violation> checkR8(final PDDocument document, final Flavour flavour) {
-		if (flavour != Flavour.X1A) {
+		if (!flavour.pdf14) {
 			return List.of();
 		}
 		final var violations = new ArrayList<Violation>();
@@ -1411,7 +1448,7 @@ public final class PdfXPreflight {
 		if (propertiesBase == null) {
 			return violations;
 		}
-		if (flavour == Flavour.X1A) {
+		if (flavour.pdf14) {
 			violations.add(new Violation("R13", "/OCPropertiesがあります"));
 			return violations;
 		}
@@ -1488,6 +1525,16 @@ public final class PdfXPreflight {
 	private static COSStream asStream(final COSBase base) {
 		final var resolved = resolve(base);
 		return resolved instanceof COSStream stream ? stream : null;
+	}
+
+	/** ICCプロファイルストリームのヘッダの主版数を返します。読めなければ-1。 */
+	private static int iccMajorVersion(final COSStream profile) {
+		try (final var in = profile.createInputStream()) {
+			final var header = in.readNBytes(9);
+			return header.length < 9 ? -1 : header[8] & 0xFF;
+		} catch (final IOException e) {
+			return -1;
+		}
 	}
 
 	private static String nameOrString(final COSBase base) {

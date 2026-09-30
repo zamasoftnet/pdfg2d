@@ -321,6 +321,95 @@ public class PDFXConformanceTest {
 	}
 
 	@Test
+	public void testPdfX3KeepsIccBasedRgbWithoutTransparency() throws Exception {
+		final var file = TestOutputFiles.outputFile(getClass(), "pdfx3_features.pdf");
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder, PDFParams.createDefault()
+					.withVersion(PDFParams.Version.V_PDFX3).withCompression(PDFParams.Compression.NONE));
+			try (final var gc = new PDFGC(pdf.nextPage(595, 842))) {
+				gc.setFillPaint(RGBColor.create(1, 0, 0));
+				gc.fill(new Rectangle2D.Double(50, 50, 200, 100));
+				// X-3 forbids transparency: alpha and groups must not become live transparency
+				gc.setFillPaint(net.zamasoft.pdfg2d.gc.paint.RGBAColor.create(0, 0, 1, 0.5f));
+				gc.fill(new Rectangle2D.Double(100, 100, 200, 200));
+				final var group = pdf.createGroupImage(200, 200);
+				try (final var ggc = new PDFGC(group)) {
+					ggc.setFillPaint(RGBColor.create(0, 1, 0));
+					ggc.fill(new Rectangle2D.Double(0, 0, 100, 100));
+				}
+				gc.drawImage(group);
+			}
+			pdf.close();
+			builder.close();
+		}
+
+		final var raw = new String(Files.readAllBytes(file.toPath()), StandardCharsets.ISO_8859_1);
+		assertTrue(raw.startsWith("%PDF-1.4"), "PDF/X-3:2003 is based on PDF 1.4");
+		assertTrue(raw.contains("(PDF/X-3:2003)"), "GTS_PDFXVersion must identify PDF/X-3:2003");
+		assertFalse(raw.contains("/Transparency"), "X-3 forbids transparency groups");
+		assertFalse(raw.contains("/SMask"), "X-3 forbids soft masks");
+		assertTrue(raw.contains("/TrimBox"), "Every X page carries a TrimBox");
+		assertTrue(raw.contains("/S /GTS_PDFX"), "OutputIntent subtype must be GTS_PDFX");
+		try (final var doc = Loader.loadPDF(file)) {
+			final String stream;
+			try (final var contents = doc.getPage(0).getContents()) {
+				stream = new String(contents.readAllBytes(), StandardCharsets.ISO_8859_1);
+			}
+			assertFalse(stream.contains(" rg"), "DeviceRGB operator must not be emitted under X-3");
+			assertTrue(stream.contains(" scn"), "RGB vector color must stay ICCBased under X-3");
+			final var states = doc.getPage(0).getResources().getCOSObject().getCOSDictionary(COSName.EXT_G_STATE);
+			if (states != null) {
+				for (final var value : states.getValues()) {
+					final var state = (COSDictionary) (value instanceof COSObject object ? object.getObject() : value);
+					assertEquals(1f, state.getFloat(COSName.getPDFName("ca"), 1f), "X-3 forbids fill alpha");
+					assertEquals(1f, state.getFloat(COSName.getPDFName("CA"), 1f), "X-3 forbids stroke alpha");
+				}
+			}
+		}
+	}
+
+	@Test
+	public void testPdf14BasedPdfXRejectsIccV4OutputIntent() throws Exception {
+		final byte[] profile;
+		try (final var in = PDFWriterImpl.class.getResourceAsStream("ISOcoated_v2_300_eci.icc")) {
+			profile = in.readAllBytes();
+		}
+		profile[8] = 4; // ICC v4 header (PDF 1.5 and later)
+		final var intent = new OutputIntent("FOGRA39", "Coated FOGRA39", OutputIntent.ICC_REGISTRY, null, profile, 4);
+		for (final var version : new PDFParams.Version[] { PDFParams.Version.V_PDFX1A, PDFParams.Version.V_PDFX3 }) {
+			final var params = PDFParams.createDefault().withVersion(version).withOutputIntent(intent);
+			org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+					() -> new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()), params),
+					version + " is PDF 1.4 based and must reject an ICC v4 output profile");
+		}
+		// PDF/X-4 (PDF 1.6) accepts ICC v4
+		new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+				PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX4).withOutputIntent(intent)).close();
+	}
+
+	@Test
+	public void testPdfX3RejectsIccV4ContentRgbProfileOnlyWhenUsed() throws Exception {
+		final byte[] rgb;
+		try (final var in = PDFWriterImpl.class.getResourceAsStream("sRGB_IEC61966-2-1_no_black_scaling.icc")) {
+			rgb = in.readAllBytes();
+		}
+		rgb[8] = 4; // ICC v4 header
+		// X-3 keeps RGB as ICCBased (PRESERVE), so a v4 content profile is rejected
+		final var x3 = PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX3).withRGBProfile(rgb);
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()), x3),
+				"X-3 must reject an ICC v4 content RGB profile");
+		// X-1a converts RGB to CMYK, so the unused profile is not checked
+		new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+				PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX1A).withRGBProfile(rgb)).close();
+		// X-3 with explicit CMYK output does not embed the RGB profile either
+		new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+				PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX3).withRGBProfile(rgb)
+						.withColorMode(PDFParams.ColorMode.CMYK)).close();
+	}
+
+	@Test
 	public void testAnnotationOutsideBleedIsAllowed() throws Exception {
 		// ISO 15930 permits annotations entirely outside the bleed area, so
 		// proofing notes can live in the slug/marks area.
@@ -370,7 +459,8 @@ public class PDFXConformanceTest {
 		final var garbage = new OutputIntent("Broken", null, OutputIntent.ICC_REGISTRY, null,
 				"not an icc profile".getBytes(StandardCharsets.US_ASCII), 4);
 		final var noProfile = new OutputIntent("JC200103", null, OutputIntent.ICC_REGISTRY, null, null, 4);
-		for (final var version : new PDFParams.Version[] { PDFParams.Version.V_PDFX1A, PDFParams.Version.V_PDFX4 }) {
+		for (final var version : new PDFParams.Version[] { PDFParams.Version.V_PDFX1A, PDFParams.Version.V_PDFX3,
+				PDFParams.Version.V_PDFX4 }) {
 			for (final var intent : new OutputIntent[] { garbage, noProfile }) {
 				final var params = PDFParams.createDefault().withVersion(version).withOutputIntent(intent);
 				org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,

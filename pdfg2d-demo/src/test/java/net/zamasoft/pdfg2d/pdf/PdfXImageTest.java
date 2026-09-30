@@ -223,6 +223,39 @@ public class PdfXImageTest {
 		}
 	}
 
+	// ---- X-3 (PRESERVE、PDF 1.4 基底で透明なし) -----------------------
+
+	@Test
+	public void testX3RgbPngUsesIccBasedAndDefaultRgb() throws Exception {
+		try (final var loaded = singleImage(generate("x3-rgb-png.pdf", PDFParams.Version.V_PDFX3, rgbPng, false))) {
+			assertIccBased(loaded.image(), 3);
+			assertEquals(W * H * 3, decoded(loaded.image()).length, "RGB stays 3 bytes per pixel");
+			assertDefaultRgb(loaded.document());
+		}
+	}
+
+	@Test
+	public void testX3AlphaPngUsesStencilMask() throws Exception {
+		try (final var loaded = singleImage(generate("x3-alpha-png.pdf", PDFParams.Version.V_PDFX3, alphaPng, false))) {
+			final var image = loaded.image();
+			assertIccBased(image, 3);
+			assertNull(image.getItem(COSName.SMASK), "X-3 forbids soft masks");
+			assertNotNull(image.getItem(COSName.MASK), "alpha must become a 1-bit /Mask in X-3");
+		}
+	}
+
+	@Test
+	public void testX3Jpeg2000RequestFallsBackToJpeg() throws Exception {
+		// JPXDecode は PDF 1.5 以降。PDF 1.4 基底の X-3 では JPEG へ落とす
+		final var params = params(PDFParams.Version.V_PDFX3)
+				.withImageCompression(PDFParams.ImageCompression.JPEG2000).withImageCompressionLossless(0);
+		try (final var loaded = singleImage(generate("x3-jpx-request.pdf", params, rgbPng, false))) {
+			assertFalse(filters(loaded.image()).contains("JPXDecode"), "X-3 must not emit JPEG 2000");
+			assertTrue(filters(loaded.image()).contains("DCTDecode"), "a lossy request falls back to JPEG");
+			assertIccBased(loaded.image(), 3);
+		}
+	}
+
 	// ---- plain PDF ---------------------------------------------------
 
 	@Test
@@ -347,7 +380,11 @@ public class PdfXImageTest {
 	@Test
 	public void testEveryImageKindPassesPreflight() throws Exception {
 		for (final var flavour : Flavour.values()) {
-			final var version = flavour == Flavour.X1A ? PDFParams.Version.V_PDFX1A : PDFParams.Version.V_PDFX4;
+			final var version = switch (flavour) {
+				case X1A -> PDFParams.Version.V_PDFX1A;
+				case X3 -> PDFParams.Version.V_PDFX3;
+				case X4 -> PDFParams.Version.V_PDFX4;
+			};
 			final var bytes = generateAll("preflight-" + flavour.name().toLowerCase() + ".pdf", version);
 			PdfXPreflight.assertConforms(bytes, flavour);
 		}

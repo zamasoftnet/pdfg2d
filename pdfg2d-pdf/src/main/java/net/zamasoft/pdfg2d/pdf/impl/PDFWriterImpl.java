@@ -293,7 +293,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	 * 入出力プロパティの段階で同じ検査(ERROR 0x380E)をしますが、pdfg2dを
 	 * 直接使う呼び出しにも同じ前提を課します(codexレビュー2026-09-05)。
 	 */
-	private static void validatePdfXOutputIntent(final OutputIntent intent) {
+	private static void validatePdfXOutputIntent(final OutputIntent intent, final PDFParams.Version version) {
 		final var data = intent.iccProfile();
 		if (data == null) {
 			throw new IllegalArgumentException(
@@ -312,6 +312,11 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 				|| intent.colorComponents() != 4) {
 			throw new IllegalArgumentException("PDF/X output intent ICC profile must be CMYK (4 components).");
 		}
+		if (version.isPdfXOnPdf14() && profile.getMajorVersion() >= 4) {
+			// ICC v4 profiles need PDF 1.5; PDF/X-1a:2003 and PDF/X-3:2003 are PDF 1.4 based.
+			throw new IllegalArgumentException(version.pdfxVersion()
+					+ " output intent ICC profile must be ICC version 2, not " + profile.getMajorVersion() + ".");
+		}
 	}
 
 	private static void validate(final PDFParams params) {
@@ -323,7 +328,22 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			throw new IllegalArgumentException("OpenAction is not allowed in PDF/A or PDF/X.");
 		}
 		if (pdfVersion.isPdfX() && params.outputIntent() != null) {
-			validatePdfXOutputIntent(params.outputIntent());
+			validatePdfXOutputIntent(params.outputIntent(), pdfVersion);
+		}
+		if (pdfVersion.isPdfXOnPdf14() && params.rgbProfile() != null
+				&& params.effectiveColorMode() == PDFParams.ColorMode.PRESERVE) {
+			// The content RGB profile is embedded as ICCBased only when RGB is
+			// preserved; ICC v4 needs PDF 1.5. An unused profile is not checked.
+			final ICC_Profile rgb;
+			try {
+				rgb = ICC_Profile.getInstance(params.rgbProfile());
+			} catch (final IllegalArgumentException e) {
+				throw new IllegalArgumentException(pdfVersion.pdfxVersion() + " RGB ICC profile cannot be parsed.", e);
+			}
+			if (rgb.getMajorVersion() >= 4 || rgb.getNumComponents() != 3) {
+				throw new IllegalArgumentException(
+						pdfVersion.pdfxVersion() + " RGB ICC profile must be a 3-component ICC version 2 profile.");
+			}
 		}
 		final var encryptionParams = params.encryption();
 		if (encryptionParams != null) {
@@ -435,7 +455,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 	public PDFWriterImpl(final FragmentedOutput builder, final PDFParams params) throws IOException {
 		var resolvedParams = (params != null) ? params : PDFParams.createDefault();
-		// PDF/X-4以降はICC-managed RGBを許す——RGBプロファイル未指定の
+		// PDF/X-3・PDF/X-4以降はICC-managed RGBを許す——RGBプロファイル未指定の
 		// PRESERVEには既定のsRGBプロファイルを補う(2026-08-18)。これが
 		// 無いとeffectiveColorMode()がCMYKへ倒れ、素朴なRGB→CMYK変換で
 		// 全体が暗くなる(書籍の表紙で実測。X-1aは仕様上CMYKのままが正)
