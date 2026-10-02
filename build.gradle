@@ -140,7 +140,9 @@ description = 'Mapping Java Graphics2D to PDF'
 gradle.taskGraph.whenReady { graph ->
     if (!project.hasProperty('includeEmojiFonts')) {
         project(':pdfg2d-svg-emoji').tasks.each { task ->
-            if (task.name in ['jar', 'processResources', 'classes', 'compileJava', 
+            // setupEmoji も止める。processResources を止めても依存の setupEmoji は走り、
+            // emoji.zip の無い clone では生成(取得)を始めてしまう
+            if (task.name in ['jar', 'processResources', 'classes', 'compileJava', 'setupEmoji',
                               'sourcesJar', 'javadocJar', 'javadoc', 'build', 'assemble']) {
                 task.enabled = false
             }

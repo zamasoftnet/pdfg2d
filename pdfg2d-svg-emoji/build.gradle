@@ -29,7 +29,12 @@ task setupEmoji(type: Exec) {
     outputs.file emojiZip
     
     workingDir projectDir
-    commandLine 'cmd', '/c', 'javac -encoding UTF-8 BuildEmojiIndexTool.java && java -cp . BuildEmojiIndexTool'
+    def command = 'javac -encoding UTF-8 BuildEmojiIndexTool.java && java -cp . BuildEmojiIndexTool'
+    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+        commandLine 'cmd', '/c', command
+    } else {
+        commandLine 'sh', '-c', command
+    }
     
     // Only run if emoji.zip doesn't exist or tool source changed
     onlyIf { !emojiZip.exists() || toolFile.lastModified() > emojiZip.lastModified() }
