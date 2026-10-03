@@ -313,6 +313,17 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
+	 * Returns the font file. Together with {@link #getIndex()} it identifies the
+	 * face, for example to hand the same face to a library that draws through
+	 * AWT (MathML).
+	 *
+	 * @return the font file
+	 */
+	public File getFile() {
+		return this.file;
+	}
+
+	/**
 	 * Returns the OpenType font instance.
 	 *
 	 * @return the OpenType font

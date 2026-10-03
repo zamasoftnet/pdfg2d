@@ -22,6 +22,15 @@ public class FontSourceWrapper implements FontSource {
 		this.source = source;
 	}
 
+	/**
+	 * Returns the wrapped font source.
+	 *
+	 * @return the wrapped font source
+	 */
+	public FontSource getSource() {
+		return this.source;
+	}
+
 	@Override
 	public String[] getAliases() {
 		return this.source.getAliases();
