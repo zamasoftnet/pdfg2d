@@ -407,15 +407,104 @@ public final class G2DUtils {
 	}
 
 	/**
+	 * Refuses an image whose pixel count, read from its header, exceeds a limit.
+	 * The reader must already have its input set. Nothing is decoded.
+	 * <p>
+	 * For GIF the logical screen size counts as well: ImageIO decodes the first
+	 * frame, but the AWT Toolkit fallback in {@link #loadImage} paints the whole
+	 * logical screen. If the size cannot be read while a limit is in force, the
+	 * image is refused too (an unreadable header would fail to decode anyway, and
+	 * the fallback decoder would learn the size only after allocating it).
+	 * </p>
+	 *
+	 * @param reader ImageReader with its input set
+	 * @param limit  maximum width x height; negative means no limit
+	 * @throws ImageTooLargeException if the image is larger than the limit
+	 */
+	public static void checkPixelLimit(final ImageReader reader, final long limit) throws ImageTooLargeException {
+		if (limit < 0) {
+			return;
+		}
+		long width, height;
+		try {
+			width = reader.getWidth(0);
+			height = reader.getHeight(0);
+			final long[] screen = gifLogicalScreen(reader);
+			if (screen != null) {
+				width = Math.max(width, screen[0]);
+				height = Math.max(height, screen[1]);
+			}
+		} catch (final IOException | RuntimeException e) {
+			throw new ImageTooLargeException(-1, -1, limit, e);
+		}
+		if (width <= 0 || height <= 0) {
+			throw new ImageTooLargeException(-1, -1, limit, null);
+		}
+		if (width * height > limit) {
+			throw new ImageTooLargeException(width, height, limit, null);
+		}
+	}
+
+	/**
+	 * GIFの論理画面の寸法を返します(GIFでなければnull)。
+	 */
+	private static long[] gifLogicalScreen(final ImageReader reader) throws IOException {
+		if (!"gif".equalsIgnoreCase(reader.getFormatName())) {
+			return null;
+		}
+		final javax.imageio.metadata.IIOMetadata stream = reader.getStreamMetadata();
+		if (stream == null) {
+			return null;
+		}
+		final org.w3c.dom.Node root = stream.getAsTree("javax_imageio_gif_stream_1.0");
+		for (org.w3c.dom.Node n = root.getFirstChild(); n != null; n = n.getNextSibling()) {
+			if ("LogicalScreenDescriptor".equals(n.getNodeName())) {
+				final org.w3c.dom.NamedNodeMap attrs = n.getAttributes();
+				return new long[] { Long.parseLong(attrs.getNamedItem("logicalScreenWidth").getNodeValue()),
+						Long.parseLong(attrs.getNamedItem("logicalScreenHeight").getNodeValue()) };
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Loads a BufferedImage from an ImageInputStream.
-	 * 
+	 *
 	 * @param reader  ImageReader
 	 * @param imageIn ImageInputStream
 	 * @return Loaded BufferedImage
 	 * @throws IOException If an I/O error occurs
 	 */
 	public static BufferedImage loadImage(ImageReader reader, ImageInputStream imageIn) throws IOException {
+		return loadImage(reader, imageIn, -1L);
+	}
+
+	/**
+	 * Loads a BufferedImage from an ImageInputStream, refusing it before any
+	 * decoding when it is larger than {@code pixelLimit}
+	 * ({@link #checkPixelLimit}).
+	 * <p>
+	 * Errors of the virtual machine (out of memory, stack overflow) are not
+	 * retried through another decoder: the AWT Toolkit fallback decodes on the
+	 * JVM-wide "Image Fetcher" threads, so retrying an image that just
+	 * exhausted the heap there stalls every other conversion's images as well.
+	 * </p>
+	 *
+	 * @param reader     ImageReader
+	 * @param imageIn    ImageInputStream
+	 * @param pixelLimit maximum width x height; negative means no limit
+	 * @return Loaded BufferedImage
+	 * @throws IOException If an I/O error occurs, or {@link ImageTooLargeException}
+	 */
+	public static BufferedImage loadImage(ImageReader reader, ImageInputStream imageIn, final long pixelLimit)
+			throws IOException {
 		try {
+			if (pixelLimit >= 0) {
+				imageIn.seek(0);
+				reader.setInput(imageIn);
+				checkPixelLimit(reader, pixelLimit);
+				imageIn.seek(0);
+			}
 			BufferedImage buffer = null;
 			if ("png".equalsIgnoreCase(reader.getFormatName())) {
 				// PNGのgAMAガンマ補正(2026-08-01、旧JAI系自前デコーダ約2,500行の
@@ -425,6 +514,8 @@ public final class G2DUtils {
 				// 0115-z-index/000-ABSOLUTE=gAMA 0.22727のorder.pngで固定)
 				try {
 					buffer = decodePngWithGamma(reader, imageIn);
+				} catch (VirtualMachineError e) {
+					throw e;
 				} catch (Throwable e) {
 					buffer = null;
 					imageIn.seek(0);
@@ -458,6 +549,8 @@ public final class G2DUtils {
 
 					reader.setInput(imageIn);
 					buffer = reader.read(0);
+				} catch (VirtualMachineError e1) {
+					throw e1;
 				} catch (Throwable e1) {
 					LOGGER.log(Level.FINE, "loadImage", e1);
 
@@ -478,6 +571,8 @@ public final class G2DUtils {
 						buffer.getGraphics().drawImage(image, 0, 0, null);
 					} catch (IOException ioe) {
 						throw ioe;
+					} catch (VirtualMachineError e2) {
+						throw e2;
 					} catch (Throwable e2) {
 						IOException ioe = new IOException(e2.getMessage());
 						ioe.initCause(e2);

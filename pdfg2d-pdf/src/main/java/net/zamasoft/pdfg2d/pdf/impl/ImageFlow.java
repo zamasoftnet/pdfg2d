@@ -44,6 +44,7 @@ import com.drew.metadata.exif.ExifIFD0Directory;
 import com.twelvemonkeys.imageio.plugins.jpeg.JPEGImageReader;
 
 import net.zamasoft.pdfg2d.g2d.util.G2DUtils;
+import net.zamasoft.pdfg2d.g2d.util.ImageTooLargeException;
 import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.image.util.TransformedImage;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
@@ -426,6 +427,7 @@ class ImageFlow {
 		int orientation = 1;
 		ImageReader ir = null;
 
+		final long pixelLimit = generated ? -1L : this.params.imagePixelLimit();
 		if (imageIn != null) {
 			JPEGImageReader cir = null;
 			ImageReader jdkJpeg = null;
@@ -433,6 +435,25 @@ class ImageFlow {
 			while (iri.hasNext()) {
 				final var reader = iri.next();
 				reader.setInput(imageIn);
+				// 画素数の上限はICCや型の判定より前に、ヘッダの寸法で
+				// 見る(2026-10-03)。大きいと分かったら他のリーダは
+				// 試さない。寸法を読めないリーダは従来どおり次へ回し、
+				// 選んだリーダで下でもう一度判定する
+				try {
+					G2DUtils.checkPixelLimit(reader, pixelLimit);
+				} catch (final ImageTooLargeException e) {
+					if (e.getWidth() >= 0) {
+						reader.dispose();
+						if (cir != null) {
+							cir.dispose();
+						}
+						if (jdkJpeg != null) {
+							jdkJpeg.dispose();
+						}
+						throw e;
+					}
+				}
+				imageIn.seek(0);
 				try {
 					final var iti = reader.getImageTypes(0);
 					if (iti != null && iti.hasNext()) {
@@ -469,6 +490,14 @@ class ImageFlow {
 			} else if (cir != null) {
 				cir.dispose();
 			}
+			// 選んだリーダでの判定。寸法を読めなければ、上限があるときは断る
+			try {
+				G2DUtils.checkPixelLimit(ir, pixelLimit);
+			} catch (final ImageTooLargeException e) {
+				ir.dispose();
+				throw e;
+			}
+			imageIn.seek(0);
 		}
 
 		int width, height;
@@ -603,7 +632,7 @@ class ImageFlow {
 					// 消える。2026-08-18、書籍の扉写真で実測)
 					final ImageReader owned = ir;
 					ir = null;
-					image = G2DUtils.loadImage(owned, imageIn);
+					image = G2DUtils.loadImage(owned, imageIn, pixelLimit);
 				}
 				if (resize) {
 					final var type = image.getType();
