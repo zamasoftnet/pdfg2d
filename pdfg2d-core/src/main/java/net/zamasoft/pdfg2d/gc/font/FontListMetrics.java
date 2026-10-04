@@ -44,6 +44,29 @@ public record FontListMetrics(FontMetrics[] metrics, double maxAscent, double ma
 	}
 
 	/**
+	 * Returns the advance of a space (U+0020) in the font that draws it: the
+	 * first font of the list that can display a space (2026-10-04).
+	 * <p>
+	 * Word spaces used the first font of the list. A generic family that starts
+	 * with the emoji font (which has no space, and answers a space advance of
+	 * half an em) widened every word space of text in the default fonts to
+	 * half an em, although the space was drawn by the text font. A font without
+	 * a source is taken as it is, since whether it has a space cannot be known.
+	 * </p>
+	 *
+	 * @return the space advance, or that of the first font when none can display
+	 *         a space
+	 */
+	public double getSpaceAdvance() {
+		for (final FontMetrics fm : this.metrics) {
+			if (fm.getFontSource() == null || fm.getFontSource().canDisplay(' ')) {
+				return fm.getSpaceAdvance();
+			}
+		}
+		return this.metrics[0].getSpaceAdvance();
+	}
+
+	/**
 	 * Returns the maximum ascent among the fonts.
 	 * 
 	 * @return the maximum ascent

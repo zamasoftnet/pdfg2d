@@ -15,7 +15,7 @@ public class WhiteSpace extends Control {
 
 	/**
 	 * Constructs a new WhiteSpace whose advance is initialised to the space
-	 * advance of the first font in the given font list metrics.
+	 * advance of the font that draws a space (FontListMetrics#getSpaceAdvance).
 	 *
 	 * @param flm        the font list metrics used to determine advance, ascent
 	 *                   and descent
@@ -23,7 +23,7 @@ public class WhiteSpace extends Control {
 	 */
 	public WhiteSpace(final FontListMetrics flm, final int charOffset) {
 		this.flm = flm;
-		this.advance = this.flm.getFontMetrics(0).getSpaceAdvance();
+		this.advance = this.flm.getSpaceAdvance();
 		this.charOffset = charOffset;
 	}
 
@@ -48,7 +48,7 @@ public class WhiteSpace extends Control {
 	 * @param wordSpacing the word spacing to set
 	 */
 	public void setWordSpacing(final double wordSpacing) {
-		this.advance = wordSpacing + this.flm.getFontMetrics(0).getSpaceAdvance();
+		this.advance = wordSpacing + this.flm.getSpaceAdvance();
 	}
 
 	/**
