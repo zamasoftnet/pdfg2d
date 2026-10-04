@@ -1445,6 +1445,50 @@ public class PDFGC implements GC, Closeable {
 		}
 	}
 
+	/**
+	 * Draws text that is not known yet, such as the page number of a later page:
+	 * the page references a Form XObject now and the painter writes its content
+	 * when the writer closes ({@link PDFWriter#createDeferredForm}).
+	 * <p>
+	 * The form is tagged like {@link #drawText} (it is text, not a figure), and
+	 * nothing inside it is marked, so the structure sees the content of the
+	 * enclosing marked-content sequence. The current fill color is in effect
+	 * when the form is painted.
+	 * </p>
+	 *
+	 * @param width   the width of the reserved rectangle at the origin
+	 * @param height  the height of the reserved rectangle at the origin
+	 * @param painter paints the content when the writer closes
+	 * @throws GraphicsException if an I/O error occurs
+	 */
+	public void drawDeferredForm(final double width, final double height, final DeferredFormPainter painter)
+			throws GraphicsException {
+		try {
+			final var name = this.getPdfWriter().createDeferredForm(width, height, painter);
+			this.applyStates();
+			try (final var state = this.begin()) {
+				final var mcid = this.beginTagged("P", null);
+
+				this.gsave();
+				this.out.writeReal(1);
+				this.out.writeReal(0);
+				this.out.writeReal(0);
+				this.out.writeReal(1);
+				this.out.writePosition(0, height);
+				this.out.writeOperator("cm");
+
+				this.out.useResource("XObject", name);
+				this.out.writeName(name);
+				this.out.writeOperator("Do");
+
+				state.close();
+				this.endTagged(mcid >= 0);
+			}
+		} catch (IOException e) {
+			throw new GraphicsException(e);
+		}
+	}
+
 	@Override
 	public void drawText(final Text text, final double x, final double y) throws GraphicsException {
 		if (DEBUG) {

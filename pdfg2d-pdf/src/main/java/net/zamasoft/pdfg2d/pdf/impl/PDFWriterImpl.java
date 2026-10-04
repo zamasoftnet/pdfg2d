@@ -161,6 +161,13 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	/** Filespec references for the PDF/A-3 catalog /AF (associated files) array. */
 	private List<ObjectRef> afRefs = null;
 
+	/** A Form XObject reserved by {@link #createDeferredForm}, painted at close. */
+	private record DeferredForm(ObjectRef ref, String name, double width, double height,
+			net.zamasoft.pdfg2d.pdf.gc.DeferredFormPainter painter) {
+	}
+
+	private List<DeferredForm> deferredForms = null;
+
 	/** Logical structure collector for tagged PDF output, or {@code null}. */
 	final StructureTreeBuilder structure;
 
@@ -1079,6 +1086,70 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 				formFlow);
 	}
 
+	public String createDeferredForm(final double width, final double height,
+			final net.zamasoft.pdfg2d.pdf.gc.DeferredFormPainter painter) throws IOException {
+		final var ref = this.xref.nextObjectRef();
+		final var name = this.addResource("XObject", "T", ref);
+		if (this.deferredForms == null) {
+			this.deferredForms = new ArrayList<>();
+		}
+		this.deferredForms.add(new DeferredForm(ref, name, width, height, painter));
+		return name;
+	}
+
+	/**
+	 * Writes the forms reserved by {@link #createDeferredForm}. Runs first in
+	 * {@link #close()}: the painters may use fonts, which are subset later.
+	 */
+	private void paintDeferredForms() throws IOException {
+		if (this.deferredForms == null) {
+			return;
+		}
+		final var forms = this.deferredForms;
+		this.deferredForms = null;
+		final var objectsFlow = this.objectsFlow;
+		for (final var form : forms) {
+			objectsFlow.startObject(form.ref());
+			objectsFlow.startHash();
+			objectsFlow.writeName("Type");
+			objectsFlow.writeName("XObject");
+			objectsFlow.lineBreak();
+			objectsFlow.writeName("Subtype");
+			objectsFlow.writeName("Form");
+			objectsFlow.lineBreak();
+			objectsFlow.writeName("FormType");
+			objectsFlow.writeInt(1);
+			objectsFlow.lineBreak();
+			objectsFlow.writeName("Resources");
+			final var resourceFlow = new ResourceFlow(objectsFlow, this::useResource, this.defaultRGBProfileRef());
+			objectsFlow.lineBreak();
+			// The bounding box is known only after painting
+			final var bboxFlow = objectsFlow.forkFragment();
+			final var contentFlow = objectsFlow.forkFragment();
+			final var contentOut = contentFlow.startStreamFromHash(PDFFragmentOutput.Mode.ASCII);
+			objectsFlow.endObject();
+
+			final var image = new PDFGroupImageImpl(this, contentOut, contentFlow, resourceFlow, form.width(),
+					form.height(), form.name(), form.ref(), bboxFlow);
+			var bounds = form.painter().paint(new net.zamasoft.pdfg2d.pdf.gc.PDFGC(image));
+			if (bounds == null) {
+				bounds = new java.awt.geom.Rectangle2D.Double(0, 0, form.width(), form.height());
+			}
+			// Top-left page coordinates to the form's PDF space (origin at the
+			// bottom-left of the reserved rectangle; no /Matrix)
+			bboxFlow.writeName("BBox");
+			bboxFlow.startArray();
+			bboxFlow.writeReal(bounds.getMinX());
+			bboxFlow.writeReal(form.height() - bounds.getMaxY());
+			bboxFlow.writeReal(bounds.getMaxX());
+			bboxFlow.writeReal(form.height() - bounds.getMinY());
+			bboxFlow.endArray();
+			bboxFlow.lineBreak();
+			bboxFlow.close();
+			image.close();
+		}
+	}
+
 	public PDFNamedGraphicsOutput createTilingPattern(final double width, final double height, final double pageHeight,
 			final AffineTransform at) throws IOException {
 		// Pattern Object
@@ -1973,6 +2044,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 	public void close() throws IOException {
 		try {
+			this.paintDeferredForms();
+
 			// Meta Info
 			final var info = this.params.metaInfo();
 

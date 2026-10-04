@@ -139,6 +139,25 @@ public interface PDFWriter extends Closeable {
 	PDFGroupImage createGroupImage(double width, double height) throws IOException;
 
 	/**
+	 * Reserves a Form XObject whose content is painted when this writer closes.
+	 * <p>
+	 * Pages can draw the form with {@code Do} at once, before its content is
+	 * known. The painter runs at the start of {@link #close()}, before fonts are
+	 * subset, and the form's bounding box is taken from what it painted. The form
+	 * has no transparency group, so it is allowed for every PDF version and
+	 * profile. Forms of a writer that is never closed are never written.
+	 * </p>
+	 *
+	 * @param width   the width of the reserved rectangle
+	 * @param height  the height of the reserved rectangle
+	 * @param painter paints the content when the writer closes
+	 * @return the XObject resource name
+	 * @throws IOException in case of I/O error
+	 */
+	String createDeferredForm(double width, double height, net.zamasoft.pdfg2d.pdf.gc.DeferredFormPainter painter)
+			throws IOException;
+
+	/**
 	 * Creates a tiling pattern.
 	 * <p>
 	 * The returned PDFNamedGraphicsOutput must be closed after writing the pattern.
