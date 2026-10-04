@@ -1,6 +1,6 @@
 # gc.text 再設計案 — 段落パイプライン
 
-作成日: 2026-07-11。ステータス: **設計提案(未実装)**。
+作成日: 2026-07-11。ステータス: **設計提案。段落パイプライン(`ParagraphLayout`・`Shaper`・`LineBreaker` ほか)は採用されず、2026-10-05 に削除した**。残ったのは Copper が使う部品(`TotalFit`・`Hyphenator`・`BreakNode`・`LineMeasure`・`Itemizer.reorderVisual`)だけ。
 [`PROPOSALS.md`](./PROPOSALS.md) §C(ハイフネーション・bidi・GPOS/GSUB・ルビ・
 カラーフォント)をすべて自然に受け止めることを目標に、破壊的変更を前提として
 テキストパイプラインを再設計する。

@@ -84,8 +84,8 @@ pdfg2d は、Java の `Graphics2D`/独自 `GC` API を PDF 出力へ変換する
 - cmap format 0/2/4/6/8/10/12/13、kern テーブル。
 - **OpenType シェーピング**: GSUB `liga`（リガチャ）、GPOS `kern`（ペアカーニング）。
 - **カラーフォント**: COLR/CPAL（v0）をレイヤー塗り分けで描画。
-- **段落パイプライン**（`gc.text.pipeline`）: bidi（UAX #9）、Liang ハイフネーション、
-  ルビ（第一級ノード）、box-glue-penalty 行分割。
+- **行分割の部品**（`gc.text.pipeline`）: box-glue-penalty の total-fit 行分割（`TotalFit`）、
+  Liang ハイフネーション（`Hyphenator`）、bidi の視覚順への並べ替え（`Itemizer.reorderVisual`）。
 - 日本語/英語の改行規則（禁則）を伴うテキストレイアウトを利用できます。
 - 横書き・縦書き（Identity-V）、字形配置、強調、斜体、太字、複合テキスト描画に対応します。
 - ページ幅に基づく段落レイアウト、行送り、両端揃え、段組、フロート、letter-spacing。

@@ -22,7 +22,7 @@ import net.zamasoft.pdfg2d.gc.text.pipeline.TotalFit.Parameters;
 class TotalFitTest {
 
 	private static BreakNode.Box box(final double width) {
-		return new BreakNode.Box(width, null, 0, 0);
+		return new BreakNode.Box(width);
 	}
 
 	private static BreakNode.Glue glue(final double width, final double stretch, final double shrink) {
@@ -99,7 +99,7 @@ class TotalFitTest {
 		// ハイフンで割れば 4+1=5 でちょうど収まる。
 		final List<BreakNode> nodes = new ArrayList<>();
 		nodes.add(box(4));
-		nodes.add(new BreakNode.Penalty(1, 50, true, null));
+		nodes.add(new BreakNode.Penalty(1, 50, true));
 		nodes.add(box(4));
 		final List<BrokenLine> lines = TotalFit.totalFit(nodes, 5, Parameters.texDefaults());
 		assertEquals(2, lines.size());
@@ -115,14 +115,10 @@ class TotalFitTest {
 		// 貪欲: [5,1,5,1,5]=17 → 2行目 [5](1語のみ)。
 		// K-P: 2-2分割(各行 natural 11、r=0.75、badness 42 ≤ tolerance)。
 		final List<BreakNode> nodes = words(5, 4, 1, 8, 0.3);
-		final List<LineBreaker.Line> greedy = LineBreaker.greedy(nodes, 17);
 		final List<BrokenLine> optimal = TotalFit.totalFit(nodes, 17,
 				Parameters.texDefaults().withLastLine(LastLinePolicy.JUSTIFY));
-		// 貪欲法は最終行が1語(ノード1個)になる
-		final LineBreaker.Line greedyLast = greedy.get(greedy.size() - 1);
-		assertEquals(1, greedyLast.end() - greedyLast.begin());
-		// total-fitは同じ行数のまま、どの行も2語を保つ(極端な最終行を回避)
-		assertEquals(greedy.size(), optimal.size());
+		// total-fitは貪欲法と同じ2行のまま、どの行も2語を保つ(極端な最終行を回避)
+		assertEquals(2, optimal.size());
 		for (final BrokenLine line : optimal) {
 			final long boxes = nodes.subList(line.begin(), Math.min(line.end(), nodes.size())).stream()
 					.filter(n -> n instanceof BreakNode.Box).count();
@@ -168,7 +164,7 @@ class TotalFitTest {
 		final List<BreakNode> nodes = new ArrayList<>();
 		for (int i = 0; i < 10000; ++i) {
 			if (i > 0) {
-				nodes.add(new BreakNode.Penalty(0, 0, false, null));
+				nodes.add(new BreakNode.Penalty(0, 0, false));
 			}
 			nodes.add(box(10));
 		}

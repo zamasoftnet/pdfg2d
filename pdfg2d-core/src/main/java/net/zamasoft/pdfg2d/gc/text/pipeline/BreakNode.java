@@ -16,14 +16,11 @@ public sealed interface BreakNode permits BreakNode.Box, BreakNode.Glue, BreakNo
 	double width();
 
 	/**
-	 * An unbreakable piece of typeset material: a glyph slice of one run.
+	 * An unbreakable piece of typeset material.
 	 *
-	 * @param width      the advance width
-	 * @param run        the glyph run this slice belongs to
-	 * @param glyphBegin the first glyph index (inclusive)
-	 * @param glyphEnd   the end glyph index (exclusive)
+	 * @param width the advance width
 	 */
-	record Box(double width, GlyphRun run, int glyphBegin, int glyphEnd) implements BreakNode {
+	record Box(double width) implements BreakNode {
 	}
 
 	/**
@@ -38,15 +35,14 @@ public sealed interface BreakNode permits BreakNode.Box, BreakNode.Glue, BreakNo
 
 	/**
 	 * A potential breakpoint with a cost. Infinite cost forbids a break;
-	 * negative cost forces one. A flagged penalty inserts material (a hyphen)
-	 * when the line breaks there.
+	 * negative cost forces one. A flagged penalty marks a break that inserts
+	 * material (a hyphen) when the line breaks there.
 	 *
-	 * @param width     the width contributed only when a line breaks here
-	 * @param cost      the break penalty ({@link #INFINITY} forbids)
-	 * @param flagged   whether breaking here inserts {@code insertion}
-	 * @param insertion the glyph run inserted on break (e.g. a hyphen), or null
+	 * @param width   the width contributed only when a line breaks here
+	 * @param cost    the break penalty ({@link #INFINITY} forbids)
+	 * @param flagged whether breaking here inserts material
 	 */
-	record Penalty(double width, int cost, boolean flagged, GlyphRun insertion) implements BreakNode {
+	record Penalty(double width, int cost, boolean flagged) implements BreakNode {
 
 		/** A cost that forbids breaking. */
 		public static final int INFINITY = 10000;
@@ -56,12 +52,12 @@ public sealed interface BreakNode permits BreakNode.Box, BreakNode.Glue, BreakNo
 
 		/** A mandatory break (end of paragraph / explicit line feed). */
 		public static Penalty forced() {
-			return new Penalty(0, FORCE, false, null);
+			return new Penalty(0, FORCE, false);
 		}
 
 		/** A forbidden break (kinsoku: no break between these boxes). */
 		public static Penalty forbidden() {
-			return new Penalty(0, INFINITY, false, null);
+			return new Penalty(0, INFINITY, false);
 		}
 	}
 }

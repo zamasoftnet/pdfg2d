@@ -10,7 +10,7 @@ import java.util.List;
  * each line greedily.
  *
  * <p>
- * The node semantics are identical to {@link LineBreaker#greedy}: a
+ * The node semantics: a
  * {@link BreakNode.Penalty} with cost {@code <= FORCE} is a mandatory break, a
  * penalty with cost {@code < INFINITY} is a feasible break whose width counts
  * only when actually broken there, a {@link BreakNode.Glue} is a feasible
@@ -58,9 +58,9 @@ public final class TotalFit {
 	 * A chosen line.
 	 *
 	 * @param begin           the first node index (inclusive; leading discarded
-	 *                        glue included, as in {@link LineBreaker.Line})
+	 *                        glue included)
 	 * @param end             the end node index (exclusive; includes the break
-	 *                        node, matching {@link LineBreaker.Line})
+	 *                        node)
 	 * @param breakIndex      the node index broken at, or the stream size for
 	 *                        {@link BreakKind#PARAGRAPH_END}
 	 * @param kind            how the line ended
