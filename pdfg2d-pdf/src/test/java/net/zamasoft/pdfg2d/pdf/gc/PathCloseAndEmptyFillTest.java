@@ -74,7 +74,7 @@ public class PathCloseAndEmptyFillTest {
 
 	@Test
 	public void testEmptyRectangleLeavesTheMarksBalanced() throws Exception {
-		final var params = uncompressed().withTagged(new TaggedParams("ja", false));
+		final var params = uncompressed().withTagged(new TaggedParams("ja", 0));
 		final var content = content(params, gc -> {
 			gc.fill(new Rectangle2D.Double(10, 10, 0, 20));
 			gc.fill(new Rectangle2D.Double(10, 40, 50, 20));

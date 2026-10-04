@@ -290,7 +290,7 @@ public class TextReplacementTest {
 
 	@Test
 	public void replacementWrapsAutoTaggedDrawTextWithoutCrossing() throws Exception {
-		final var params = uncompressed().withTagged(new TaggedParams("en", false));
+		final var params = uncompressed().withTagged(new TaggedParams("en", 0));
 		final byte[] rendered = render(params, (gc, page) -> {
 			try (final var replacement = gc.beginTextReplacement(LOGICAL)) {
 				drawAutoTaggedText(gc, 'A', 30);
@@ -304,7 +304,7 @@ public class TextReplacementTest {
 
 	@Test
 	public void replacementsInsideAndOutsideLayerRemainProperlyNested() throws Exception {
-		final var params = uncompressed().withTagged(new TaggedParams("en", false));
+		final var params = uncompressed().withTagged(new TaggedParams("en", 0));
 		final byte[] rendered = render(params, (gc, page) -> {
 			final var layer = gc.getPdfWriter().createOptionalContentGroup("text", true, true, true, false);
 			try (final var replacement = gc.beginTextReplacement("outside")) {
@@ -326,7 +326,7 @@ public class TextReplacementTest {
 
 	@Test
 	public void replacementInsideArtifactRemainsProperlyNested() throws Exception {
-		final var params = uncompressed().withTagged(new TaggedParams("en", false));
+		final var params = uncompressed().withTagged(new TaggedParams("en", 0));
 		final byte[] rendered = render(params, (gc, page) -> {
 			try (final var artifact = gc.beginArtifactScope()) {
 				try (final var replacement = gc.beginTextReplacement(LOGICAL)) {

@@ -114,7 +114,7 @@ public class TaggedPDFTest {
 	public void testStructureTreeIsEmitted() throws Exception {
 		final var params = PDFParams.createDefault()
 				.withFontSourceManager(embeddedFonts())
-				.withTagged(new TaggedParams("ja", false));
+				.withTagged(new TaggedParams("ja", 0));
 		final var file = generate("tagged_structure.pdf", params);
 
 		final var raw = new String(java.nio.file.Files.readAllBytes(file.toPath()),
@@ -138,7 +138,7 @@ public class TaggedPDFTest {
 		final var params = PDFParams.createDefault()
 				.withVersion(PDFParams.Version.V_PDFA2A)
 				.withFontSourceManager(embeddedFonts())
-				.withTagged(new TaggedParams("ja", false));
+				.withTagged(new TaggedParams("ja", 0));
 		assertCompliant(generate("tagged_pdfa2a.pdf", params), PDFAFlavour.PDFA_2_A);
 	}
 
@@ -147,7 +147,7 @@ public class TaggedPDFTest {
 		final var params = PDFParams.createDefault()
 				.withVersion(PDFParams.Version.V_PDFA3A)
 				.withFontSourceManager(embeddedFonts())
-				.withTagged(new TaggedParams("ja", false));
+				.withTagged(new TaggedParams("ja", 0));
 		assertCompliant(generate("tagged_pdfa3a.pdf", params), PDFAFlavour.PDFA_3_A);
 	}
 
@@ -220,7 +220,7 @@ public class TaggedPDFTest {
 	public void testTableAndLinkStructure() throws Exception {
 		final var params = PDFParams.createDefault()
 				.withFontSourceManager(embeddedFonts())
-				.withTagged(new TaggedParams("ja", false));
+				.withTagged(new TaggedParams("ja", 0));
 		final var file = generateSemantic("tagged_semantic.pdf", params);
 
 		final var raw = new String(java.nio.file.Files.readAllBytes(file.toPath()),

@@ -42,14 +42,6 @@ public record LookupList(Lookup[] lookups) {
 		}
 	}
 
-	public Lookup getLookup(final Feature feature, final int index) {
-		if (feature.getLookupCount() > index) {
-			final int i = feature.getLookupListIndex(index);
-			return this.lookups[i];
-		}
-		return null;
-	}
-
 	@Override
 	public String toString() {
 		final var sb = new StringBuilder();

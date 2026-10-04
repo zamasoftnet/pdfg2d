@@ -123,7 +123,7 @@ public class ArtifactScopeTest {
 	 */
 	@Test
 	public void testTaggedScopeOpensExactlyOneArtifactSequence() throws Exception {
-		final var params = uncompressed().withTagged(new TaggedParams("ja", false));
+		final var params = uncompressed().withTagged(new TaggedParams("ja", 0));
 
 		final var plain = streams(render(params, false));
 		assertEquals(2, count(plain, "/Artifact BMC"),
@@ -149,7 +149,7 @@ public class ArtifactScopeTest {
 	/** Closing the returned handle twice is harmless (mirrors {@link GC#begin()}). */
 	@Test
 	public void testCloseIsIdempotent() throws Exception {
-		final var params = uncompressed().withTagged(new TaggedParams("ja", false));
+		final var params = uncompressed().withTagged(new TaggedParams("ja", 0));
 		final var buff = new ByteArrayOutputStream();
 		final var builder = new StreamFragmentedOutput(buff);
 		final var pdf = new PDFWriterImpl(builder, params);

@@ -81,9 +81,9 @@ public class ObjectStreamTest {
 	@Test
 	public void testObjectStreamsShrinkTaggedDocuments() throws Exception {
 		final var plain = generate("objstm_off.pdf",
-				PDFParams.createDefault().withTagged(new TaggedParams("ja", false)));
+				PDFParams.createDefault().withTagged(new TaggedParams("ja", 0)));
 		final var packed = generate("objstm_on.pdf",
-				PDFParams.createDefault().withTagged(new TaggedParams("ja", false)).withObjectStreams(true));
+				PDFParams.createDefault().withTagged(new TaggedParams("ja", 0)).withObjectStreams(true));
 
 		final var raw = new String(Files.readAllBytes(packed.toPath()), StandardCharsets.ISO_8859_1);
 		assertTrue(raw.contains("/ObjStm"), "Structure elements must be packed into object streams");
@@ -103,7 +103,7 @@ public class ObjectStreamTest {
 	public void testPdfA2aWithObjectStreamsIsCompliant() throws Exception {
 		final var file = generate("objstm_pdfa2a.pdf",
 				PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFA2A)
-						.withTagged(new TaggedParams("ja", false)).withObjectStreams(true));
+						.withTagged(new TaggedParams("ja", 0)).withObjectStreams(true));
 		try (final var parser = Foundries.defaultInstance().createParser(new FileInputStream(file),
 				PDFAFlavour.PDFA_2_A);
 				final var validator = Foundries.defaultInstance().createValidator(PDFAFlavour.PDFA_2_A, false)) {

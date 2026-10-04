@@ -143,7 +143,7 @@ public class PDFGCBlurTest {
 
 	@Test
 	public void testBlurIsOneArtifactImageWithSoftMask() throws Exception {
-		final var params = uncompressed().withTagged(new TaggedParams("ja", false));
+		final var params = uncompressed().withTagged(new TaggedParams("ja", 0));
 		final var rendered = render(params, gc -> {
 			assertTrue(gc.supports(GC.Capability.GAUSSIAN_BLUR));
 			assertTrue(gc.supports(GC.Capability.CONIC_GRADIENT));

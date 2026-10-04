@@ -83,7 +83,7 @@ public class DeferredFormTest {
 	 */
 	@Test
 	public void testTaggedLikeText() throws Exception {
-		final var params = uncompressed().withTagged(new TaggedParams("ja", false));
+		final var params = uncompressed().withTagged(new TaggedParams("ja", 0));
 		final var pdf = render(params, gc -> {
 			gc.fill(new Rectangle2D.Double(0, 0, 30, 10));
 			return null;

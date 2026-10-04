@@ -30,12 +30,4 @@ public record LangSys(int[] featureIndex) {
 		return new LangSys(featureIndex);
 	}
 
-	protected boolean isFeatureIndexed(final int n) {
-		for (final int index : this.featureIndex) {
-			if (index == n) {
-				return true;
-			}
-		}
-		return false;
-	}
 }

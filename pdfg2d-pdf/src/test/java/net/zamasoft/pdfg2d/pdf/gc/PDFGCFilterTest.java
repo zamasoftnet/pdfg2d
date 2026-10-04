@@ -95,7 +95,7 @@ public class PDFGCFilterTest {
 				.2126f, .7152f, .0722f, 0, 0,
 				.2126f, .7152f, .0722f, 0, 0,
 				0, 0, 0, 1, 0 };
-		final var rendered = render(uncompressed().withTagged(new TaggedParams("ja", false)), gc -> {
+		final var rendered = render(uncompressed().withTagged(new TaggedParams("ja", 0)), gc -> {
 			assertTrue(gc.supports(GC.Capability.GROUP_FILTER));
 			assertTrue(gc.rasterizesGroupEffects());
 			return gc.drawGroupEffects(capturedRect(gc, GROUP_SIZE, GROUP_SIZE),

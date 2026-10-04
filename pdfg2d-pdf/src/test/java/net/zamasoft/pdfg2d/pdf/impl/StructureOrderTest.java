@@ -50,7 +50,7 @@ public class StructureOrderTest {
 				.withCompression(PDFParams.Compression.NONE)
 				.withFileId(new byte[16])
 				.withMetaInfo(meta)
-				.withTagged(pdfUa ? TaggedParams.pdfua("en") : new TaggedParams("en", false));
+				.withTagged(pdfUa ? TaggedParams.pdfua("en") : new TaggedParams("en", 0));
 	}
 
 	private static Rendered render() throws Exception {

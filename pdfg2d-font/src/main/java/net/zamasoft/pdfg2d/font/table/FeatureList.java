@@ -44,21 +44,6 @@ public record FeatureList(FeatureRecord[] featureRecords, Feature[] features) {
 		}
 	}
 
-	public Feature findFeature(final LangSys langSys, final String tag) {
-		if (tag.length() != 4) {
-			return null;
-		}
-		final int tagVal = ((tag.charAt(0) << 24) | (tag.charAt(1) << 16) | (tag.charAt(2) << 8) | tag.charAt(3));
-		for (int i = 0; i < this.featureRecords.length; i++) {
-			if (this.featureRecords[i].tag() == tagVal) {
-				if (langSys.isFeatureIndexed(i)) {
-					return this.features[i];
-				}
-			}
-		}
-		return null;
-	}
-
 	@Override
 	public String toString() {
 		final var sb = new StringBuilder();

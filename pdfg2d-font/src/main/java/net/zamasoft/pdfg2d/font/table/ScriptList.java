@@ -52,19 +52,6 @@ public record ScriptList(ScriptRecord[] scriptRecords, Script[] scripts) {
 		return this.scriptRecords[i];
 	}
 
-	public Script findScript(final String tag) {
-		if (tag.length() != 4) {
-			return null;
-		}
-		final int tagVal = ((tag.charAt(0) << 24) | (tag.charAt(1) << 16) | (tag.charAt(2) << 8) | tag.charAt(3));
-		for (int i = 0; i < this.scriptRecords.length; i++) {
-			if (this.scriptRecords[i].tag() == tagVal) {
-				return this.scripts[i];
-			}
-		}
-		return null;
-	}
-
 	@Override
 	public String toString() {
 		final var sb = new StringBuilder();

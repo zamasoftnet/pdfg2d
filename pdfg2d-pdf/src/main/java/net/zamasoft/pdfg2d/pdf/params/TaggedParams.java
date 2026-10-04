@@ -40,16 +40,6 @@ public record TaggedParams(String lang, int pdfuaPart) {
 	}
 
 	/**
-	 * Compatibility form of the pre-part boolean constructor.
-	 *
-	 * @param lang  the document language, or {@code null}
-	 * @param pdfua whether to declare PDF/UA-1
-	 */
-	public TaggedParams(final String lang, final boolean pdfua) {
-		this(lang, pdfua ? 1 : 0);
-	}
-
-	/**
 	 * Returns whether any PDF/UA part is declared.
 	 *
 	 * @return {@code true} when {@link #pdfuaPart()} is non-zero
