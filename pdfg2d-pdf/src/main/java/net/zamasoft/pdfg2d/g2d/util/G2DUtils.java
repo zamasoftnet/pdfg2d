@@ -417,6 +417,15 @@ public final class G2DUtils {
 	 * the fallback decoder would learn the size only after allocating it).
 	 * </p>
 	 *
+	 * <p>
+	 * The input stream and the reader are left as they were found: the stream at
+	 * its position and the reader with a fresh input. A reader that has read the
+	 * header remembers it; the JDK PNG reader then skipped the header again after
+	 * a caller rewound the stream, read the signature as a chunk and failed, so
+	 * every PNG without alpha was refused as unreadable once a limit was set
+	 * (2026-10-04).
+	 * </p>
+	 *
 	 * @param reader ImageReader with its input set
 	 * @param limit  maximum width x height; negative means no limit
 	 * @throws ImageTooLargeException if the image is larger than the limit
@@ -424,6 +433,16 @@ public final class G2DUtils {
 	public static void checkPixelLimit(final ImageReader reader, final long limit) throws ImageTooLargeException {
 		if (limit < 0) {
 			return;
+		}
+		final javax.imageio.stream.ImageInputStream input = reader
+				.getInput() instanceof final javax.imageio.stream.ImageInputStream in ? in : null;
+		long start = -1;
+		if (input != null) {
+			try {
+				start = input.getStreamPosition();
+			} catch (final IOException e) {
+				// 戻せないだけ
+			}
 		}
 		long width, height;
 		try {
@@ -436,6 +455,15 @@ public final class G2DUtils {
 			}
 		} catch (final IOException | RuntimeException e) {
 			throw new ImageTooLargeException(-1, -1, limit, e);
+		} finally {
+			if (start >= 0) {
+				try {
+					input.seek(start);
+					reader.setInput(input, reader.isSeekForwardOnly(), reader.isIgnoringMetadata());
+				} catch (final IOException | IndexOutOfBoundsException e) {
+					// 戻せないだけ
+				}
+			}
 		}
 		if (width <= 0 || height <= 0) {
 			throw new ImageTooLargeException(-1, -1, limit, null);
