@@ -107,7 +107,8 @@ public class RecorderGC extends NoOpGC {
 
 	protected final List<Command> contents = new ArrayList<>();
 
-	private final boolean allCapabilities;
+	/** What {@link #supports(Capability)} answers while recording. */
+	private final java.util.function.Predicate<Capability> capabilities;
 
 	/** Union of visible recorded content in this recorder's local user space. */
 	private Rectangle2D contentBounds;
@@ -137,13 +138,26 @@ public class RecorderGC extends NoOpGC {
 	 * @param allCapabilities whether {@link #supports(Capability)} returns true
 	 */
 	public RecorderGC(final FontManager fm, final boolean allCapabilities) {
+		this(fm, allCapabilities ? capability -> true : capability -> false);
+	}
+
+	/**
+	 * Creates a recorder that answers {@link #supports(Capability)} like the
+	 * backend the recording will be replayed onto, so that callers take the same
+	 * exact or approximate path as when drawing there directly. Groups created
+	 * while recording answer the same.
+	 *
+	 * @param fm           the font manager
+	 * @param capabilities what {@link #supports(Capability)} answers
+	 */
+	public RecorderGC(final FontManager fm, final java.util.function.Predicate<Capability> capabilities) {
 		super(fm);
-		this.allCapabilities = allCapabilities;
+		this.capabilities = capabilities;
 	}
 
 	@Override
 	public boolean supports(final Capability capability) {
-		return this.allCapabilities && capability != null;
+		return capability != null && this.capabilities.test(capability);
 	}
 
 	@Override
@@ -472,6 +486,15 @@ public class RecorderGC extends NoOpGC {
 		public void drawTo(final GC gc) throws GraphicsException {
 			this.page.drawTo(gc);
 		}
+
+		/**
+		 * Returns the recorded operations of this group.
+		 *
+		 * @return the recorded page
+		 */
+		public Page getPage() {
+			return this.page;
+		}
 	}
 
 	/**
@@ -501,7 +524,21 @@ public class RecorderGC extends NoOpGC {
 		 */
 		public RecorderGroupImageGC(final FontManager fm, final double width, final double height,
 				final boolean allCapabilities) {
-			super(fm, allCapabilities);
+			this(fm, width, height, allCapabilities ? capability -> true : capability -> false);
+		}
+
+		/**
+		 * Creates a recording group that answers {@link #supports(Capability)} with
+		 * the given predicate.
+		 *
+		 * @param fm           the font manager
+		 * @param width        the width
+		 * @param height       the height
+		 * @param capabilities what {@link #supports(Capability)} answers
+		 */
+		public RecorderGroupImageGC(final FontManager fm, final double width, final double height,
+				final java.util.function.Predicate<Capability> capabilities) {
+			super(fm, capabilities);
 			this.width = width;
 			this.height = height;
 		}
@@ -515,7 +552,7 @@ public class RecorderGC extends NoOpGC {
 
 	@Override
 	public GroupImageGC createGroupImage(final double width, final double height) throws GraphicsException {
-		return new RecorderGroupImageGC(this.getFontManager(), width, height, this.allCapabilities);
+		return new RecorderGroupImageGC(this.getFontManager(), width, height, this.capabilities);
 	}
 
 	/**
