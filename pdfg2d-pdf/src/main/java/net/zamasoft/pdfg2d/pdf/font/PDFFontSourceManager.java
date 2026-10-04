@@ -114,13 +114,14 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 			} else {
 				file = this.uriToFile.get(face.src.getURI());
 				if (file == null) {
-					byte[] buff = new byte[8192];
 					file = File.createTempFile("copper-font-face", ".font");
-					file.deleteOnExit();
+					// 登録するまでは自分で持ち、取得に失敗したら消す(2026-10-04 までは失敗すると close() の削除の
+					// 対象に入らず、deleteOnExit 頼みでプロセスが終わるまで残った)
 					try (InputStream in = face.src.getInputStream(); OutputStream out = new FileOutputStream(file)) {
-						for (int len = in.read(buff); len != -1; len = in.read(buff)) {
-							out.write(buff, 0, len);
-						}
+						in.transferTo(out);
+					} catch (final IOException | RuntimeException e) {
+						file.delete();
+						throw e;
 					}
 					this.uriToFile.put(face.src.getURI(), file);
 				}

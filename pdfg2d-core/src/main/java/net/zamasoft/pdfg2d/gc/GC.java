@@ -264,10 +264,6 @@ public interface GC {
 	}
 
 	/**
-	 * @return the current blend mode; {@code NORMAL} for backends that do not
-	 *         track it.
-	 */
-	/**
 	 * 出力先が厳密に描ける描画機能(2026-08-29)。
 	 *
 	 * <p>
@@ -326,6 +322,10 @@ public interface GC {
 		return false;
 	}
 
+	/**
+	 * @return the current blend mode; {@code NORMAL} for backends that do not
+	 *         track it.
+	 */
 	public default net.zamasoft.pdfg2d.gc.paint.BlendMode getBlendMode() {
 		return net.zamasoft.pdfg2d.gc.paint.BlendMode.NORMAL;
 	}

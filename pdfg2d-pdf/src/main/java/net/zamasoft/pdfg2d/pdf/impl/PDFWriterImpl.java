@@ -290,10 +290,6 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	private final boolean forceDisplayDocTitle;
 
 	/**
-	 * 出力開始前の妥当性検証です(2026-08-01)。ここで弾かれる組合せは
-	 * 1バイトも書かずにIllegalArgumentExceptionで失敗する。
-	 */
-	/**
 	 * PDF/Xの明示的な出力インテントを完全に検証します(fail closed)。出力
 	 * インテントは印刷条件を表すので、DestOutputProfileは解析できるCMYKの
 	 * 出力用(class prtr)プロファイルでなければなりません。foliojet4は
@@ -326,6 +322,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 	}
 
+	/**
+	 * 出力開始前の妥当性検証です(2026-08-01)。ここで弾かれる組合せは
+	 * 1バイトも書かずにIllegalArgumentExceptionで失敗する。
+	 */
 	private static void validate(final PDFParams params) {
 		final var pdfVersion = params.version();
 		// PDF/A-1 forbids JavaScript actions and PDF/X forbids actions
@@ -756,14 +756,6 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	/**
-	 * Loads a classpath resource bundled with this library (e.g. a built-in
-	 * ICC profile) into a byte array.
-	 *
-	 * @param name the resource name relative to this class
-	 * @return the resource contents
-	 * @throws IOException if the resource is missing or cannot be read
-	 */
-	/**
 	 * 同梱リソースのキャッシュ(2026-07-29)。
 	 *
 	 * <p>
@@ -783,6 +775,14 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	 */
 	private static final java.util.concurrent.ConcurrentMap<String, byte[]> RESOURCE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
 
+	/**
+	 * Loads a classpath resource bundled with this library (e.g. a built-in
+	 * ICC profile) into a byte array.
+	 *
+	 * @param name the resource name relative to this class
+	 * @return the resource contents
+	 * @throws IOException if the resource is missing or cannot be read
+	 */
 	static byte[] loadResource(final String name) throws IOException {
 		final byte[] cached = RESOURCE_CACHE.get(name);
 		if (cached != null) {
@@ -2043,7 +2043,12 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	public void close() throws IOException {
-		try {
+		// The output and the font manager are closed on every path, the output first. A failure while
+		// writing stays the primary exception and a failure while closing is added as suppressed (until
+		// 2026-10-04 the font manager was closed after the finally, so it was skipped when writing or
+		// closing the output failed, and a failing builder.close() hid the writing exception)
+		try (final java.io.Closeable fonts = this::closeFontManager;
+				final java.io.Closeable output = this.builder::close) {
 			this.paintDeferredForms();
 
 			// Meta Info
@@ -2295,9 +2300,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			}
 
 			this.mainFlow.close();
-		} finally {
-			this.builder.close();
 		}
+	}
+
+	private void closeFontManager() {
 		if (this.fontManager != null) {
 			this.fontManager.close();
 		}
