@@ -35,35 +35,11 @@ public record FontStyleImpl(
 		}
 	}
 
-	/** 言語別フォント選択導入前と同じ言語指定なしを使う互換コンストラクタ。 */
-	public FontStyleImpl(final FontFamilyList families, final double size, final Style style, final Weight weight,
-			final Direction direction, final FontPolicyList policy, final FontFeatureSet features,
-			final boolean synthesisWeight, final boolean synthesisStyle, final TextOrientation textOrientation,
-			final int widthClass) {
-		this(families, size, style, weight, direction, policy, features, synthesisWeight, synthesisStyle,
-				textOrientation, widthClass, null);
-	}
-
-	/** font-stretch導入前(2026-08-29)と同じ通常幅を使う互換コンストラクタ。 */
-	public FontStyleImpl(final FontFamilyList families, final double size, final Style style, final Weight weight,
-			final Direction direction, final FontPolicyList policy, final FontFeatureSet features,
-			final boolean synthesisWeight, final boolean synthesisStyle, final TextOrientation textOrientation) {
-		this(families, size, style, weight, direction, policy, features, synthesisWeight, synthesisStyle,
-				textOrientation, net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS);
-	}
-
-	/** text-orientation導入前と同じmixedを使う互換コンストラクタ。 */
-	public FontStyleImpl(final FontFamilyList families, final double size, final Style style, final Weight weight,
-			final Direction direction, final FontPolicyList policy, final FontFeatureSet features,
-			final boolean synthesisWeight, final boolean synthesisStyle) {
-		this(families, size, style, weight, direction, policy, features, synthesisWeight, synthesisStyle,
-				TextOrientation.MIXED);
-	}
-
 	/** Synthesis-permitting form (CSS font-synthesis initial value). */
 	public FontStyleImpl(final FontFamilyList families, final double size, final Style style, final Weight weight,
 			final Direction direction, final FontPolicyList policy, final FontFeatureSet features) {
-		this(families, size, style, weight, direction, policy, features, true, true);
+		this(families, size, style, weight, direction, policy, features, true, true, TextOrientation.MIXED,
+				net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS, null);
 	}
 
 	/** Feature-less form: every OpenType feature is left unspecified. */

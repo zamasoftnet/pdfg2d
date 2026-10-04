@@ -61,7 +61,7 @@ public class FontStretchSelectionTest {
 	private static FontStyle style(final int widthClass) {
 		return new FontStyleImpl(FontFamilyList.create(FAMILY), 12, FontStyle.Style.NORMAL, FontStyle.Weight.W_400,
 				FontStyle.Direction.LTR, EMBEDDED, FontFeatureSet.EMPTY, true, true,
-				FontStyle.TextOrientation.MIXED, widthClass);
+				FontStyle.TextOrientation.MIXED, widthClass, null);
 	}
 
 	@Test
@@ -104,17 +104,18 @@ public class FontStretchSelectionTest {
 		// 要求: condensed かつ 700。weightの一致が幅級より優先される
 		final FontStyle bold = new FontStyleImpl(FontFamilyList.create(FAMILY), 12, FontStyle.Style.NORMAL,
 				FontStyle.Weight.W_700, FontStyle.Direction.LTR, EMBEDDED, FontFeatureSet.EMPTY, true, true,
-				FontStyle.TextOrientation.MIXED, 3);
+				FontStyle.TextOrientation.MIXED, 3, null);
 		assertEquals(FontStyle.Weight.W_700, manager.lookup(bold)[0].getWeight());
 	}
 
 	@Test
 	public void styleKeyDistinguishesWidthClass() {
-		assertTrue(FontUtils.equals(style(3), style(3)));
-		assertTrue(!FontUtils.equals(style(3), style(5)));
-		assertTrue(FontUtils.hashCode(style(3)) != FontUtils.hashCode(style(5)));
+		// FontStyleImpl は record で、等価は幅級(と lang)を含む全成分で決まる(2026-10-04 まで別に FontUtils.equals を持っていた)
+		assertEquals(style(3), style(3));
+		assertTrue(!style(3).equals(style(5)));
+		assertTrue(style(3).hashCode() != style(5).hashCode());
 		assertEquals(5, new FontStyleImpl(FontFamilyList.create(FAMILY), 12, FontStyle.Style.NORMAL,
-				FontStyle.Weight.W_400, FontStyle.Direction.LTR, EMBEDDED).getWidthClass(), "互換コンストラクタは通常幅");
+				FontStyle.Weight.W_400, FontStyle.Direction.LTR, EMBEDDED).getWidthClass(), "幅級を渡さない形は通常幅");
 	}
 
 	@Test

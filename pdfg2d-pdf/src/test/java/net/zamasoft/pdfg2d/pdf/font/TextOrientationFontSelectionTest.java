@@ -40,7 +40,7 @@ public class TextOrientationFontSelectionTest {
 	private static FontStyle style(final String family, final FontStyle.TextOrientation orientation) {
 		return new FontStyleImpl(FontFamilyList.create(family), 12, FontStyle.Style.NORMAL, FontStyle.Weight.W_400,
 				FontStyle.Direction.TB, EMBEDDED, net.zamasoft.pdfg2d.gc.font.FontFeatureSet.EMPTY, true, true,
-				orientation);
+				orientation, net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS, null);
 	}
 
 	@Test

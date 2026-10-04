@@ -11,7 +11,6 @@ import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GC.TextMode;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
 
-import net.zamasoft.pdfg2d.gc.font.FontStyle;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Direction;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Style;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
@@ -46,40 +45,6 @@ public final class FontUtils {
 			buff.append(Character.toUpperCase(ch));
 		}
 		return buff.toString();
-	}
-
-	/**
-	 * Returns whether two font styles are equal.
-	 *
-	 * @param a the first font style
-	 * @param b the second font style
-	 * @return {@code true} if the two font styles are equal
-	 */
-	public static boolean equals(final FontStyle a, final FontStyle b) {
-		return a.getFamily().equals(b.getFamily()) && a.getSize() == b.getSize() && a.getStyle() == b.getStyle()
-				&& a.getWeight() == b.getWeight() && a.getDirection() == b.getDirection()
-				&& a.getTextOrientation() == b.getTextOrientation() && a.getWidthClass() == b.getWidthClass()
-				&& a.getPolicy().equals(b.getPolicy()) && a.getFeatures().equals(b.getFeatures());
-	}
-
-	/**
-	 * Returns a hash code for the specified font style.
-	 *
-	 * @param fontStyle the font style
-	 * @return the hash code
-	 */
-	public static int hashCode(final FontStyle fontStyle) {
-		int h = fontStyle.getFamily().hashCode();
-		final var a = Double.doubleToLongBits(fontStyle.getSize());
-		h = 31 * h + (int) (a ^ (a >>> 32));
-		h = 31 * h + fontStyle.getStyle().ordinal();
-		h = 31 * h + fontStyle.getWeight().w;
-		h = 31 * h + fontStyle.getDirection().ordinal();
-		h = 31 * h + fontStyle.getTextOrientation().ordinal();
-		h = 31 * h + fontStyle.getWidthClass();
-		h = 31 * h + fontStyle.getPolicy().hashCode();
-		h = 31 * h + fontStyle.getFeatures().hashCode();
-		return h;
 	}
 
 	/**
