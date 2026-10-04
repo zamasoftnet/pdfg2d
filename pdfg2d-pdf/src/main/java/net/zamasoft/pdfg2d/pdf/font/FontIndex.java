@@ -64,8 +64,10 @@ public final class FontIndex {
 	 * 書体選択)。レコードにwidthClassの1バイトを追加した。
 	 * 4: name ID 6のASCII PostScript名優先を反映するため、旧索引に
 	 * 保存されたローカライズ名を破棄する(2026-09-01)。
+	 * 5: 可変フォントの太さの写し(wght を固定した座標)を記録(2026-10-04)。
+	 * レコードに wght の 2 バイト(0 は固定なし)を追加した。
 	 */
-	private static final int VERSION = 4;
+	private static final int VERSION = 5;
 
 	private static final int SUBTYPE_EMBEDDED = 0;
 	private static final int SUBTYPE_CID_IDENTITY = 1;
@@ -105,11 +107,13 @@ public final class FontIndex {
 		final short ascent, descent, spaceAdvance;
 		final GenericCmapFormat cmap;
 		final UvsCmapFormat uvsCmap;
+		/** 可変フォントの wght を固定した写しならその座標、そうでなければ 0(2026-10-04)。 */
+		final int wght;
 
 		SourceRecord(final int subtype, final Direction direction, final int ttcIndex, final String fontName,
 				final String[] aliases, final boolean italic, final Weight weight, final int widthClass,
 				final Panose panose, final short upm, final BBox bbox, final short ascent, final short descent,
-				final short spaceAdvance, final GenericCmapFormat cmap, final UvsCmapFormat uvsCmap) {
+				final short spaceAdvance, final GenericCmapFormat cmap, final UvsCmapFormat uvsCmap, final int wght) {
 			this.subtype = subtype;
 			this.direction = direction;
 			this.ttcIndex = ttcIndex;
@@ -126,6 +130,7 @@ public final class FontIndex {
 			this.spaceAdvance = spaceAdvance;
 			this.cmap = cmap;
 			this.uvsCmap = uvsCmap;
+			this.wght = wght;
 		}
 	}
 
@@ -237,8 +242,9 @@ public final class FontIndex {
 		final GenericCmapFormat cmap = cmapPool[in.readUnsignedShort()];
 		final int uvsIndex = in.readShort();
 		final UvsCmapFormat uvsCmap = uvsIndex < 0 ? null : uvsPool[uvsIndex];
+		final int wght = in.readUnsignedShort();
 		return new SourceRecord(subtype, direction, ttcIndex, fontName, aliases, italic, weight, widthClass, panose,
-				upm, bbox, ascent, descent, spaceAdvance, cmap, uvsCmap);
+				upm, bbox, ascent, descent, spaceAdvance, cmap, uvsCmap, wght);
 	}
 
 	/**
@@ -268,6 +274,9 @@ public final class FontIndex {
 			};
 			// 幅級は復元コンストラクタの引数を増やさずsetterで戻す(2026-08-29)
 			source.setWidthClass(r.widthClass);
+			if (r.wght != 0) {
+				source.setVariation(Map.of("wght", (double) r.wght));
+			}
 			sources.add(source);
 		}
 		return sources;
@@ -300,11 +309,21 @@ public final class FontIndex {
 				// 再構築に必要なメタデータが欠けるファイルは索引しない
 				return;
 			}
+			final Map<String, Double> variation = ot.getVariation();
+			int wght = 0;
+			if (variation != null) {
+				final Double w = variation.get("wght");
+				if (variation.size() != 1 || w == null || w < 1 || w > 1000 || w != Math.rint(w)) {
+					// 索引は wght の整数座標だけを再生できる
+					return;
+				}
+				wght = w.intValue();
+			}
 			records.add(new SourceRecord(subtype, ot.getDirection(), ot.getIndex(), ot.getFontName(),
 					ot.getAliases(), ot.isItalic(), ot.getWeight(), ot.getWidthClass(), ot.getPanose(),
 					ot.getUnitsPerEm(), ot.getBBox(),
 					ot.getAscent(), ot.getDescent(), ot.getSpaceAdvance(), ot.getCmapFormat(),
-					ot.getUvsCmapFormat()));
+					ot.getUvsCmapFormat(), wght));
 		}
 		this.pathToEntry.put(fontFile.getPath(),
 				new FileEntry(fontFile.length(), fontFile.lastModified(), scanKey, numFonts, records));
@@ -447,5 +466,6 @@ public final class FontIndex {
 		out.writeShort(r.spaceAdvance);
 		out.writeShort(cmapPoolIndex);
 		out.writeShort(uvsPoolIndex);
+		out.writeShort(r.wght);
 	}
 }

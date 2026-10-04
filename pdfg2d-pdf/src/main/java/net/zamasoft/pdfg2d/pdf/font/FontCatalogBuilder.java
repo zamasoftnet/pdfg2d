@@ -235,6 +235,9 @@ final class FontCatalogBuilder {
 									true);
 						}
 					}
+					if (numFonts == 1) {
+						FontLoader.addWeightInstances(list, ttfFile);
+					}
 					if (this.fontIndex != null) {
 						this.fontIndex.put(ttfFile, scanKey, numFonts, list);
 					}

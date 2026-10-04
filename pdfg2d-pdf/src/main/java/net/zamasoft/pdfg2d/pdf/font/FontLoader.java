@@ -20,6 +20,7 @@ import net.zamasoft.pdfg2d.font.table.Table;
 import net.zamasoft.pdfg2d.font.AbstractFontSource;
 import net.zamasoft.pdfg2d.font.BBox;
 import net.zamasoft.pdfg2d.font.FontSource;
+import net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource;
 import net.zamasoft.pdfg2d.gc.font.FontFace;
 import net.zamasoft.pdfg2d.gc.font.FontFamily;
 import net.zamasoft.pdfg2d.gc.font.FontFamilyList;
@@ -473,6 +474,63 @@ public final class FontLoader {
 		}
 
 		return face;
+	}
+
+	/**
+	 * 可変フォント(wght 軸を持つ TrueType アウトライン)のファイルから読んだソース列に、CSS の
+	 * 太さ段階(100〜900、軸の範囲内)で wght を固定した写しを足します(2026-10-04)。
+	 *
+	 * <p>
+	 * {@code <font-dir>}の走査は既定の実体しか登録せず、Google Fonts 一式のように可変フォントしか
+	 * 配られていない書体では太字が選べなかった(@font-face 経路は 2026-08-20 から 9 段に展開済み)。
+	 * 写しは既定の実体の寸法・cmap を借り、静的フォントは使われたときに初めて作る
+	 * ({@link OpenTypeFontSource#setVariation})。既定の実体と同じ太さの段は足さない。
+	 * </p>
+	 *
+	 * @param list     1 ファイル(TTC でない)から読んだソース列。写しを末尾に足す
+	 * @param fontFile そのファイル
+	 */
+	static void addWeightInstances(final List<FontSource> list, final File fontFile) {
+		final double[] range;
+		try {
+			range = net.zamasoft.pdfg2d.font.VariableFontInstancer
+					.axisRange(new net.zamasoft.pdfg2d.font.FontFile(fontFile).getSfntFile(), "wght");
+		} catch (final Exception e) {
+			LOG.log(Level.FINE, "Not a variable font: " + fontFile, e);
+			return;
+		}
+		if (range == null) {
+			return;
+		}
+		final int count = list.size();
+		for (int w = 100; w <= 900; w += 100) {
+			if (w < range[0] || w > range[2]) {
+				continue;
+			}
+			final Weight weight = Weight.valueOf("W_" + w);
+			for (int i = 0; i < count; ++i) {
+				if (!(list.get(i) instanceof OpenTypeFontSource base) || base.getWeight() == weight) {
+					continue;
+				}
+				final OpenTypeFontSource copy;
+				if (base instanceof OpenTypeEmbeddedCIDFontSource) {
+					copy = new OpenTypeEmbeddedCIDFontSource(fontFile, base.getIndex(), base.getDirection(),
+							base.getUnitsPerEm(), base.getBBox(), base.getFontName(), base.getAliases(), base.isItalic(),
+							weight, base.getPanose(), base.getAscent(), base.getDescent(), base.getSpaceAdvance(),
+							base.getCmapFormat(), base.getUvsCmapFormat());
+				} else if (base instanceof OpenTypeCIDIdentityFontSource) {
+					copy = new OpenTypeCIDIdentityFontSource(fontFile, base.getIndex(), base.getDirection(),
+							base.getUnitsPerEm(), base.getBBox(), base.getFontName(), base.getAliases(), base.isItalic(),
+							weight, base.getPanose(), base.getAscent(), base.getDescent(), base.getSpaceAdvance(),
+							base.getCmapFormat(), base.getUvsCmapFormat());
+				} else {
+					continue;
+				}
+				copy.setWidthClass(base.getWidthClass());
+				copy.setVariation(Map.of("wght", (double) w));
+				list.add(copy);
+			}
+		}
 	}
 
 	public static void add(FontSource source, Map<String, Object> nameToFonts) {

@@ -73,9 +73,13 @@ public class OpenTypeEmbeddedCIDFontSource extends OpenTypeFontSource implements
 		return new OpenTypeEmbeddedCIDFont(this, name, fontRef, subset);
 	}
 
-	/** Returns the backing file used as part of the physical-font identity. */
+	/**
+	 * Returns the backing file used as part of the physical-font identity (the
+	 * static instance when the source pins a variable font).
+	 */
+	@Override
 	public File getFile() {
-		return this.file;
+		return super.getFile();
 	}
 
 	/**

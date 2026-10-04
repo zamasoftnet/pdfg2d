@@ -65,6 +65,28 @@ public final class VariableFontInstancer {
 	}
 
 	/**
+	 * 軸の範囲をユーザー座標で返します(2026-10-04)。
+	 *
+	 * @param sfnt 解凍済みの sfnt ファイル
+	 * @param tag 軸タグ(例: {@code "wght"})
+	 * @return {@code {min, default, max}}。インスタンス化できる可変フォントでないか、軸が無ければ null
+	 */
+	public static double[] axisRange(final File sfnt, final String tag) throws IOException {
+		final ByteBuffer bb = ByteBuffer.wrap(Files.readAllBytes(sfnt.toPath())).order(ByteOrder.BIG_ENDIAN);
+		final Map<String, int[]> tables = readDirectory(bb, 0);
+		final int[] fvar = tables.get("fvar");
+		if (fvar == null || !tables.containsKey("glyf")) {
+			return null;
+		}
+		for (final Axis a : readFvar(bb, fvar[0])) {
+			if (a.tag.equals(tag)) {
+				return new double[] { a.min, a.def, a.max };
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * 指定軸座標の静的インスタンスを生成して一時ファイルへ書き出します。
 	 *
 	 * @param sfnt 解凍済みの sfnt ファイル(TTC 不可、単一フォント)

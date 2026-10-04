@@ -320,7 +320,7 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	 * @return the font file
 	 */
 	public File getFile() {
-		return this.file;
+		return this.variation == null ? this.file : instanceFile(this.file, this.variation);
 	}
 
 	/**
@@ -329,7 +329,56 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	 * @return the OpenType font
 	 */
 	public OpenTypeFont getOpenTypeFont() {
-		return getOpenTypeFont(this.file, this.index);
+		return this.variation == null ? getOpenTypeFont(this.file, this.index)
+				: getOpenTypeFont(instanceFile(this.file, this.variation), 0);
+	}
+
+	/**
+	 * 可変フォントの軸を固定する座標です(2026-10-04)。null なら{@link #file}をそのまま使う。
+	 *
+	 * <p>
+	 * 書体ディレクトリの可変フォントは、既定の実体のほかに太さ(wght)を固定した写しを登録する。
+	 * 写しの寸法・cmap は既定の実体のものを借り、静的フォントは字を描く・幅を測るときに初めて作る
+	 * ({@link #instanceFile})。Google Fonts 一式のように可変フォントが数百あっても、起動時に
+	 * 実体化しない。
+	 * </p>
+	 */
+	private Map<String, Double> variation;
+
+	/** 実体化した静的フォントの一時ファイル(ファイルの鮮度+座標→ファイル)。 */
+	private static final Map<String, File> INSTANCES = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/**
+	 * 可変フォントの軸を固定します。単一フォント(TTC でない)のファイルに限ります。
+	 *
+	 * @param variation 軸タグ→ユーザー座標(例: {@code {"wght": 700}})、null で解除
+	 */
+	public void setVariation(final Map<String, Double> variation) {
+		this.variation = variation == null ? null : Map.copyOf(variation);
+	}
+
+	/**
+	 * 可変フォントの固定座標を返します。
+	 *
+	 * @return 軸タグ→ユーザー座標、固定していなければ null
+	 */
+	public Map<String, Double> getVariation() {
+		return this.variation;
+	}
+
+	private static File instanceFile(final File file, final Map<String, Double> variation) {
+		final String key = file.getPath() + '\u0000' + file.lastModified() + '\u0000'
+				+ new java.util.TreeMap<>(variation);
+		return INSTANCES.computeIfAbsent(key, k -> {
+			try {
+				return net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(new FontFile(file).getSfntFile(),
+						variation);
+			} catch (final Exception e) {
+				// 作れなければ既定の実体で組む(太さは合わないが字は出る)
+				LOG.log(Level.WARNING, "variable font instantiation failed; using default instance: " + file, e);
+				return file;
+			}
+		});
 	}
 
 	/**
