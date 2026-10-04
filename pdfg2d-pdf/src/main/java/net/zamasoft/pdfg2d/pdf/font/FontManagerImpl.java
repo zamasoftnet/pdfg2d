@@ -74,6 +74,33 @@ public class FontManagerImpl implements FontManager, Closeable {
 	}
 
 	/**
+	 * 字形を持たない中核書体(Type 1 の AFM だけの書体)を候補の最後に回すか(2026-10-04)。
+	 */
+	private boolean coreFontsLast;
+
+	/**
+	 * 字形を持たない中核書体(Type 1 の AFM だけの書体)を、選んだ書体の候補の最後に回します。
+	 * <p>
+	 * ラスタ出力(PNG・JPEG)では中核書体を Java2D の書体で描くが、Times-Roman のような名前は
+	 * Java2D が知らず sans の既定(Dialog)で描かれ、それを AFM の送り幅で並べるので字形も字間も
+	 * 崩れた(既定の欧文が Times)。字形を持つ書体が候補にあればそちらで描き、無ければ従来どおり
+	 * 中核書体を使う(字が消えない)。PDF は中核書体を閲覧ソフトが描くので変えない。
+	 * </p>
+	 *
+	 * @param coreFontsLast 回すなら true
+	 */
+	public void setCoreFontsLast(final boolean coreFontsLast) {
+		if (this.coreFontsLast != coreFontsLast) {
+			this.coreFontsLast = coreFontsLast;
+			this.fontListMetricsCache.clear();
+		}
+	}
+
+	private static boolean isCoreFont(final FontSource source) {
+		return source instanceof final PDFFontSource pdf && pdf.getType() == PDFFontSource.Type.CORE;
+	}
+
+	/**
 	 * Closes this font manager and releases any resources held by the local font source manager.
 	 */
 	public void close() {
@@ -123,13 +150,27 @@ public class FontManagerImpl implements FontManager, Closeable {
 		FontMetrics[] fms = new FontMetrics[count];
 		int j = 0;
 
+		final java.util.List<FontSource> core = this.coreFontsLast ? new java.util.ArrayList<>() : null;
 		if (fonts1 != null) {
 			for (int i = 0; i < fonts1.length; ++i) {
+				if (core != null && isCoreFont(fonts1[i])) {
+					core.add(fonts1[i]);
+					continue;
+				}
 				fms[j++] = new FontMetricsImpl(this.fontStore, fonts1[i], fontStyle);
 			}
 		}
 		for (int i = 0; i < fonts2.length; ++i) {
+			if (core != null && isCoreFont(fonts2[i])) {
+				core.add(fonts2[i]);
+				continue;
+			}
 			fms[j++] = new FontMetricsImpl(this.fontStore, fonts2[i], fontStyle);
+		}
+		if (core != null) {
+			for (final FontSource source : core) {
+				fms[j++] = new FontMetricsImpl(this.fontStore, source, fontStyle);
+			}
 		}
 
 		if (fontStyle.getDirection() == Direction.TB
