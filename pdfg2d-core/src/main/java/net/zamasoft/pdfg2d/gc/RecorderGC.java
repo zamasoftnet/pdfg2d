@@ -423,7 +423,20 @@ public class RecorderGC extends NoOpGC {
 	}
 
 	private static Shape snapshot(final Shape shape) {
-		return shape == null ? null : new Path2D.Double(shape);
+		if (shape == null) {
+			return null;
+		}
+		// Keep the kind of shape (2026-10-04). Java2D fills an axis-aligned
+		// rectangle on its own path (crisp pixel edges); the same rectangle as a
+		// path is antialiased at fractional edges, so a replayed page differed
+		// from the page drawn directly
+		if (shape instanceof java.awt.geom.RectangularShape rectangular) {
+			return (Shape) rectangular.clone();
+		}
+		if (shape instanceof java.awt.geom.Line2D line) {
+			return (Shape) line.clone();
+		}
+		return new Path2D.Double(shape);
 	}
 
 	private static GroupEffects snapshot(final GroupEffects effects) {
@@ -440,6 +453,12 @@ public class RecorderGC extends NoOpGC {
 	public static class RecorderImage extends NoOpImage {
 		protected final Page page;
 		private final Rectangle2D contentBounds;
+
+		/**
+		 * The recorder's state when the group was created, or {@code null} when
+		 * unknown (see {@link Page#drawTo}).
+		 */
+		CreationState created;
 
 		/**
 		 * Creates a new RecorderImage.
@@ -503,6 +522,9 @@ public class RecorderGC extends NoOpGC {
 	public static class RecorderGroupImageGC extends RecorderGC implements GroupImageGC {
 		private final double width, height;
 
+		/** The parent's state when this group was created. */
+		CreationState created;
+
 		/**
 		 * Creates a new RecorderGroupImageGC.
 		 * 
@@ -546,13 +568,29 @@ public class RecorderGC extends NoOpGC {
 		@Override
 		public Image finish() throws GraphicsException {
 			final var page = this.getPage();
-			return new RecorderImage(this.width, this.height, page, this.contentBoundsSnapshot());
+			final RecorderImage image = new RecorderImage(this.width, this.height, page,
+					this.contentBoundsSnapshot());
+			image.created = this.created;
+			return image;
 		}
+	}
+
+	/**
+	 * The transparency and blend state of the recorder when a group was created
+	 * (2026-10-04). Some backends (Java2D) start a group with the parent's
+	 * current state. Callers create a group first and set the opacity before
+	 * drawing it, but a replay creates the group just before drawing it, so it
+	 * restores this state around the creation.
+	 */
+	record CreationState(float fillAlpha, float strokeAlpha, net.zamasoft.pdfg2d.gc.paint.BlendMode blendMode) {
 	}
 
 	@Override
 	public GroupImageGC createGroupImage(final double width, final double height) throws GraphicsException {
-		return new RecorderGroupImageGC(this.getFontManager(), width, height, this.capabilities);
+		final RecorderGroupImageGC group = new RecorderGroupImageGC(this.getFontManager(), width, height,
+				this.capabilities);
+		group.created = new CreationState(this.getFillAlpha(), this.getStrokeAlpha(), this.blendMode);
+		return group;
 	}
 
 	/**
@@ -615,7 +653,30 @@ public class RecorderGC extends NoOpGC {
 			if (!(image instanceof RecorderImage recorded)) {
 				return image;
 			}
-			final GroupImageGC group = gc.createGroupImage(recorded.getWidth(), recorded.getHeight());
+			// Create the group under the state it was created under when recorded.
+			// The replay reaches this point after the opacity of the group was set
+			// (a Java2D group would take it over and the opacity would apply twice)
+			final CreationState created = recorded.created;
+			final float fillAlpha = gc.getFillAlpha();
+			final float strokeAlpha = gc.getStrokeAlpha();
+			final net.zamasoft.pdfg2d.gc.paint.BlendMode blendMode = gc.getBlendMode();
+			final boolean swap = created != null && (created.fillAlpha() != fillAlpha
+					|| created.strokeAlpha() != strokeAlpha || created.blendMode() != blendMode);
+			final GroupImageGC group;
+			if (swap) {
+				gc.setFillAlpha(created.fillAlpha());
+				gc.setStrokeAlpha(created.strokeAlpha());
+				gc.setBlendMode(created.blendMode());
+				try {
+					group = gc.createGroupImage(recorded.getWidth(), recorded.getHeight());
+				} finally {
+					gc.setFillAlpha(fillAlpha);
+					gc.setStrokeAlpha(strokeAlpha);
+					gc.setBlendMode(blendMode);
+				}
+			} else {
+				group = gc.createGroupImage(recorded.getWidth(), recorded.getHeight());
+			}
 			recorded.page.drawTo(group);
 			return group.finish();
 		}
