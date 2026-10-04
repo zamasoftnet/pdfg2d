@@ -66,14 +66,16 @@ class Type1Font implements PDFFont {
 	}
 
 	/**
-	 * Returns the kerning adjustment between two glyphs.
+	 * Returns the kerning adjustment between two glyphs. As for the other fonts,
+	 * a positive value narrows the pair (2026-10-04: the AFM value, negative
+	 * to narrow, was returned as it is, so layout widened every kerned pair).
 	 *
 	 * @param scid the glyph ID of the first (source) glyph
 	 * @param cid  the glyph ID of the second glyph
-	 * @return the kerning value in design units
+	 * @return the kerning value in design units, positive to narrow
 	 */
 	public short getKerning(int scid, int cid) {
-		return this.source.getKerning(scid, cid);
+		return (short) -this.source.getKerning(scid, cid);
 	}
 
 	/**
@@ -134,13 +136,17 @@ class Type1Font implements PDFFont {
 			int glyphCount = text.getGlyphCount();
 			int[] glyphIds = text.getGlyphIds();
 			final net.zamasoft.pdfg2d.gc.text.GlyphAdvances xadvances = text.xAdvances();
-			double size = text.getFontMetrics().getFontSize();
+			final net.zamasoft.pdfg2d.gc.font.FontMetrics fm = text.getFontMetrics();
+			double size = fm.getFontSize();
 			out.startArray();
 			int pgid = 0;
 			StringBuilder buff = new StringBuilder();
 			for (int j = 0; j < glyphCount; ++j) {
 				int gid = glyphIds[j];
-				short kerning = this.source.getKerning(gid, pgid);
+				// 組版と同じ値(前の字と今の字の組、正なら詰める)で描く。2026-10-04 までは今の字と前の字の
+				// 組(逆の組: 「To」が詰まらず「oT」が詰まる)を引き、font-feature-settings の kern 0 も効かなかった
+				short kerning = j == 0 ? 0
+						: (short) -Math.round(fm.getKerning(pgid, gid) * FontSource.DEFAULT_UNITS_PER_EM / size);
 				if (xadvances != null) {
 					if (j == 0) {
 						double xadvance = xadvances.get(j);

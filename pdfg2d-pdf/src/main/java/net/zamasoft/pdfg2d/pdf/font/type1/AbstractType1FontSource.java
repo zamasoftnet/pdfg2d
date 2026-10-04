@@ -80,12 +80,13 @@ public abstract class AbstractType1FontSource extends AbstractFontSource impleme
 		return gi.advance;
 	}
 
-	short getKerning(int gid, int pgid) {
-		if (!this.canDisplayGID(gid)) {
+	/** AFM の KPX の値(負なら詰める)です。first の後ろに second が続く組。 */
+	short getKerning(int first, int second) {
+		if (!this.canDisplayGID(first)) {
 			return 0;
 		}
-		GlyphInfo gi = this.getGidToGi()[gid];
-		return gi.getKerning(pgid);
+		GlyphInfo gi = this.getGidToGi()[first];
+		return gi.getKerning(second);
 	}
 
 	int getLigature(int gid, int cid) {
