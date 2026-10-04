@@ -250,15 +250,14 @@ class EmojiFont implements ImageFont {
 				final GVTBuilder gvt = new PDFGVTBuilder();
 				final var gvtRoot = gvt.build(ctx, doc);
 
-				// Cache strategy depends on output type and PDF version
+				// PDF 1.4 and later also cache the drawing as a group image. The GVT node itself is
+				// cached by the caller's computeIfAbsent; putting it here as well changed the map
+				// inside the mapping function, which HashMap rejects (ConcurrentModificationException
+				// on the first emoji drawn to images, SVG or PDF 1.3; 2026-10-04)
 				if (gc instanceof final PDFGC pdfGc
 						&& pdfGc.getPDFGraphicsOutput().getPdfWriter().getParams()
 								.version().v >= PDFParams.Version.V_1_4.v) {
-					// Create cached PDF group image for better performance
 					this.cacheAsPdfGroupImage(pdfGc, gid, gvtRoot);
-				} else {
-					// Cache raw GVT node for non-PDF or older PDF versions
-					this.gidToNode.put(gid, gvtRoot);
 				}
 				return gvtRoot;
 			}

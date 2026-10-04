@@ -1309,15 +1309,19 @@ public class PDFGC implements GC, Closeable {
 		}
 		try {
 			this.applyStates();
+			// An empty rectangle paints nothing. Return before the artifact mark is opened: returning
+			// after it left /Artifact BMC unclosed on tagged pages, and every later text and image on
+			// the page lost its marked content (2026-10-04)
+			if (shape instanceof Rectangle2D r
+					&& (this.out.equals(r.getWidth(), 0.0) || this.out.equals(r.getHeight(), 0.0))) {
+				return;
+			}
 			// Plain vector paths default to artifacts (typically decoration
 			// such as backgrounds and rules); real content is marked by
 			// drawText/drawImage.
 			final var marked = this.beginArtifactTagged();
 			final int winding;
 			if (shape instanceof Rectangle2D r) {
-				if (this.out.equals(r.getWidth(), 0.0) || this.out.equals(r.getHeight(), 0.0)) {
-					return;
-				}
 				winding = PathIterator.WIND_NON_ZERO;
 				this.plotRect(r);
 			} else {
@@ -1942,10 +1946,15 @@ public class PDFGC implements GC, Closeable {
 		final var out = this.out;
 		final var c = this.cord;
 
-		var sx = 0.0;
-		var sy = 0.0;
-		var px = 0.0;
-		var py = 0.0;
+		// The current point (the end of the last segment), the last point written (a line to it is
+		// dropped), and the start of the subpath, where "h" leaves the current point (2026-10-04:
+		// the close kept the last point, so a quad or a line straight after a close was off)
+		var curX = 0.0;
+		var curY = 0.0;
+		var writtenX = 0.0;
+		var writtenY = 0.0;
+		var startX = 0.0;
+		var startY = 0.0;
 		var first = true;
 
 		while (!i.isDone()) {
@@ -1954,32 +1963,30 @@ public class PDFGC implements GC, Closeable {
 				case PathIterator.SEG_LINETO -> {
 					final var x = c[0];
 					final var y = c[1];
-					if (first || !out.equals(x, px) || !out.equals(y, py)) {
+					if (first || !out.equals(x, writtenX) || !out.equals(y, writtenY)) {
 						out.writePosition(x, y);
 						out.writeOperator("l");
-						px = x;
-						py = y;
+						writtenX = x;
+						writtenY = y;
 					}
-					sx = x;
-					sy = y;
+					curX = x;
+					curY = y;
 					first = false;
 				}
 				case PathIterator.SEG_MOVETO -> {
-					sx = px = c[0];
-					sy = py = c[1];
-					out.writePosition(sx, sy);
+					startX = curX = writtenX = c[0];
+					startY = curY = writtenY = c[1];
+					out.writePosition(curX, curY);
 					out.writeOperator("m");
 					first = false;
 				}
 				case PathIterator.SEG_CUBICTO -> {
 					out.writePosition(c[0], c[1]);
 					out.writePosition(c[2], c[3]);
-					sx = c[4];
-					sy = c[5];
-					out.writePosition(sx, sy);
+					curX = writtenX = c[4];
+					curY = writtenY = c[5];
+					out.writePosition(curX, curY);
 					out.writeOperator("c");
-					px = sx;
-					py = sy;
 					first = false;
 				}
 				case PathIterator.SEG_QUADTO -> {
@@ -1987,14 +1994,12 @@ public class PDFGC implements GC, Closeable {
 					final var cy = c[1];
 					final var ex = c[2];
 					final var ey = c[3];
-					out.writePosition(sx * ONE_THIRD + cx * TWO_THIRD, sy * ONE_THIRD + cy * TWO_THIRD);
+					out.writePosition(curX * ONE_THIRD + cx * TWO_THIRD, curY * ONE_THIRD + cy * TWO_THIRD);
 					out.writePosition(ex * ONE_THIRD + cx * TWO_THIRD, ey * ONE_THIRD + cy * TWO_THIRD);
-					sx = ex;
-					sy = ey;
-					out.writePosition(sx, sy);
+					curX = writtenX = ex;
+					curY = writtenY = ey;
+					out.writePosition(curX, curY);
 					out.writeOperator("c");
-					px = sx;
-					py = sy;
 					first = false;
 				}
 				case PathIterator.SEG_CLOSE -> {
@@ -2003,8 +2008,8 @@ public class PDFGC implements GC, Closeable {
 						return true;
 					}
 					out.writeOperator("h");
-					px = sx;
-					py = sy;
+					curX = writtenX = startX;
+					curY = writtenY = startY;
 					continue;
 				}
 				default -> throw new IllegalStateException("Unknown segment type: " + type);
