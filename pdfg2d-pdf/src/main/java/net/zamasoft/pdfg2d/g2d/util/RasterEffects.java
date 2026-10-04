@@ -3,6 +3,7 @@ package net.zamasoft.pdfg2d.g2d.util;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
+import net.zamasoft.pdfg2d.util.ColorUtils;
 
 /**
  * 層(ARGB ラスタ)に掛ける画素効果(2026-08-29)。ガウスぼかし・色行列・落とし影。
@@ -175,15 +176,11 @@ public final class RasterEffects {
 		final float[] a = p[0], r = p[1], g = p[2], b = p[3];
 		for (int i = 0; i < a.length; ++i) {
 			final float ri = r[i], gi = g[i], bi = b[i], ai = a[i];
-			r[i] = clamp(m[0] * ri + m[1] * gi + m[2] * bi + m[3] * ai + m[4]);
-			g[i] = clamp(m[5] * ri + m[6] * gi + m[7] * bi + m[8] * ai + m[9]);
-			b[i] = clamp(m[10] * ri + m[11] * gi + m[12] * bi + m[13] * ai + m[14]);
-			a[i] = clamp(m[15] * ri + m[16] * gi + m[17] * bi + m[18] * ai + m[19]);
+			r[i] = ColorUtils.clamp01(m[0] * ri + m[1] * gi + m[2] * bi + m[3] * ai + m[4]);
+			g[i] = ColorUtils.clamp01(m[5] * ri + m[6] * gi + m[7] * bi + m[8] * ai + m[9]);
+			b[i] = ColorUtils.clamp01(m[10] * ri + m[11] * gi + m[12] * bi + m[13] * ai + m[14]);
+			a[i] = ColorUtils.clamp01(m[15] * ri + m[16] * gi + m[17] * bi + m[18] * ai + m[19]);
 		}
-	}
-
-	private static float clamp(final float v) {
-		return v < 0f ? 0f : (v > 1f ? 1f : v);
 	}
 
 	/** 全面を係数倍する(不透明度)。乗算済みの面に使う。 */

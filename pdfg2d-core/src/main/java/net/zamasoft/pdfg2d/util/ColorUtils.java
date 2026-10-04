@@ -20,6 +20,28 @@ public final class ColorUtils {
 	}
 
 	/**
+	 * Converts a colour component in 0..1 to an octet in 0..255, rounding and clamping (one
+	 * definition for the filters, blend modes and SVG paints, 2026-10-04).
+	 *
+	 * @param v the component
+	 * @return the octet
+	 */
+	public static int toOctet(final float v) {
+		final int i = Math.round(v * 255f);
+		return i < 0 ? 0 : i > 255 ? 255 : i;
+	}
+
+	/**
+	 * Clamps a colour component or an alpha to 0..1.
+	 *
+	 * @param v the value
+	 * @return the clamped value
+	 */
+	public static float clamp01(final float v) {
+		return v < 0f ? 0f : v > 1f ? 1f : v;
+	}
+
+	/**
 	 * Converts the given color to a grayscale color.
 	 * 
 	 * @param color the color to simple convert

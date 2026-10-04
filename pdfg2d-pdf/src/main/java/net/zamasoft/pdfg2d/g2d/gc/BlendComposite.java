@@ -9,6 +9,7 @@ import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 
 import net.zamasoft.pdfg2d.gc.paint.BlendMode;
+import net.zamasoft.pdfg2d.util.ColorUtils;
 
 /**
  * Java2D 用のブレンド合成(PDF 1.7 §11.3.5 / CSS Compositing Level 1、2026-08-29)。
@@ -137,14 +138,9 @@ public final class BlendComposite implements Composite {
 		for (int i = 0; i < 3; ++i) {
 			// PDF 11.3.8: Cr = (1 - as/ar)·Cb + (as/ar)·((1 - ab)·Cs + ab·B(Cb, Cs))
 			final float c = (1f - as / ar) * cb[i] + (as / ar) * ((1f - ab) * cs[i] + ab * cr[i]);
-			out |= clamp8(c) << (16 - 8 * i);
+			out |= ColorUtils.toOctet(c) << (16 - 8 * i);
 		}
 		return out;
-	}
-
-	private static int clamp8(final float v) {
-		final int i = Math.round(v * 255f);
-		return i < 0 ? 0 : (i > 255 ? 255 : i);
 	}
 
 	/**
