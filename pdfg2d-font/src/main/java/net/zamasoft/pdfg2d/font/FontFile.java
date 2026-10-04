@@ -29,7 +29,7 @@ import net.zamasoft.pdfg2d.font.util.BufferedRandomAccessFile;
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
-public class FontFile {
+public class FontFile implements AutoCloseable {
 
 	/** The last-modified timestamp of the source file at construction time. */
 	public final long timestamp;
@@ -299,5 +299,26 @@ public class FontFile {
 	 */
 	public OpenTypeFont getFont() throws IOException {
 		return this.getFont(0);
+	}
+
+	/**
+	 * 開いた書体を閉じ、WOFF/WOFF2 を解凍した一時ファイルを消します(2026-10-05)。生の TTF/TTC は消さない。
+	 *
+	 * <p>
+	 * {@link #getSfntFile()} だけを使う呼び出し(可変フォントの判定・写しの生成)は、これで閉じないと解凍結果の
+	 * 持ち主がいない——書体を開いていなければ {@link OpenTypeFont} の後始末も走らず、常駐するサーバーでは
+	 * プロセスが終わるまで残った。閉じた後は使わないこと。
+	 * </p>
+	 */
+	@Override
+	public synchronized void close() {
+		for (final OpenTypeFont font : this.fonts) {
+			if (font != null) {
+				font.close();
+			}
+		}
+		if (this.woff) {
+			this.file.delete();
+		}
 	}
 }

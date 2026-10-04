@@ -492,9 +492,8 @@ public final class FontLoader {
 	 */
 	static void addWeightInstances(final List<FontSource> list, final File fontFile) {
 		final double[] range;
-		try {
-			range = net.zamasoft.pdfg2d.font.VariableFontInstancer
-					.axisRange(new net.zamasoft.pdfg2d.font.FontFile(fontFile).getSfntFile(), "wght");
+		try (final net.zamasoft.pdfg2d.font.FontFile probe = new net.zamasoft.pdfg2d.font.FontFile(fontFile)) {
+			range = net.zamasoft.pdfg2d.font.VariableFontInstancer.axisRange(probe.getSfntFile(), "wght");
 		} catch (final Exception e) {
 			LOG.log(Level.FINE, "Not a variable font: " + fontFile, e);
 			return;

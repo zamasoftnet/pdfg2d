@@ -75,8 +75,9 @@ public class EmojiFontSource extends AbstractFontSource {
 				// disabled.");
 			}
 		} catch (final Exception e) {
-			e.printStackTrace();
-			// Continue with empty maps
+			// Continue with empty maps: emoji fall back to the text fonts
+			java.util.logging.Logger.getLogger(EmojiFontSource.class.getName()).log(java.util.logging.Level.WARNING,
+					"Cannot read the emoji index", e);
 		}
 
 		codeToGid = Collections.unmodifiableMap(ctog);
@@ -240,14 +241,19 @@ public class EmojiFontSource extends AbstractFontSource {
 	public static synchronized java.io.InputStream getEmojiStream(final String name) throws java.io.IOException {
 		if (emojiZip == null) {
 			final java.io.File tempFile = java.io.File.createTempFile("emoji", ".zip");
-			tempFile.deleteOnExit();
 			try (final var is = EmojiFontSource.class.getResourceAsStream("emoji.zip")) {
 				if (is == null) {
 					throw new java.io.FileNotFoundException("emoji.zip not found in classpath");
 				}
 				java.nio.file.Files.copy(is, tempFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+				emojiZip = new java.util.zip.ZipFile(tempFile);
+			} catch (final java.io.IOException | RuntimeException e) {
+				// 次の呼び出しが作り直すので、作りかけは残さない(2026-10-05 までは失敗のたびに 1 本残った)
+				tempFile.delete();
+				throw e;
 			}
-			emojiZip = new java.util.zip.ZipFile(tempFile);
+			// 展開した 1 本はプロセスの間使い回す
+			tempFile.deleteOnExit();
 			Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 				try {
 					emojiZip.close();

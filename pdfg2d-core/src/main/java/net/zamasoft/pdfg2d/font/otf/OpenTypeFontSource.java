@@ -370,9 +370,12 @@ public class OpenTypeFontSource extends AbstractFontSource {
 		final String key = file.getPath() + '\u0000' + file.lastModified() + '\u0000'
 				+ new java.util.TreeMap<>(variation);
 		return INSTANCES.computeIfAbsent(key, k -> {
-			try {
-				return net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(new FontFile(file).getSfntFile(),
-						variation);
+			try (final FontFile fontFile = new FontFile(file)) {
+				// 書体ディレクトリの書体の写しはプロセスの間使い回すので、消すのは終わるとき
+				final File instance = net.zamasoft.pdfg2d.font.VariableFontInstancer
+						.instantiate(fontFile.getSfntFile(), variation);
+				instance.deleteOnExit();
+				return instance;
 			} catch (final Exception e) {
 				// 作れなければ既定の実体で組む(太さは合わないが字は出る)
 				LOG.log(Level.WARNING, "variable font instantiation failed; using default instance: " + file, e);
@@ -416,10 +419,32 @@ public class OpenTypeFontSource extends AbstractFontSource {
 						fontFile = loadedFontFile;
 					}
 				}
+				if (fontFile != loadedFontFile) {
+					// 並行ロードに負けた側は解凍した一時ファイルごと捨てる
+					loadedFontFile.close();
+				}
 			}
 			return fontFile.getFont(index);
 		} catch (final Exception e) {
 			throw new RuntimeException(e);
+		}
+	}
+
+	/**
+	 * {@code file} から開いた書体をキャッシュから外して閉じます(2026-10-05)。文書ごとに作った書体ファイル
+	 * ({@code @font-face} の取得結果・可変フォントの写し)の持ち主が、消す前に呼ぶ。外さないと、キャッシュが
+	 * 解凍した一時ファイルを握ったまま、常駐するサーバーに溜まった。
+	 *
+	 * @param file 書体ファイル
+	 */
+	public static void release(final File file) {
+		final java.lang.ref.SoftReference<FontFile> ref;
+		synchronized (fileToFont) {
+			ref = fileToFont.remove(file.getPath());
+		}
+		final FontFile fontFile = ref == null ? null : ref.get();
+		if (fontFile != null) {
+			fontFile.close();
 		}
 	}
 

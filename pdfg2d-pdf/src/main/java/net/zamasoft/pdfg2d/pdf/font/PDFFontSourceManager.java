@@ -15,7 +15,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -58,6 +57,12 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 
 	protected Map<URI, File> uriToFile = new HashMap<URI, File>();
 
+	/**
+	 * {@code @font-face} のために作った可変フォントの写しです(2026-10-05)。{@link #uriToFile} の取得結果と
+	 * 一緒に {@link #close()} が消す。
+	 */
+	private final List<File> instanceFiles = new ArrayList<File>();
+
 	protected Collection<FontSource> allFonts = new ArrayList<FontSource>();
 
 	/**
@@ -89,11 +94,24 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 		this(false);
 	}
 
+	/**
+	 * この管理が作った書体ファイル(取得結果・可変フォントの写し)を、開いた書体ごと消します。
+	 */
 	public void close() {
-		for (Iterator<File> i = this.uriToFile.values().iterator(); i.hasNext();) {
-			File file = i.next();
+		final List<File> files = new ArrayList<File>(this.uriToFile.values());
+		files.addAll(this.instanceFiles);
+		for (final File file : files) {
+			net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource.release(file);
 			file.delete();
 		}
+		this.uriToFile.clear();
+		this.instanceFiles.clear();
+	}
+
+	private File instantiate(final File sfnt, final Map<String, Double> axes) throws IOException {
+		final File instance = net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt, axes);
+		this.instanceFiles.add(instance);
+		return instance;
 	}
 
 	public synchronized void addFontFace(FontFace face) throws IOException {
@@ -134,8 +152,8 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 			// usWeightClassで通常のウェイト選択に乗せる。他の軸は既定値
 			// 各エントリ = (フォントファイル, そのファイルに与えるウェイト)
 			final java.util.List<Object[]> fontEntries = new ArrayList<>();
-			try {
-				final net.zamasoft.pdfg2d.font.FontFile ff = new net.zamasoft.pdfg2d.font.FontFile(file);
+			try (final net.zamasoft.pdfg2d.font.FontFile ff = new net.zamasoft.pdfg2d.font.FontFile(file)) {
+				// 解凍結果(WOFF/WOFF2)は写しを作り終えたら要らない。閉じて消す
 				final File sfnt = ff.getSfntFile();
 				if (net.zamasoft.pdfg2d.font.VariableFontInstancer.isVariable(sfnt)) {
 					final java.util.List<String> axisTags = net.zamasoft.pdfg2d.font.VariableFontInstancer
@@ -152,25 +170,20 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 									? face.fontWeight
 									: net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.valueOf(
 											"W_" + Math.max(1, Math.min(9, Math.round(wght / 100.0))) * 100);
-							fontEntries.add(new Object[] {
-									net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt, baseAxes),
-									weight });
+							fontEntries.add(new Object[] { this.instantiate(sfnt, baseAxes), weight });
 						}
 						// baseAxes空かつwght軸なし: インスタンス化不要(既定へ)
 					} else if (face.fontWeight != net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.W_400) {
 						// ディスクリプタでウェイト明示——その1本だけを固定
 						final java.util.Map<String, Double> axes = new java.util.LinkedHashMap<>(baseAxes);
 						axes.put("wght", (double) face.fontWeight.w);
-						fontEntries.add(new Object[] {
-								net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt, axes),
-								face.fontWeight });
+						fontEntries.add(new Object[] { this.instantiate(sfnt, axes), face.fontWeight });
 					} else {
 						// 未指定(既定400)——CSSのウェイト段階9本を展開
 						for (int w = 100; w <= 900; w += 100) {
 							final java.util.Map<String, Double> axes = new java.util.LinkedHashMap<>(baseAxes);
 							axes.put("wght", (double) w);
-							fontEntries.add(new Object[] {
-									net.zamasoft.pdfg2d.font.VariableFontInstancer.instantiate(sfnt, axes),
+							fontEntries.add(new Object[] { this.instantiate(sfnt, axes),
 									net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.valueOf("W_" + w) });
 						}
 					}

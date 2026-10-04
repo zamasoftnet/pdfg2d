@@ -92,7 +92,8 @@ public final class VariableFontInstancer {
 	 * @param sfnt 解凍済みの sfnt ファイル(TTC 不可、単一フォント)
 	 * @param userAxes 軸タグ→ユーザー座標(例: {@code {"wght": 700}})。
 	 *        指定の無い軸は既定値で固定される
-	 * @return 生成された静的フォントの一時ファイル
+	 * @return 生成された静的フォントの一時ファイル。消すのは呼び出し側(2026-10-05 までは deleteOnExit で
+	 *         プロセスの終わりまで残した——変換ごとに作る呼び出しでは常駐するサーバーに溜まる)
 	 */
 	public static File instantiate(final File sfnt, final Map<String, Double> userAxes) throws IOException {
 		final byte[] src = Files.readAllBytes(sfnt.toPath());
@@ -274,8 +275,12 @@ public final class VariableFontInstancer {
 		}
 
 		final File dst = File.createTempFile("copper-vf-instance", ".ttf");
-		dst.deleteOnExit();
-		Files.write(dst.toPath(), buildSfnt(out));
+		try {
+			Files.write(dst.toPath(), buildSfnt(out));
+		} catch (final IOException | RuntimeException e) {
+			dst.delete();
+			throw e;
+		}
 		return dst;
 	}
 
