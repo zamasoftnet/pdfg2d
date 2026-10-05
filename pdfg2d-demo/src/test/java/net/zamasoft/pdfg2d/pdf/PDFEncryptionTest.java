@@ -117,6 +117,32 @@ public class PDFEncryptionTest {
         }
     }
 
+    /**
+     * V4 の RC4(CFM V2)は鍵の長さを最上位の /Length にも書く。暗号フィルタにだけ書いていた頃は、最上位を読む
+     * PDFBox が 40 ビットの鍵で開こうとして、空のパスワードでも開けなかった(2026-10-05、入出力プロパティの境界値試験)。
+     */
+    @Test
+    public void testEncryptionV4RC4OpensWithEmptyUserPassword() throws IOException {
+        final var file = TestOutputFiles.outputFile(getClass(), "encryption_v4_rc4_test.pdf");
+        assertDoesNotThrow(() -> {
+            final var encParams = new V4EncryptionParams();
+            encParams.setLength(128);
+            encParams.setCFM(CFM.V2);
+            final var params = PDFParams.createDefault().withVersion(PDFParams.Version.V_1_5).withEncryption(encParams);
+            try (final var g2d = new PDFGraphics2D(file, 595, 842, params)) {
+                g2d.setPaint(Color.BLACK);
+                g2d.drawString("Encryption V4 RC4 Test", 100, 100);
+            }
+        });
+        try (final var doc = Loader.loadPDF(file)) {
+            assertTrue(doc.isEncrypted());
+            assertTrue(doc.getEncryption().getVersion() == 4, "Encryption V must be 4");
+            assertTrue(doc.getEncryption().getLength() == 128, "the key length must be written at the top level");
+            final var text = new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+            assertTrue(text.contains("Encryption V4 RC4 Test"), text);
+        }
+    }
+
     @Test
     public void testEncryptionAES256() {
         final var file = TestOutputFiles.outputFile(getClass(), "encryption_aes256_test.pdf");
