@@ -527,8 +527,11 @@ public final class G2DUtils {
 	public static BufferedImage loadImage(ImageReader reader, ImageInputStream imageIn, final long pixelLimit)
 			throws IOException {
 		try {
+			// 呼び出し側は直前にメタデータ(EXIF)を読んで位置を進めていることがあるので、必ず先頭から読む
+			// (2026-10-05)。以前は上限があるときしか戻さず、GIF は ImageIO が途中から読んで失敗し、AWT
+			// Toolkit へ落ちていた。Toolkit はアニメーションを裏で進めるので、描くコマが実行の速さで変わった
+			imageIn.seek(0);
 			if (pixelLimit >= 0) {
-				imageIn.seek(0);
 				reader.setInput(imageIn);
 				checkPixelLimit(reader, pixelLimit);
 				imageIn.seek(0);
@@ -670,8 +673,9 @@ public final class G2DUtils {
 				return 1.0;
 			}
 			final double exponent = 1.0 / (fileGamma * 2.2);
-			// 標準のsRGB相当(gAMA=45455)は恒等——LUT適用を省く
-			return Math.abs(exponent - 1.0) < 0.01 ? 1.0 : exponent;
+			// 標準のsRGB相当(gAMA=45455)は恒等——LUT適用を省く。よく書かれる 45000 も含める(指数 1.0101。
+			// 2026-10-05、±0.01 だとわずかに外れ、色はほぼ変わらないのに色票の PNG が ARGB に変わって大きくなった)
+			return Math.abs(exponent - 1.0) < 0.02 ? 1.0 : exponent;
 		} catch (final Exception e) {
 			return 1.0;
 		}
