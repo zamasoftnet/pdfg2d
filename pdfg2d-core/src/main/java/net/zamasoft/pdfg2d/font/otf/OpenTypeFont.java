@@ -523,7 +523,12 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 
 	@Override
 	public short getAdvance(final int gid) {
-		if (this.isVertical()) {
+		// A vertical source advances vertically even without vertical tables
+		// (getVAdvance synthesises 1 em). The horizontal advance put upright
+		// half-width glyphs of a font with no vert/vmtx (STIX Two Text) in a box
+		// half an em tall while drawing them from the 0.88 em origin, so they
+		// overlapped the next character (2026-10-06)
+		if (this.source.getDirection() == Direction.TB) {
 			return this.getVAdvance(gid);
 		}
 		return this.getHAdvance(gid);

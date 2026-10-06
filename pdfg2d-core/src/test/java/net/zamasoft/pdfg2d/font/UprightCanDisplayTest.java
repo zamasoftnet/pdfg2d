@@ -48,6 +48,21 @@ class UprightCanDisplayTest {
 		assertTrue(wrapped.canDisplayUpright('A'));
 	}
 
+	/**
+	 * A vertical source of a font with no vertical tables advances 1 em per
+	 * glyph; the horizontal advance (half an em for a digit) made upright
+	 * glyphs overlap the next character.
+	 */
+	@Test
+	void verticalSourceWithoutVmtxAdvancesOneEm() throws Exception {
+		final var font = new OpenTypeFontSource(new File("../pdfg2d-demo/src/main/resources/Daum_Regular.ttf"), 0,
+				Direction.TB).createFont();
+		final int gid = font.toGID('2');
+		assertTrue(gid != 0);
+		org.junit.jupiter.api.Assertions.assertEquals(FontSource.DEFAULT_UNITS_PER_EM, font.getAdvance(gid));
+		assertTrue(font.getWidth(gid) < FontSource.DEFAULT_UNITS_PER_EM);
+	}
+
 	@Test
 	void metricsAskTheWrapperForUprightText() throws Exception {
 		final FontSource wrapped = new FontSourceWrapper(new OpenTypeFontSource(FONT, 0, Direction.TB));
