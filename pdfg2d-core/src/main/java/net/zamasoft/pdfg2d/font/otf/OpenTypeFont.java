@@ -190,6 +190,12 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	 * 回転します。ToUnicodeには代用前の文字を保持します。</p>
 	 */
 	protected final int substituteVertical(final int codePoint, final int gid) {
+		if (OpenTypeFontSource.isSidewaysHalfWidth(codePoint)) {
+			// 縦組みの書体に半角の字が来るのは正立のときだけ(OpenTypeFontSource.canDisplayUpright)。
+			// vrt2 はこれらを90°回した字形に置き換えるので掛けない(2026-10-06、Shippori Mincho の正立の
+			// 数字が横倒しになった)
+			return gid;
+		}
 		final int vertical = this.substituteVertical(gid);
 		if (!this.isVertical() || vertical != gid) {
 			return vertical;

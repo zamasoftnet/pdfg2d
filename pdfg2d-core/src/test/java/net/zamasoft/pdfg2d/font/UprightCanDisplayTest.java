@@ -69,6 +69,22 @@ class UprightCanDisplayTest {
 		assertFalse(new OpenTypeFontSource(FONT, 0, Direction.LTR).hasVerticalLayout());
 	}
 
+	/**
+	 * The half-width range that vertical sources leave out of canDisplay is
+	 * also the range kept out of vertical substitution: vrt2 rotates these
+	 * glyphs, and upright text wants them unrotated (Shippori Mincho's upright
+	 * digits lay sideways).
+	 */
+	@Test
+	void sidewaysHalfWidthRange() {
+		assertTrue(OpenTypeFontSource.isSidewaysHalfWidth('2'));
+		assertTrue(OpenTypeFontSource.isSidewaysHalfWidth(0xFF));
+		assertTrue(OpenTypeFontSource.isSidewaysHalfWidth(0xFF71));
+		assertFalse(OpenTypeFontSource.isSidewaysHalfWidth(0x100));
+		assertFalse(OpenTypeFontSource.isSidewaysHalfWidth('２'));
+		assertFalse(OpenTypeFontSource.isSidewaysHalfWidth('、'));
+	}
+
 	@Test
 	void metricsAskTheWrapperForUprightText() throws Exception {
 		final FontSource wrapped = new FontSourceWrapper(new OpenTypeFontSource(FONT, 0, Direction.TB));

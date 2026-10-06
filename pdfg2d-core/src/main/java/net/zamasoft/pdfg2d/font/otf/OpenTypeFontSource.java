@@ -591,12 +591,22 @@ public class OpenTypeFontSource extends AbstractFontSource {
 		return this.uvsCmap;
 	}
 
+	/**
+	 * 縦組みで横倒しにする半角の字か(U+00FF 以下と半角形 U+FF60〜U+FFDF)。縦組みの元は{@link #canDisplay(int)}で
+	 * これらを外し(横組みの書体を回して置く)、{@code text-orientation: upright}のときだけ受け持つ
+	 * ({@link #canDisplayUpright(int)})。
+	 *
+	 * @param c 字
+	 * @return 半角の字なら{@code true}
+	 */
+	public static boolean isSidewaysHalfWidth(final int c) {
+		return c <= 0xFF || (c >= 0xFF60 && c <= 0xFFDF);
+	}
+
 	@Override
 	public boolean canDisplay(final int c) {
-		if (this.getDirection() == Direction.TB) {
-			if (c <= 0xFF || (c >= 0xFF60 && c <= 0xFFDF)) {
-				return false;
-			}
+		if (this.getDirection() == Direction.TB && isSidewaysHalfWidth(c)) {
+			return false;
 		}
 		final int gid = this.cmap.mapCharCode(c);
 		if (gid != 0) {
