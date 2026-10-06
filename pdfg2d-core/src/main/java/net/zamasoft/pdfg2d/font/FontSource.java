@@ -83,6 +83,25 @@ public interface FontSource extends Serializable {
 	public boolean canDisplay(int c);
 
 	/**
+	 * Returns whether the character can be displayed upright in vertical text
+	 * ({@code text-orientation: upright}). Vertical OpenType sources leave the
+	 * half-width characters that are normally set sideways out of
+	 * {@link #canDisplay(int)}; upright text needs them.
+	 * <p>
+	 * The default is {@link #canDisplay(int)}. Wrappers must delegate to the
+	 * wrapped source, or a font registered through a wrapper (the font
+	 * configuration, {@code unicode-range}) silently loses its upright
+	 * half-width characters to the next font in the list.
+	 * </p>
+	 *
+	 * @param c the character to check
+	 * @return true if displayable upright
+	 */
+	public default boolean canDisplayUpright(int c) {
+		return this.canDisplay(c);
+	}
+
+	/**
 	 * Returns the bounding box of the font.
 	 * 
 	 * @return the bounding box

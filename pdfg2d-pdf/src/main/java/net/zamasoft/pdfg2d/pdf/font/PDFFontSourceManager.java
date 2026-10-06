@@ -611,6 +611,11 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 			return false;
 		}
 
+		@Override
+		public boolean canDisplayUpright(int c) {
+			return this.includes.canDisplay(c) && this.source.canDisplayUpright(c);
+		}
+
 		public PDFFont createFont(String name, ObjectRef fontRef) {
 			return ((PDFFontSource) this.source).createFont(name, fontRef);
 		}

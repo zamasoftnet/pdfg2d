@@ -272,24 +272,30 @@ class PDFFontSourceManagerConfigurationHandler extends DefaultHandler {
 		}
 
 		public boolean canDisplay(int c) {
-			if (!this.excludes.isEmpty()) {
-				for (int i = 0; i < this.excludes.size(); ++i) {
-					UnicodeRange range = (UnicodeRange) this.excludes.get(i);
-					if (range.contains(c)) {
-						return false;
-					}
+			return this.inRanges(c) && this.source.canDisplay(c);
+		}
+
+		@Override
+		public boolean canDisplayUpright(int c) {
+			return this.inRanges(c) && this.source.canDisplayUpright(c);
+		}
+
+		/** Whether the configured include/exclude ranges let the character through. */
+		private boolean inRanges(int c) {
+			for (int i = 0; i < this.excludes.size(); ++i) {
+				if (this.excludes.get(i).contains(c)) {
+					return false;
 				}
 			}
-			if (!this.includes.isEmpty()) {
-				for (int i = 0; i < this.includes.size(); ++i) {
-					UnicodeRange range = (UnicodeRange) this.includes.get(i);
-					if (range.contains(c)) {
-						return this.source.canDisplay(c);
-					}
-				}
-				return false;
+			if (this.includes.isEmpty()) {
+				return true;
 			}
-			return this.source.canDisplay(c);
+			for (int i = 0; i < this.includes.size(); ++i) {
+				if (this.includes.get(i).contains(c)) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		public PDFFont createFont(String name, ObjectRef fontRef) {

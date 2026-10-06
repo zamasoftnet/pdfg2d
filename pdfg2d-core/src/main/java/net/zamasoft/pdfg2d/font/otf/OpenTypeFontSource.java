@@ -609,6 +609,7 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	 * 縦組のmixed用除外を掛けず、基礎cmapに字形があるかを返す。
 	 * text-orientation: uprightのフォント選択だけが使う。
 	 */
+	@Override
 	public boolean canDisplayUpright(final int c) {
 		final int gid = this.cmap.mapCharCode(c);
 		if (gid != 0) {

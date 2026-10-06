@@ -42,6 +42,11 @@ public class FontSourceWrapper implements FontSource {
 	}
 
 	@Override
+	public boolean canDisplayUpright(final int c) {
+		return this.source.canDisplayUpright(c);
+	}
+
+	@Override
 	public Font createFont() {
 		return this.source.createFont();
 	}

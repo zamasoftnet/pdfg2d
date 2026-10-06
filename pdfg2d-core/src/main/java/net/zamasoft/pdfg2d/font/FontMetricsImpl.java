@@ -185,9 +185,12 @@ public class FontMetricsImpl implements FontMetrics {
 	public boolean canDisplay(final int c) {
 		if (this.direction == FontStyle.Direction.TB
 				&& this.textOrientation == FontStyle.TextOrientation.UPRIGHT
-				&& this.source.getDirection() == FontStyle.Direction.TB
-				&& this.source instanceof net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource otf) {
-			return otf.canDisplayUpright(c);
+				&& this.source.getDirection() == FontStyle.Direction.TB) {
+			// The source may be a wrapper (font configuration, unicode-range):
+			// asking it keeps the wrapper's own ranges (2026-10-06; before, only a
+			// bare OpenTypeFontSource was asked, and configured fonts lost their
+			// upright half-width characters to the next font in the list)
+			return this.source.canDisplayUpright(c);
 		}
 		return this.getFontSource().canDisplay(c);
 	}
