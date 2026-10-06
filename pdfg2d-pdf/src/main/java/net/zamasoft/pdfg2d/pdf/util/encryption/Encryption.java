@@ -519,8 +519,10 @@ public class Encryption {
 					default -> "SHA-512";
 				});
 				k = md.digest(e);
-				// Stop after at least 64 rounds once E's last byte <= round-32.
-				if (round >= 63 && (e[e.length - 1] & 0xFF) <= round - 32) {
+				// Stop after at least 64 rounds once E's last byte <= (next round
+				// number) - 32. Comparing with this round's number was one off: about
+				// 1 in 30 passwords failed to open in PDFBox/pdf.js (2026-10-06).
+				if (round >= 63 && (e[e.length - 1] & 0xFF) <= round + 1 - 32) {
 					break;
 				}
 			}

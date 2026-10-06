@@ -192,6 +192,32 @@ public class PDFEncryptionTest {
         }
     }
 
+    /**
+     * The salts are random, so one file says little. The password hash stopped
+     * one round early whenever E's last byte hit the boundary, and about 1 file
+     * in 15 did not open (2026-10-06).
+     */
+    @Test
+    public void testEncryptionAES256OpensEveryTime() throws IOException {
+        final var file = TestOutputFiles.outputFile(getClass(), "encryption_aes256_repeat.pdf");
+        for (var i = 0; i < 100; ++i) {
+            final var encParams = new net.zamasoft.pdfg2d.pdf.params.V5EncryptionParams();
+            encParams.setUserPassword("user");
+            encParams.setOwnerPassword("owner");
+            final var params = PDFParams.createDefault().withVersion(PDFParams.Version.V_2_0)
+                    .withEncryption(encParams);
+            try (final var g2d = new PDFGraphics2D(file, 100, 100, params)) {
+                g2d.drawString("x", 10, 10);
+            }
+            try (final var doc = Loader.loadPDF(file, "user")) {
+                assertTrue(doc.isEncrypted());
+            }
+            try (final var doc = Loader.loadPDF(file, "owner")) {
+                assertTrue(doc.getCurrentAccessPermission().isOwnerPermission());
+            }
+        }
+    }
+
     @Test
     public void testAES256RequiresPdf17OrLater() {
         final var params = PDFParams.createDefault();
