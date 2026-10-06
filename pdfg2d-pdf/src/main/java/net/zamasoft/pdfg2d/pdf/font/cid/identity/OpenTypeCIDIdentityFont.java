@@ -36,6 +36,9 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 
 	protected final IntList unicodes = new IntList();
 
+	/** 2 字以上を表す字形(合字)の元の字(ToUnicode 用、2026-10-06)。 */
+	protected final java.util.Map<Integer, int[]> clusters = new java.util.HashMap<Integer, int[]>();
+
 	protected OpenTypeCIDIdentityFont(OpenTypeCIDIdentityFontSource metaFont, String name, ObjectRef fontRef) {
 		super(metaFont);
 		this.fontRef = fontRef;
@@ -127,14 +130,21 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 		int glyphCount = text.getGlyphCount();
 		int[] glyphIds = text.getGlyphIds();
 		char[] chars = text.getChars();
+		byte[] lengths = text.getClusterLengths();
+		int c = 0;
 		for (int i = 0; i < glyphCount; ++i) {
 			this.widths.set(glyphIds[i], this.getHAdvance(glyphIds[i]));
 			if (this.isVertical()) {
 				this.heights.set(glyphIds[i], this.getVAdvance(glyphIds[i]));
 				this.origins.set(glyphIds[i], this.getVerticalOrigin(glyphIds[i]));
 			}
-			this.unicodes.set(glyphIds[i], chars[i]);
+			// 字形の最初の字(以前は字形の番号で字を引いていて、合字の後ろでずれた)
+			if (c < chars.length) {
+				this.unicodes.set(glyphIds[i], chars[c]);
+			}
+			c += lengths[i];
 		}
+		CIDUtils.recordClusters(text, this.clusters);
 	}
 
 	public void writeTo(PDFFragmentOutput out, XRef xref) throws IOException {
@@ -147,7 +157,7 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 			w2 = null;
 		}
 		CIDUtils.writeIdentityFont(out, xref, source, this.fontRef, w, w2,
-				this.origins == null ? null : this.origins.toArray(), this.unicodes.toArray());
+				this.origins == null ? null : this.origins.toArray(), this.unicodes.toArray(), this.clusters);
 	}
 
 	public short getKerning(int scid, int cid) {

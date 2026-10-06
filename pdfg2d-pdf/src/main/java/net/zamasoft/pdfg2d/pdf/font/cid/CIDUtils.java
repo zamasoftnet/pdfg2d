@@ -300,6 +300,13 @@ public final class CIDUtils {
 	public static void writeIdentityFont(final PDFFragmentOutput out, final XRef xref, final CIDFontSource source,
 			final ObjectRef fontRef, final short[] w, final short[] w2, final short[] vy, final int[] unicodeArray)
 			throws IOException {
+		writeIdentityFont(out, xref, source, fontRef, w, w2, vy, unicodeArray, null);
+	}
+
+	/** {@link #writeIdentityFont} with the ligature clusters for ToUnicode. */
+	public static void writeIdentityFont(final PDFFragmentOutput out, final XRef xref, final CIDFontSource source,
+			final ObjectRef fontRef, final short[] w, final short[] w2, final short[] vy, final int[] unicodeArray,
+			final java.util.Map<Integer, int[]> clusters) throws IOException {
 		// Main font
 		String fontName = source.getFontName();
 		out.startObject(fontRef);
@@ -333,7 +340,7 @@ public final class CIDUtils {
 		out.startObject(toUnicodeRef);
 		PDFOutput pout = new PDFOutput(out.startStream(PDFFragmentOutput.Mode.ASCII), "ISO-8859-1");
 		pout.setPrecision(out.getPrecision());
-		CIDUtils.writeIdentityToUnicode(pout, unicodeArray);
+		CIDUtils.writeIdentityToUnicode(pout, unicodeArray, clusters);
 		out.endObject();
 
 		// Descendant font
@@ -418,6 +425,24 @@ public final class CIDUtils {
 	}
 
 	private static void writeIdentityToUnicode(PDFOutput pout, int[] unicodeArray) throws IOException {
+		writeIdentityToUnicode(pout, unicodeArray, null);
+	}
+
+	/**
+	 * Writes an identity ToUnicode CMap. Glyphs in {@code clusters} (ligatures)
+	 * map to all their characters with bfchar instead of the single code in
+	 * {@code unicodeArray}.
+	 */
+	private static void writeIdentityToUnicode(PDFOutput pout, int[] unicodeArray,
+			final java.util.Map<Integer, int[]> clusters) throws IOException {
+		if (clusters != null && !clusters.isEmpty()) {
+			unicodeArray = unicodeArray.clone();
+			for (final int gid : clusters.keySet()) {
+				if (gid < unicodeArray.length) {
+					unicodeArray[gid] = -1;
+				}
+			}
+		}
 		boolean sparse = false;
 		for (final int unicode : unicodeArray) {
 			if (unicode < 0) {
@@ -511,6 +536,21 @@ public final class CIDUtils {
 		pout.writeOperator("endbfrange");
 		pout.lineBreak();
 
+		if (clusters != null && !clusters.isEmpty()) {
+			final var gids = new java.util.TreeSet<Integer>(clusters.keySet());
+			pout.writeInt(gids.size());
+			pout.writeOperator("beginbfchar");
+			pout.lineBreak();
+			for (final int gid : gids) {
+				final int[] units = clusters.get(gid);
+				pout.writeBytes16(gid);
+				pout.writeBytes16(units, 0, units.length);
+				pout.lineBreak();
+			}
+			pout.writeOperator("endbfchar");
+			pout.lineBreak();
+		}
+
 		pout.writeOperator("endcmap");
 		pout.lineBreak();
 
@@ -560,7 +600,7 @@ public final class CIDUtils {
 	/** Writes the direction-specific Type0 wrapper and its sparse ToUnicode map. */
 	public static void writeEmbeddedFontType0(final PDFFragmentOutput out, final XRef xref,
 			final ObjectRef fontRef, final ObjectRef descendantRef, final String subsetName, final boolean vertical,
-			final int[] unicodeArray) throws IOException {
+			final int[] unicodeArray, final java.util.Map<Integer, int[]> clusters) throws IOException {
 		out.startObject(fontRef);
 		out.startHash();
 		out.writeName("Type");
@@ -591,8 +631,39 @@ public final class CIDUtils {
 		out.startObject(toUnicodeRef);
 		PDFOutput pout = new PDFOutput(out.startStream(PDFFragmentOutput.Mode.ASCII), "ISO-8859-1");
 		pout.setPrecision(out.getPrecision());
-		CIDUtils.writeIdentityToUnicode(pout, unicodeArray);
+		CIDUtils.writeIdentityToUnicode(pout, unicodeArray, clusters);
 		out.endObject();
+	}
+
+	/**
+	 * Records the source characters of every glyph that stands for more than
+	 * one character (a ligature: fi, ffi, ...) so that ToUnicode can map it to
+	 * all of them. A single code per glyph lost the other characters
+	 * ("Office" extracted as "Ofice").
+	 *
+	 * @param text     the drawn text
+	 * @param clusters glyph id to UTF-16 units, filled in
+	 */
+	public static void recordClusters(final net.zamasoft.pdfg2d.gc.text.Text text,
+			final java.util.Map<Integer, int[]> clusters) {
+		final int[] glyphIds = text.getGlyphIds();
+		final byte[] lengths = text.getClusterLengths();
+		final char[] chars = text.getChars();
+		int c = 0;
+		for (int i = 0; i < text.getGlyphCount(); ++i) {
+			final int len = lengths[i];
+			if (len > 1 && c + len <= text.getCharCount()) {
+				final int[] units = new int[len];
+				for (int j = 0; j < len; ++j) {
+					units[j] = chars[c + j];
+				}
+				// A ligature built from a surrogate pair is still one character
+				if (!(len == 2 && Character.isHighSurrogate(chars[c]))) {
+					clusters.put(glyphIds[i], units);
+				}
+			}
+			c += len;
+		}
 	}
 
 	/** Writes an embedded font using one private descendant and program. */
@@ -601,7 +672,7 @@ public final class CIDUtils {
 			final short[] vy, final int[] unicodeArray) throws IOException {
 		final ObjectRef descendantRef = xref.nextObjectRef();
 		final String subsetName = createEmbeddedSubsetName(w, w2, unicodeArray, font.getPSName());
-		writeEmbeddedFontType0(out, xref, fontRef, descendantRef, subsetName, w2 != null, unicodeArray);
+		writeEmbeddedFontType0(out, xref, fontRef, descendantRef, subsetName, w2 != null, unicodeArray, null);
 		writeEmbeddedFontProgram(out, xref, source, font, descendantRef, subsetName, w, w2, vy, unicodeArray);
 	}
 

@@ -42,6 +42,9 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	/** Direction-specific CID-to-Unicode map; gaps belong to the other wrapper. */
 	private IntList gidToCid = new IntList(-1);
 
+	/** 2 字以上を表す字形(合字)の元の字(ToUnicode 用、2026-10-06)。 */
+	private java.util.Map<Integer, int[]> clusters = new java.util.HashMap<Integer, int[]>();
+
 	/**
 	 * Constructs a new embedded CID font instance.
 	 *
@@ -256,6 +259,9 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	}
 
 	public void drawTo(GC gc, Text text) throws IOException, GraphicsException {
+		if (this.clusters != null) {
+			CIDUtils.recordClusters(text, this.clusters);
+		}
 		if (gc instanceof PDFGC) {
 			final var direction = ((OpenTypeEmbeddedCIDFontSource) this.getFontSource()).getDirection();
 			PDFFontUtils.drawCIDTo(((PDFGC) gc).getPDFGraphicsOutput(), text,
@@ -270,7 +276,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 		this.subset.prepare(xref, this.getPSName());
 		final boolean vertical = source.getDirection() == net.zamasoft.pdfg2d.gc.font.FontStyle.Direction.TB;
 		CIDUtils.writeEmbeddedFontType0(out, xref, this.fontRef, this.subset.descendantRef(),
-				this.subset.subsetName(), vertical, this.gidToCid.toArray());
+				this.subset.subsetName(), vertical, this.gidToCid.toArray(), this.clusters);
 		if (!this.subset.isWritten()) {
 			CIDUtils.writeEmbeddedFontProgram(out, xref, source, this, this.subset.descendantRef(),
 					this.subset.subsetName(), this.subset.widths(), this.subset.heights(), this.subset.origins(),
@@ -278,6 +284,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 			this.subset.markWritten();
 		}
 		this.gidToCid = null;
+		this.clusters = null;
 	}
 
 	public BBox getBBox() {
