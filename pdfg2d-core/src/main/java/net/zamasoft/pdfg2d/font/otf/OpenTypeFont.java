@@ -161,8 +161,10 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 
 	/** Packed ligature and vertical-substitution feature tags. */
 	private static final int TAG_LIGA = 0x6c696761, TAG_CLIG = 0x636c6967,
-			TAG_DLIG = 0x646c6967, TAG_HLIG = 0x686c6967,
-			TAG_VRT2 = 0x76727432, TAG_VERT = 0x76657274;
+			TAG_DLIG = 0x646c6967, TAG_HLIG = 0x686c6967;
+
+	/** Vertical-substitution feature tags (also read by {@link OpenTypeFontSource#hasVerticalLayout()}). */
+	static final int TAG_VRT2 = 0x76727432, TAG_VERT = 0x76657274;
 
 	/**
 	 * Applies the required vertical substitution ({@code vrt2}/{@code vert})
@@ -523,12 +525,7 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 
 	@Override
 	public short getAdvance(final int gid) {
-		// A vertical source advances vertically even without vertical tables
-		// (getVAdvance synthesises 1 em). The horizontal advance put upright
-		// half-width glyphs of a font with no vert/vmtx (STIX Two Text) in a box
-		// half an em tall while drawing them from the 0.88 em origin, so they
-		// overlapped the next character (2026-10-06)
-		if (this.source.getDirection() == Direction.TB) {
+		if (this.isVertical()) {
 			return this.getVAdvance(gid);
 		}
 		return this.getHAdvance(gid);

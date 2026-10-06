@@ -49,18 +49,24 @@ class UprightCanDisplayTest {
 	}
 
 	/**
-	 * A vertical source of a font with no vertical tables advances 1 em per
-	 * glyph; the horizontal advance (half an em for a digit) made upright
-	 * glyphs overlap the next character.
+	 * A font without a vertical layout (no vert/vrt2, or no vmtx) is written as
+	 * a horizontal font even in vertical text, with no vertical advance or
+	 * origin: it must not take upright half-width characters, or they overlap
+	 * the next character (STIX Two Text). The next font in the list takes them.
 	 */
 	@Test
-	void verticalSourceWithoutVmtxAdvancesOneEm() throws Exception {
-		final var font = new OpenTypeFontSource(new File("../pdfg2d-demo/src/main/resources/Daum_Regular.ttf"), 0,
-				Direction.TB).createFont();
-		final int gid = font.toGID('2');
-		assertTrue(gid != 0);
-		org.junit.jupiter.api.Assertions.assertEquals(FontSource.DEFAULT_UNITS_PER_EM, font.getAdvance(gid));
-		assertTrue(font.getWidth(gid) < FontSource.DEFAULT_UNITS_PER_EM);
+	void fontWithoutVerticalLayoutLeavesUprightToTheNextFont() throws Exception {
+		final var noVmtx = new OpenTypeFontSource(new File("../pdfg2d-demo/src/main/resources/Daum_Regular.ttf"), 0,
+				Direction.TB);
+		assertFalse(noVmtx.hasVerticalLayout());
+		assertFalse(noVmtx.canDisplayUpright('2'));
+		final var noVert = new OpenTypeFontSource(new File("src/test/resources/pgothic-novert-subset.ttf"), 0,
+				Direction.TB);
+		assertFalse(noVert.hasVerticalLayout());
+		final var vertical = new OpenTypeFontSource(FONT, 0, Direction.TB);
+		assertTrue(vertical.hasVerticalLayout());
+		assertTrue(vertical.canDisplayUpright('A'));
+		assertFalse(new OpenTypeFontSource(FONT, 0, Direction.LTR).hasVerticalLayout());
 	}
 
 	@Test

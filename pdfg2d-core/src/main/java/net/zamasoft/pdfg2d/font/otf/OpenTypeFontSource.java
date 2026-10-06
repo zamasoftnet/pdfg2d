@@ -80,6 +80,9 @@ public class OpenTypeFontSource extends AbstractFontSource {
 
 	private transient volatile boolean heightsComputed;
 
+	/** {@link #hasVerticalLayout()} の結果(未計算なら null)。 */
+	private transient volatile Boolean verticalLayout;
+
 	protected Panose panose;
 
 	protected final Direction direction;
@@ -608,9 +611,18 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	/**
 	 * 縦組のmixed用除外を掛けず、基礎cmapに字形があるかを返す。
 	 * text-orientation: uprightのフォント選択だけが使う。
+	 *
+	 * <p>
+	 * 縦組みの組み方を持たない書体({@link #hasVerticalLayout()}が偽、STIX Two Text のような欧文書体)は
+	 * 正立の半角の字を受け持たない(2026-10-06)。縦の送りも原点も無く横組みの書体として書き出されるので、
+	 * 正立に置くと字が次の字に重なった。font-family の次の書体へ回す。
+	 * </p>
 	 */
 	@Override
 	public boolean canDisplayUpright(final int c) {
+		if (!this.hasVerticalLayout()) {
+			return this.canDisplay(c);
+		}
 		final int gid = this.cmap.mapCharCode(c);
 		if (gid != 0) {
 			return !this.isGlyphless(gid, c);
@@ -659,6 +671,29 @@ public class OpenTypeFontSource extends AbstractFontSource {
 			LOG.log(Level.FINE, "Failed to read a glyph: " + this.file, e);
 			return false;
 		}
+	}
+
+	/**
+	 * 縦組みの組み方(縦組みの元で、vrt2 か vert の置き換えと vmtx)を持つか(2026-10-06)。
+	 * {@link net.zamasoft.pdfg2d.font.otf.OpenTypeFont} が縦組みの書体として組み・書き出す条件と同じ。
+	 *
+	 * @return 縦組みの書体として使えるなら{@code true}
+	 */
+	public boolean hasVerticalLayout() {
+		if (this.getDirection() != Direction.TB) {
+			return false;
+		}
+		Boolean layout = this.verticalLayout;
+		if (layout == null) {
+			final var font = this.getOpenTypeFont();
+			final var gsub = (net.zamasoft.pdfg2d.font.table.GsubTable) font.getTable(Table.GSUB);
+			layout = gsub != null && font.getTable(Table.VMTX) != null
+					&& (!gsub.collectSingleSubstitutions(net.zamasoft.pdfg2d.font.otf.OpenTypeFont.TAG_VRT2).isEmpty()
+							|| !gsub.collectSingleSubstitutions(net.zamasoft.pdfg2d.font.otf.OpenTypeFont.TAG_VERT)
+									.isEmpty());
+			this.verticalLayout = layout;
+		}
+		return layout;
 	}
 
 	@Override
