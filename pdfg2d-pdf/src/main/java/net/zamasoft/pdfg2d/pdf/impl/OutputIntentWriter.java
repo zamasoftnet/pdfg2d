@@ -104,7 +104,7 @@ final class OutputIntentWriter {
 		}
 
 		mainFlow.writeName("OutputConditionIdentifier");
-		mainFlow.writeString(intent.outputConditionIdentifier());
+		writeByteString(mainFlow, intent.outputConditionIdentifier());
 		mainFlow.lineBreak();
 
 		if (intent.outputCondition() != null) {
@@ -115,13 +115,21 @@ final class OutputIntentWriter {
 
 		if (intent.registryName() != null) {
 			mainFlow.writeName("RegistryName");
-			mainFlow.writeString(intent.registryName());
+			writeByteString(mainFlow, intent.registryName());
 			mainFlow.lineBreak();
 		}
 
-		if (intent.info() != null) {
+		// Info is required unless the identifier names a registered standard
+		// condition (ISO 32000-1 table 365). Whether a name is registered cannot
+		// be decided here, so PDF/X always gets one: the condition, else the
+		// identifier (2026-10-07; a custom intent without Info was not PDF/X).
+		final String info = intent.info() != null ? intent.info()
+				: pdfVersion.isPdfX() ? (intent.outputCondition() != null ? intent.outputCondition()
+						: intent.outputConditionIdentifier())
+						: null;
+		if (info != null) {
 			mainFlow.writeName("Info");
-			mainFlow.writeText(intent.info());
+			mainFlow.writeText(info);
 			mainFlow.lineBreak();
 		}
 
@@ -149,5 +157,19 @@ final class OutputIntentWriter {
 			mainFlow.endHash();
 		}
 		mainFlow.endObject();
+	}
+
+	/**
+	 * Writes an identifier string. ASCII goes out byte for byte; anything else
+	 * as a UTF-16 text string, since the byte writer keeps only the low 8 bits
+	 * and silently garbled non-ASCII names (2026-10-07). PDF/X refuses
+	 * non-ASCII identifiers before this point.
+	 */
+	private static void writeByteString(final PDFFragmentOutputImpl out, final String s) throws IOException {
+		if (s.chars().allMatch(c -> c < 0x80)) {
+			out.writeString(s);
+		} else {
+			out.writeText(s);
+		}
 	}
 }

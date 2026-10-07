@@ -229,6 +229,19 @@ public class PdfXPreflightTest {
 	}
 
 	@Test
+	public void testR2RejectsMissingInfo() throws Exception {
+		final var pdf = mutate(generate(Flavour.X4), document -> outputIntent(document).removeItem(COSName.INFO));
+		assertOnlyRule(pdf, Flavour.X4, "R2");
+	}
+
+	@Test
+	public void testR2RejectsNonAsciiIdentifier() throws Exception {
+		final var pdf = mutate(generate(Flavour.X1A), document -> outputIntent(document)
+				.setItem(COSName.OUTPUT_CONDITION_IDENTIFIER, new org.apache.pdfbox.cos.COSString("日本")));
+		assertOnlyRule(pdf, Flavour.X1A, "R2");
+	}
+
+	@Test
 	public void testR3RejectsMissingTrapped() throws Exception {
 		final var pdf = mutate(generate(Flavour.X1A), document -> document.getDocumentInformation().getCOSObject()
 				.removeItem(COSName.TRAPPED));
@@ -240,6 +253,38 @@ public class PdfXPreflightTest {
 		final var pdf = mutate(generate(Flavour.X4), document -> removeXmpProperty(document,
 				"http://ns.adobe.com/xap/1.0/mm/", "DocumentID"));
 		assertOnlyRule(pdf, Flavour.X4, "R4");
+	}
+
+	@Test
+	public void testR5RejectsRestrictedViewerPreference() throws Exception {
+		final var pdf = mutate(generate(Flavour.X4), document -> {
+			final var prefs = new COSDictionary();
+			prefs.setName(COSName.getPDFName("PrintArea"), "MediaBox");
+			document.getDocumentCatalog().getCOSObject().setItem(COSName.VIEWER_PREFERENCES, prefs);
+		});
+		assertOnlyRule(pdf, Flavour.X4, "R5");
+	}
+
+	@Test
+	public void testR5RejectsUriActionInX1a() throws Exception {
+		final var pdf = mutate(generate(Flavour.X1A), document -> {
+			final var action = new COSDictionary();
+			action.setName(COSName.S, "URI");
+			action.setString(COSName.URI, "https://example.com/");
+			final var annot = new COSDictionary();
+			annot.setName(COSName.TYPE, "Annot");
+			annot.setName(COSName.SUBTYPE, "Link");
+			annot.setItem(COSName.A, action);
+			final var rect = new org.apache.pdfbox.cos.COSArray();
+			for (final float v : new float[] { 0, 0, 1, 1 }) {
+				rect.add(new org.apache.pdfbox.cos.COSFloat(v));
+			}
+			annot.setItem(COSName.RECT, rect);
+			final var annots = new org.apache.pdfbox.cos.COSArray();
+			annots.add(annot);
+			document.getPage(0).getCOSObject().setItem(COSName.ANNOTS, annots);
+		});
+		assertTrue(PdfXPreflight.check(pdf, Flavour.X1A).stream().anyMatch(v -> "R5".equals(v.rule())));
 	}
 
 	@Test

@@ -248,6 +248,14 @@ class PDFPageOutputImpl extends PDFPageOutput {
 	public void addAnnotation(final Annot annot) throws IOException {
 		final var pdfWriterImpl = this.getPDFWriterImpl();
 		final var params = pdfWriterImpl.getParams();
+		if (params.version().isPdfXOnPdf14() && annot instanceof net.zamasoft.pdfg2d.pdf.annot.LinkAnnot link
+				&& link.getURI() != null && !link.getURI().toString().startsWith("#")) {
+			// PDF/X-1a:2003 and PDF/X-3:2003 (6.13, 6.14) forbid the /URI action
+			// of a link wherever it sits; only internal /Dest links are written.
+			// Other Annot subclasses can write any action, so they remain the
+			// caller's responsibility.
+			throw new UnsupportedOperationException("PDF/X-1a and PDF/X-3 do not allow URI link actions.");
+		}
 		if (params.version().isPdfX()) {
 			// ISO 15930 permits annotations only when they lie entirely
 			// outside the bleed area (or the finished page when there is no
@@ -702,7 +710,9 @@ class PDFPageOutputImpl extends PDFPageOutput {
 					"PDF/X requires exactly one of TrimBox or ArtBox per page, not both.");
 		}
 		if (this.trimBox == null && this.artBox == null) {
-			this.trimBox = new Rectangle2D.Double(0, 0, this.width, this.height);
+			// The visible page: the CropBox when one was set, else the whole sheet
+			this.trimBox = (this.cropBox != null) ? this.cropBox
+					: new Rectangle2D.Double(0, 0, this.width, this.height);
 		}
 		final var finished = (this.trimBox != null) ? this.trimBox : this.artBox;
 		if (this.bleedBox != null) {
@@ -716,6 +726,20 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		} else if (!containsBox(this.mediaBox, finished)) {
 			throw new IllegalStateException(
 					(this.trimBox != null ? "TrimBox" : "ArtBox") + " must lie within the MediaBox.");
+		}
+		// The CropBox (when set) sits between the two: the bleed area (or the
+		// finished box without bleed) inside it, and it inside the MediaBox.
+		// A viewer or RIP clips to the CropBox, so a smaller one would cut
+		// printed content (same order as the regression preflight R10).
+		if (this.cropBox != null) {
+			if (!containsBox(this.mediaBox, this.cropBox)) {
+				throw new IllegalStateException("CropBox must lie within the MediaBox.");
+			}
+			final var bleedArea = (this.bleedBox != null) ? this.bleedBox : finished;
+			if (!containsBox(this.cropBox, bleedArea)) {
+				throw new IllegalStateException((this.bleedBox != null ? "BleedBox"
+						: this.trimBox != null ? "TrimBox" : "ArtBox") + " must lie within the CropBox.");
+			}
 		}
 
 		// ISO 15930: annotations must lie entirely outside the bleed area

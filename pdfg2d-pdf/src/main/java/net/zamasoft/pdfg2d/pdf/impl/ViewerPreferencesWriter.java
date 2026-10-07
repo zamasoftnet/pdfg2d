@@ -110,6 +110,7 @@ final class ViewerPreferencesWriter {
 			if (params.version().v < PDFParams.Version.V_1_4.v) {
 				throw new UnsupportedOperationException("ViewerPreference ViewArea requires PDF 1.4 or later.");
 			}
+			refuseUnderPdfX(params, "ViewArea");
 			catalogFlow.writeName("ViewArea");
 			writeArea(catalogFlow, vp.getViewArea());
 			catalogFlow.lineBreak();
@@ -119,6 +120,7 @@ final class ViewerPreferencesWriter {
 			if (params.version().v < PDFParams.Version.V_1_4.v) {
 				throw new UnsupportedOperationException("ViewerPreference ViewClip requires PDF 1.4 or later.");
 			}
+			refuseUnderPdfX(params, "ViewClip");
 			catalogFlow.writeName("ViewClip");
 			writeArea(catalogFlow, vp.getViewClip());
 			catalogFlow.lineBreak();
@@ -128,6 +130,7 @@ final class ViewerPreferencesWriter {
 			if (params.version().v < PDFParams.Version.V_1_4.v) {
 				throw new UnsupportedOperationException("ViewerPreference PrintArea requires PDF 1.4 or later.");
 			}
+			refuseUnderPdfX(params, "PrintArea");
 			catalogFlow.writeName("PrintArea");
 			writeArea(catalogFlow, vp.getPrintArea());
 			catalogFlow.lineBreak();
@@ -137,6 +140,7 @@ final class ViewerPreferencesWriter {
 			if (params.version().v < PDFParams.Version.V_1_4.v) {
 				throw new UnsupportedOperationException("ViewerPreference PrintClip requires PDF 1.4 or later.");
 			}
+			refuseUnderPdfX(params, "PrintClip");
 			catalogFlow.writeName("PrintClip");
 			writeArea(catalogFlow, vp.getPrintClip());
 			catalogFlow.lineBreak();
@@ -203,6 +207,18 @@ final class ViewerPreferencesWriter {
 		catalogFlow.endHash();
 
 		catalogFlow.lineBreak();
+	}
+
+	/**
+	 * PDF/X (ISO 15930 6.17) restricts the ViewArea, ViewClip, PrintArea and
+	 * PrintClip viewer preferences; leaving them out keeps the default CropBox,
+	 * which satisfies every reading of the rule.
+	 */
+	private static void refuseUnderPdfX(final PDFParams params, final String key) {
+		if (params.version().isPdfX()) {
+			throw new UnsupportedOperationException("PDF/X does not allow the ViewerPreference " + key
+					+ " (leave it at the CropBox default).");
+		}
 	}
 
 	private static void writeArea(final PDFFragmentOutputImpl catalogFlow, final ViewerPreferences.AreaBox area)

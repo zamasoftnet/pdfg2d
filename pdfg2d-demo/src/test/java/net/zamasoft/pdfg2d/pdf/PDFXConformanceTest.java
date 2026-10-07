@@ -422,7 +422,8 @@ public class PDFXConformanceTest {
 			page.setTrimBox(new Rectangle2D.Double(60, 60, 475, 722));
 			final var link = new net.zamasoft.pdfg2d.pdf.annot.LinkAnnot();
 			link.setShape(new Rectangle2D.Double(5, 5, 40, 20)); // in the slug area
-			link.setURI(java.net.URI.create("https://example.com/proof"));
+			// an internal link: PDF/X-1a forbids the URI action wherever it sits
+			link.setURI(java.net.URI.create("#proof"));
 			page.addAnnotation(link);
 			page.close();
 			pdf.close();
@@ -430,6 +431,104 @@ public class PDFXConformanceTest {
 		}
 		final var raw = new String(Files.readAllBytes(file.toPath()), StandardCharsets.ISO_8859_1);
 		assertTrue(raw.contains("/Annots"), "The slug-area annotation must be emitted");
+	}
+
+	@Test
+	public void testUriLinkIsRejectedOnPdf14BasedPdfX() throws Exception {
+		// PDF/X-1a:2003 and X-3:2003 (6.13, 6.14) forbid the URI action even in
+		// the slug area; PDF/X-4 only restricts the position.
+		for (final var version : new PDFParams.Version[] { PDFParams.Version.V_PDFX1A, PDFParams.Version.V_PDFX3,
+				PDFParams.Version.V_PDFX4 }) {
+			final var pdf = new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+					PDFParams.createDefault().withVersion(version));
+			final var page = pdf.nextPage(595, 842);
+			page.setTrimBox(new Rectangle2D.Double(60, 60, 475, 722));
+			final var link = new net.zamasoft.pdfg2d.pdf.annot.LinkAnnot();
+			link.setShape(new Rectangle2D.Double(5, 5, 40, 20));
+			link.setURI(java.net.URI.create("https://example.com/proof"));
+			if (version.isPdfXOnPdf14()) {
+				org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+						() -> page.addAnnotation(link), version + " must reject a URI link");
+			} else {
+				page.addAnnotation(link);
+			}
+		}
+	}
+
+	@Test
+	public void testCropBoxContainment() throws Exception {
+		// MediaBox ⊇ CropBox ⊇ BleedBox (or the finished box): a RIP clips to the CropBox
+		final var outside = new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+				PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX1A));
+		final var page1 = outside.nextPage(595, 842);
+		page1.setCropBox(new Rectangle2D.Double(-10, 0, 605, 842));
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, page1::close,
+				"CropBox must lie within the MediaBox");
+
+		final var bleed = new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+				PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX1A));
+		final var page2 = bleed.nextPage(595, 842);
+		page2.setCropBox(new Rectangle2D.Double(20, 20, 555, 802));
+		page2.setBleedBox(new Rectangle2D.Double(10, 10, 575, 822));
+		page2.setTrimBox(new Rectangle2D.Double(30, 30, 535, 782));
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, page2::close,
+				"BleedBox must lie within the CropBox");
+
+		// A CropBox alone is fine: the default TrimBox follows it
+		final var file = TestOutputFiles.outputFile(getClass(), "pdfx_crop_only.pdf");
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder,
+					PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX1A));
+			final var page = pdf.nextPage(595, 842);
+			page.setCropBox(new Rectangle2D.Double(20, 20, 555, 802));
+			page.close();
+			pdf.close();
+			builder.close();
+		}
+		try (final var doc = Loader.loadPDF(file)) {
+			assertEquals(doc.getPage(0).getCropBox().toString(), doc.getPage(0).getTrimBox().toString());
+		}
+	}
+
+	@Test
+	public void testRestrictedViewerPreferencesAreRejected() throws Exception {
+		final var vp = new net.zamasoft.pdfg2d.pdf.params.ViewerPreferences();
+		vp.setPrintArea(net.zamasoft.pdfg2d.pdf.params.ViewerPreferences.AreaBox.MEDIA);
+		final var pdf = new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+				PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX4).withViewerPreferences(vp));
+		try (final var page = pdf.nextPage(595, 842)) {
+			// empty page
+		}
+		org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class, pdf::close,
+				"PDF/X must reject PrintArea");
+	}
+
+	@Test
+	public void testCustomOutputIntentGetsInfoAndAsciiIdentifier() throws Exception {
+		final byte[] profile;
+		try (final var in = PDFWriterImpl.class.getResourceAsStream("ISOcoated_v2_300_eci.icc")) {
+			profile = in.readAllBytes();
+		}
+		// Info is required for a condition that is not registered; supply it when missing
+		final var custom = new OutputIntent("MyPress", null, null, null, profile, 4);
+		final var file = generate("pdfx_output_intent_info.pdf",
+				PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX4).withOutputIntent(custom));
+		try (final var doc = Loader.loadPDF(file)) {
+			assertEquals("MyPress", doc.getDocumentCatalog().getOutputIntents().get(0).getInfo());
+		}
+		// A non-ASCII identifier is refused under PDF/X ...
+		final var japanese = new OutputIntent("日本の印刷", null, null, null, profile, 4);
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+						PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX4).withOutputIntent(japanese)));
+		// ... and written as a text string elsewhere instead of losing its high bytes
+		final var plain = generate("output_intent_non_ascii.pdf",
+				PDFParams.createDefault().withVersion(PDFParams.Version.V_1_7).withOutputIntent(japanese));
+		try (final var doc = Loader.loadPDF(plain)) {
+			assertEquals("日本の印刷",
+					doc.getDocumentCatalog().getOutputIntents().get(0).getOutputConditionIdentifier());
+		}
 	}
 
 	@Test
@@ -443,7 +542,7 @@ public class PDFXConformanceTest {
 			page.setTrimBox(new Rectangle2D.Double(60, 60, 475, 722));
 			final var link = new net.zamasoft.pdfg2d.pdf.annot.LinkAnnot();
 			link.setShape(new Rectangle2D.Double(100, 100, 50, 50)); // on the printed page
-			link.setURI(java.net.URI.create("https://example.com"));
+			link.setURI(java.net.URI.create("#target")); // internal: only the position is tested
 			page.addAnnotation(link);
 			org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, page::close,
 					"An annotation inside the finished page area must be rejected under PDF/X");

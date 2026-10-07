@@ -297,6 +297,14 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	 * 直接使う呼び出しにも同じ前提を課します(codexレビュー2026-09-05)。
 	 */
 	private static void validatePdfXOutputIntent(final OutputIntent intent, final PDFParams.Version version) {
+		// The identifiers name a printing condition (ICC registry names are all
+		// ASCII); a non-ASCII one cannot be matched by a RIP (2026-10-07).
+		for (final String name : new String[] { intent.outputConditionIdentifier(), intent.registryName() }) {
+			if (name != null && !name.chars().allMatch(c -> c >= 0x20 && c <= 0x7E)) {
+				throw new IllegalArgumentException(
+						"PDF/X output intent identifier and registry name must be printable ASCII: " + name);
+			}
+		}
 		final var data = intent.iccProfile();
 		if (data == null) {
 			throw new IllegalArgumentException(

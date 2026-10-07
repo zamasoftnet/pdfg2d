@@ -159,7 +159,7 @@ public final class PdfXPreflight {
 			if (flavour == Flavour.X4) {
 				violations.addAll(checkR4(document));
 			}
-			violations.addAll(checkR5(document));
+			violations.addAll(checkR5(document, flavour));
 			violations.addAll(checkR6(document));
 			violations.addAll(checkR7(document, flavour));
 			violations.addAll(checkR8(document, flavour));
@@ -280,6 +280,16 @@ public final class PdfXPreflight {
 			}
 			if (isBlank(intent.getString(COSName.REGISTRY_NAME))) {
 				violations.add(new Violation("R2", "RegistryNameが空です"));
+			}
+			// 登録済みかを判定できないので、Info は常に要る扱い(ISO 32000-1 表 365。2026-10-07)
+			if (isBlank(intent.getString(COSName.INFO))) {
+				violations.add(new Violation("R2", "OutputIntentのInfoがありません"));
+			}
+			for (final var key : new COSName[] { COSName.OUTPUT_CONDITION_IDENTIFIER, COSName.REGISTRY_NAME }) {
+				final var value = intent.getString(key);
+				if (value != null && !value.chars().allMatch(c -> c >= 0x20 && c <= 0x7E)) {
+					violations.add(new Violation("R2", key.getName() + "が印字可能なASCIIではありません"));
+				}
 			}
 
 			final var profile = asStream(intent.getDictionaryObject(COSName.DEST_OUTPUT_PROFILE));
@@ -448,7 +458,7 @@ public final class PdfXPreflight {
 				+ hex.substring(12, 16) + '-' + hex.substring(16, 20) + '-' + hex.substring(20);
 	}
 
-	private static List<Violation> checkR5(final PDDocument document) {
+	private static List<Violation> checkR5(final PDDocument document, final Flavour flavour) {
 		final var violations = new ArrayList<Violation>();
 		final var trailer = document.getDocument().getTrailer();
 		if (trailer.getDictionaryObject(COSName.ENCRYPT) != null) {
@@ -467,6 +477,38 @@ public final class PdfXPreflight {
 		final var names = asDictionary(catalog.getDictionaryObject(COSName.NAMES));
 		if (names != null && names.getDictionaryObject(JAVA_SCRIPT) != null) {
 			violations.add(new Violation("R5", "/Namesに/JavaScriptがあります"));
+		}
+		// ISO 15930 6.17: ViewArea・ViewClip・PrintArea・PrintClip は既定(CropBox)のまま(2026-10-07)
+		final var prefs = asDictionary(catalog.getDictionaryObject(COSName.VIEWER_PREFERENCES));
+		if (prefs != null) {
+			for (final String key : new String[] { "ViewArea", "ViewClip", "PrintArea", "PrintClip" }) {
+				final var value = prefs.getNameAsString(COSName.getPDFName(key));
+				if (value != null && !"CropBox".equals(value)) {
+					violations.add(new Violation("R5", "ViewerPreferencesの/" + key + "が/" + value + "です"));
+				}
+			}
+		}
+		// X-1a:2003・X-3:2003 6.13・6.14: 注釈のアクションは文書内の移動(GoTo)だけ(2026-10-07)
+		if (flavour.pdf14) {
+			var pageNumber = 0;
+			for (final var page : document.getPages()) {
+				++pageNumber;
+				final var annots = page.getCOSObject().getCOSArray(COSName.ANNOTS);
+				if (annots == null) {
+					continue;
+				}
+				for (var i = 0; i < annots.size(); ++i) {
+					final var annot = asDictionary(annots.getObject(i));
+					final var action = annot == null ? null : asDictionary(annot.getDictionaryObject(COSName.A));
+					if (action != null && !"GoTo".equals(action.getNameAsString(COSName.S))) {
+						violations.add(new Violation("R5", "ページ" + pageNumber + "の注釈に/"
+								+ action.getNameAsString(COSName.S) + "アクションがあります"));
+					}
+					if (annot != null && annot.getDictionaryObject(COSName.AA) != null) {
+						violations.add(new Violation("R5", "ページ" + pageNumber + "の注釈に/AAがあります"));
+					}
+				}
+			}
 		}
 		return violations;
 	}
