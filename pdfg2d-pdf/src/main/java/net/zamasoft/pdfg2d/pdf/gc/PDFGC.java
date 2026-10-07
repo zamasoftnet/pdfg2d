@@ -14,7 +14,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Logger;
 
 import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.GraphicsException;
@@ -36,7 +35,6 @@ import net.zamasoft.pdfg2d.gc.text.Text;
 import net.zamasoft.pdfg2d.pdf.PDFGraphicsOutput;
 import net.zamasoft.pdfg2d.pdf.PDFOutput;
 import net.zamasoft.pdfg2d.pdf.PDFWriter;
-import net.zamasoft.pdfg2d.pdf.font.PDFFontSource.Type;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 import net.zamasoft.pdfg2d.g2d.gc.G2DGC;
@@ -158,10 +156,6 @@ import net.zamasoft.pdfg2d.g2d.util.RasterEffects;
  * @since 1.0
  */
 public class PDFGC implements GC, Closeable {
-	private static final Logger LOG = Logger.getLogger(PDFGC.class.getName());
-
-	private static final boolean DEBUG = false;
-
 	protected final PDFGraphicsOutput out;
 
 	private static final double ONE_THIRD = 1.0 / 3.0;
@@ -911,9 +905,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public State begin() throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("begin");
-		}
 		try {
 			this.applyTransform();
 			this.applyClip();
@@ -956,9 +947,6 @@ public class PDFGC implements GC, Closeable {
 	 */
 	@Override
 	public State beginArtifactScope() throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("beginArtifactScope");
-		}
 		final boolean began;
 		try {
 			this.applyTransform();
@@ -1050,9 +1038,6 @@ public class PDFGC implements GC, Closeable {
 	 * when a {@link State} returned by {@link #begin()} is closed.
 	 */
 	private void restoreState() throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("end");
-		}
 		try {
 			this.grestore();
 		} catch (IOException e) {
@@ -1071,9 +1056,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void resetState() throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("reset");
-		}
 		try {
 			this.grestore();
 		} catch (IOException e) {
@@ -1087,9 +1069,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void setLineWidth(final double lineWidth) {
-		if (DEBUG) {
-			System.err.println("setLineWidth: " + lineWidth);
-		}
 		this.lineWidth = lineWidth;
 	}
 
@@ -1100,9 +1079,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void setLinePattern(final double[] linePattern) {
-		if (DEBUG) {
-			System.err.println("setLinePattern: " + linePattern);
-		}
 		if (linePattern != null && linePattern.length > 0) {
 			this.linePattern = linePattern;
 		} else {
@@ -1117,9 +1093,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void setLineJoin(final LineJoin lineJoin) {
-		if (DEBUG) {
-			System.err.println("setLineJoin: " + lineJoin);
-		}
 		this.lineJoin = lineJoin;
 	}
 
@@ -1130,9 +1103,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void setLineCap(final LineCap lineCap) {
-		if (DEBUG) {
-			System.err.println("setLineCap: " + lineCap);
-		}
 		this.lineCap = lineCap;
 	}
 
@@ -1143,9 +1113,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void setStrokePaint(final Paint paint) throws GraphicsException {
-		if (DEBUG) {
-			System.err.println("setStrokePaint: " + paint);
-		}
 		this.setPaint(paint, false);
 	}
 
@@ -1156,9 +1123,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void setFillPaint(final Paint paint) throws GraphicsException {
-		if (DEBUG) {
-			System.err.println("setFillPaint: " + paint);
-		}
 		this.setPaint(paint, true);
 	}
 
@@ -1241,9 +1205,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void setTextMode(final TextMode textMode) {
-		if (DEBUG) {
-			LOG.fine("setTextMode: " + textMode);
-		}
 		this.textMode = textMode;
 	}
 
@@ -1254,9 +1215,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void transform(final AffineTransform at) throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("transform: " + at);
-		}
 		if (at == null || at.isIdentity()) {
 			return;
 		}
@@ -1290,9 +1248,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void clip(final Shape clip) throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("clip: " + (clip == null ? clip : clip.getBounds2D()));
-		}
 		try {
 			this.applyTransform();
 			this.applyClip();
@@ -1304,9 +1259,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void fill(final Shape shape) throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("fill: " + shape.getBounds2D());
-		}
 		try {
 			this.applyStates();
 			// An empty rectangle paints nothing. Return before the artifact mark is opened: returning
@@ -1344,9 +1296,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void draw(final Shape shape) throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("draw: " + shape.getBounds2D());
-		}
 		try {
 			this.applyStates();
 			final var marked = this.beginArtifactTagged();
@@ -1368,9 +1317,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void fillDraw(final Shape shape) throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("fillDraw: " + shape.getBounds2D());
-		}
 		try {
 			this.applyStates();
 			final var marked = this.beginArtifactTagged();
@@ -1404,9 +1350,6 @@ public class PDFGC implements GC, Closeable {
 	}
 
 	private void drawImage(final Image image, final String alt) throws GraphicsException {
-		if (DEBUG) {
-			LOG.fine("drawImage: " + image);
-		}
 		try {
 			this.applyStates();
 		} catch (IOException e) {
@@ -1495,9 +1438,6 @@ public class PDFGC implements GC, Closeable {
 
 	@Override
 	public void drawText(final Text text, final double x, final double y) throws GraphicsException {
-		if (DEBUG) {
-			System.err.println("drawText: " + text);
-		}
 		if (text.getGlyphCount() <= 0) {
 			return;
 		}

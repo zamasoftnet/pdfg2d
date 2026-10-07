@@ -187,7 +187,7 @@ public class GlyfSimpleDescript extends GlyfDescript {
 				}
 			}
 		} catch (final ArrayIndexOutOfBoundsException e) {
-			System.out.println("error: array index out of bounds");
+			// 壊れた字形(繰り返しが点の数を超える): 読めたところまで使う
 		}
 	}
 }

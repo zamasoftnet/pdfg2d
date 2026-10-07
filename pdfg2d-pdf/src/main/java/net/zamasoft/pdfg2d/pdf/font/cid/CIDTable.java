@@ -111,9 +111,6 @@ public class CIDTable implements Serializable {
 				}
 				toCid = intList;
 			}
-			// if (!toCid.contains(MISSING_CHAR)) {
-			// System.err.println("missing missing char");
-			// }
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}

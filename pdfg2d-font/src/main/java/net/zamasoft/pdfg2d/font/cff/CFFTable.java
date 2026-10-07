@@ -155,8 +155,6 @@ public class CFFTable implements Table {
 	/** Token type constant: the current byte sequence represents a real-number operand. */
 	public static final byte TYPE_REAL = 3;
 
-	private static final boolean DEBUG = false;
-
 	private final RandomAccessFile raf;
 
 	private final CFFStack stack = new CFFStack();
@@ -206,10 +204,6 @@ public class CFFTable implements Table {
 			{
 				this.raf.seek(de.offset());
 				byte[] header = this.readHeader();
-				if (DEBUG) {
-					System.err.println("Major Version: " + header[0]);
-					System.err.println("Minor Version: " + header[1]);
-				}
 				int skip = header[2];
 				this.raf.skipBytes(skip - 4);
 			}
@@ -217,9 +211,6 @@ public class CFFTable implements Table {
 			// Skip Name INDEX
 			{
 				int count = this.readCard16();
-				if (DEBUG) {
-					System.err.println("Name INDEX count: " + count);
-				}
 				if (count != 1) {
 					throw new IOException("Name INDEX is not 1: " + count);
 				}
@@ -233,9 +224,6 @@ public class CFFTable implements Table {
 			int dictEnd;
 			{
 				int count = this.readCard16();
-				if (DEBUG) {
-					System.err.println("Top DICT INDEX count: " + count);
-				}
 				if (count != 1) {
 					throw new IOException("Top DICT INDEX is not 1: " + count);
 				}
@@ -243,9 +231,6 @@ public class CFFTable implements Table {
 				this.raf.skipBytes(offSize);
 				int offset = this.readOffset(offSize);
 				dictEnd = offset - 1;
-			}
-			if (DEBUG) {
-				System.err.println("Top DICT size:" + dictEnd);
 			}
 			dictEnd += this.raf.getFilePointer();
 
@@ -256,9 +241,6 @@ public class CFFTable implements Table {
 			int fdSelectOffset = -1;
 			while (this.raf.getFilePointer() < dictEnd) {
 				int op = this.scanOperator();
-				if (DEBUG) {
-					System.err.println("[DICT]:" + Integer.toHexString(op) + ";" + this.stack.size());
-				}
 				switch (op) {
 					case CHAR_STRINGS:
 						charStringsOffset = this.stack.get(0).intValue();
@@ -292,9 +274,6 @@ public class CFFTable implements Table {
 			// Skip String INDEX
 			{
 				int count = this.readCard16();
-				if (DEBUG) {
-					System.err.println("String INDEX count: " + count);
-				}
 				if (count > 0) {
 					int offSize = this.readOffSize();
 					int skip = count * offSize;
@@ -307,9 +286,6 @@ public class CFFTable implements Table {
 			// Parse Global Subrs INDEX
 			{
 				int count = this.readCard16();
-				if (DEBUG) {
-					System.err.println("Global Subrs INDEX count: " + count);
-				}
 				// **countが0のINDEXは2バイトだけ**(CFF仕様 §5「INDEX Data」
 				// ——count==0 のとき offSize も offset 配列もデータも無い)。
 				// 2026-08-05まで無条件に offSize を読んでいたため、
@@ -337,9 +313,6 @@ public class CFFTable implements Table {
 			this.raf.seek(de.offset() + charStringsOffset);
 			int charCount = this.readCard16();
 			{
-				if (DEBUG) {
-					System.err.println("CharStrings INDEX count:" + charCount);
-				}
 				int offSize = this.readOffSize();
 				cso = new int[charCount];
 				for (int i = 0; i < charCount; ++i) {
@@ -352,10 +325,6 @@ public class CFFTable implements Table {
 			}
 
 			// Parse Private DICT
-			if (DEBUG) {
-				System.err.println("Private DICT offset:" + privateOffset);
-				System.err.println("Private DICT size:" + privateEnd);
-			}
 			if (privateEnd != 0) {
 				this.raf.seek(de.offset() + privateOffset);
 				privateEnd += this.raf.getFilePointer();
@@ -363,9 +332,6 @@ public class CFFTable implements Table {
 				int localSubrsOffset = -1;
 				while (this.raf.getFilePointer() < privateEnd) {
 					int op = this.scanOperator();
-					if (DEBUG) {
-						System.err.println("[Private DICT]:" + Integer.toHexString(op) + ";" + this.stack.size());
-					}
 					switch (op) {
 						case SUBRS:
 							localSubrsOffset = this.stack.get(0).intValue() + privateOffset;
@@ -378,9 +344,6 @@ public class CFFTable implements Table {
 					// Parse Local Subrs INDEX
 					this.raf.seek(de.offset() + localSubrsOffset);
 					int count = this.readCard16();
-					if (DEBUG) {
-						System.err.println("Local Subrs INDEX count: " + count);
-					}
 					if (count == 0) {
 						// 上と同じ——空のINDEXは2バイトだけ
 						lso = null;
@@ -407,9 +370,6 @@ public class CFFTable implements Table {
 				// Parse Font DICT INDEX
 				this.raf.seek(de.offset() + fontDictIndexOffset);
 				int count = this.readCard16();
-				if (DEBUG) {
-					System.err.println("Font DICT INDEX count: " + count);
-				}
 				++count;
 				int offSize = this.readOffSize();
 				int[] offsets = new int[count];
@@ -422,18 +382,10 @@ public class CFFTable implements Table {
 					int end = (int) this.raf.getFilePointer() + offsets[i + 1] - offsets[i];
 					while (this.raf.getFilePointer() < end) {
 						int op = this.scanOperator();
-						if (DEBUG) {
-							System.err.println(
-									"[Font DICT]:" + i + "/" + Integer.toHexString(op) + ";" + this.stack.size());
-						}
 						switch (op) {
 							case PRIVATE:
 								privateLengths[i] = this.stack.get(0).intValue();
 								privateOffsets[i] = this.stack.get(1).intValue();
-								if (DEBUG) {
-									System.err.println("PRIVATE length/offset: " + i + "/" + privateLengths[i] + "/"
-											+ privateOffsets[i]);
-								}
 								break;
 						}
 						this.stack.clear();
@@ -452,17 +404,9 @@ public class CFFTable implements Table {
 					end += this.raf.getFilePointer();
 					while (this.raf.getFilePointer() < end) {
 						int op = this.scanOperator();
-						if (DEBUG) {
-							System.err.println(
-									"[Private DICT]:" + i + "/" + Integer.toHexString(op) + ";" + this.stack.size());
-						}
 						switch (op) {
 							case SUBRS:
 								subrsOffsets[i] = fdPrivateOffset + this.stack.get(0).intValue();
-								if (DEBUG) {
-									System.err.println(
-											"FD Subrs offset: " + i + "/" + fdPrivateOffset + "+" + this.stack.get(0));
-								}
 								break;
 						}
 						this.stack.clear();
@@ -477,9 +421,6 @@ public class CFFTable implements Table {
 					}
 					this.raf.seek(de.offset() + subrsOffsets[i]);
 					int subrCount = this.readCard16() + 1;
-					if (DEBUG) {
-						System.err.println("FD Local Subrs INDEX count: " + i + "/" + subrCount);
-					}
 					int subrOffSize = this.readOffSize();
 					if (subrOffSize == 0) {
 						continue;
@@ -500,9 +441,6 @@ public class CFFTable implements Table {
 					lso = new int[charCount][];
 					this.raf.seek(de.offset() + fdSelectOffset);
 					int format = this.readCard8();
-					if (DEBUG) {
-						System.err.println("FD Select format type: " + format);
-					}
 					switch (format) {
 						case 0:
 							for (int i = 0; i < charCount; ++i) {
@@ -627,9 +565,6 @@ public class CFFTable implements Table {
 					try {
 						number = Float.parseFloat(real);
 					} catch (NumberFormatException e) {
-						if (DEBUG) {
-							System.err.println("BadNumber: " + real);
-						}
 						throw e;
 					}
 					break;

@@ -27,8 +27,6 @@ public class CFFGenerator {
 
 	protected BBox bbox;
 
-	private static final boolean DEBUG = false;
-
 	/**
 	 * Sets the subset name (the six-letter tag + PostScript name) that will be
 	 * written into the CFF Name INDEX, e.g. {@code "ABCDEF+FontName"}.
@@ -260,24 +258,15 @@ public class CFFGenerator {
 									if (dx == 0) {
 										tout3.writeShort(dy);
 										tout3.writeOperator(Type2OutputStream.VMOVETO);
-										if (DEBUG) {
-											System.err.println("vmoveto " + dy);
-										}
 										cy += dy;
 									} else if (dy == 0) {
 										tout3.writeShort(dx);
 										tout3.writeOperator(Type2OutputStream.HMOVETO);
-										if (DEBUG) {
-											System.err.println("hmoveto " + dx);
-										}
 										cx += dx;
 									} else {
 										tout3.writeShort(dx);
 										tout3.writeShort(dy);
 										tout3.writeOperator(Type2OutputStream.RMOVETO);
-										if (DEBUG) {
-											System.err.println("rmoveto " + dx + " " + dy);
-										}
 										cx += dx;
 										cy += dy;
 									}
@@ -289,9 +278,6 @@ public class CFFGenerator {
 									if (closed) {
 										tout3.writeShort((short) 0);
 										tout3.writeOperator(Type2OutputStream.HMOVETO);
-										if (DEBUG) {
-											System.err.println("hmoveto " + 0);
-										}
 										closed = false;
 									}
 									double x = cord[0];
@@ -301,24 +287,15 @@ public class CFFGenerator {
 									if (dx == 0) {
 										tout3.writeShort(dy);
 										tout3.writeOperator(Type2OutputStream.VLINETO);
-										if (DEBUG) {
-											System.err.println("vlineto " + dy);
-										}
 										cy += dy;
 									} else if (dy == 0) {
 										tout3.writeShort(dx);
 										tout3.writeOperator(Type2OutputStream.HLINETO);
-										if (DEBUG) {
-											System.err.println("hlineto " + dx);
-										}
 										cx += dx;
 									} else {
 										tout3.writeShort(dx);
 										tout3.writeShort(dy);
 										tout3.writeOperator(Type2OutputStream.RLINETO);
-										if (DEBUG) {
-											System.err.println("rlineto " + dx + " " + dy);
-										}
 										cx += dx;
 										cy += dy;
 									}
@@ -329,9 +306,6 @@ public class CFFGenerator {
 									if (closed) {
 										tout3.writeShort((short) 0);
 										tout3.writeOperator(Type2OutputStream.HMOVETO);
-										if (DEBUG) {
-											System.err.println("hmoveto " + 0);
-										}
 										closed = false;
 									}
 									double x1 = cord[0];
@@ -363,10 +337,6 @@ public class CFFGenerator {
 									tout3.writeShort(dxc);
 									tout3.writeShort(dyc);
 									tout3.writeOperator(Type2OutputStream.RRCURVETO);
-									if (DEBUG) {
-										System.err.println("rrcurveto " + dxa + " " + dya + " " + dxb + " " + dyb + " "
-												+ dxc + " " + dyc);
-									}
 								}
 									break;
 
@@ -374,9 +344,6 @@ public class CFFGenerator {
 									if (closed) {
 										tout3.writeShort((short) 0);
 										tout3.writeOperator(Type2OutputStream.HMOVETO);
-										if (DEBUG) {
-											System.err.println("hmoveto " + 0);
-										}
 										closed = false;
 									}
 									double xa = cord[0];
@@ -404,10 +371,6 @@ public class CFFGenerator {
 									tout3.writeShort(dxc);
 									tout3.writeShort(dyc);
 									tout3.writeOperator(Type2OutputStream.RRCURVETO);
-									if (DEBUG) {
-										System.err.println("rrcurveto " + dxa + " " + dya + " " + dxb + " " + dyb + " "
-												+ dxc + " " + dyc);
-									}
 									cx = xc;
 									cy = yc;
 								}

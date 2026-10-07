@@ -331,20 +331,6 @@ public final class FontIndex {
 	}
 
 	/**
-	 * 索引にあるTTC内フォント数を返します(鮮度一致時のみ)。
-	 *
-	 * @return フォント数、索引ミスなら-1
-	 */
-	public int numFonts(final File fontFile, final String scanKey) {
-		final FileEntry entry = this.pathToEntry.get(fontFile.getPath());
-		if (entry == null || entry.size != fontFile.length() || entry.lastModified != fontFile.lastModified()
-				|| !entry.scanKey.equals(scanKey)) {
-			return -1;
-		}
-		return entry.numFonts;
-	}
-
-	/**
 	 * 変更があれば索引をファイルへ書き出します(一時ファイル+rename)。
 	 * 失敗しても警告のみ(次回起動が遅いだけで機能に影響しない)。
 	 */

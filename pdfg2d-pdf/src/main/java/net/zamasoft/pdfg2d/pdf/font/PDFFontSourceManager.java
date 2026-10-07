@@ -279,28 +279,6 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				m.add(name);
 			}
 		}
-		// Insert font names obtained from FontSource
-		// Commented out since not needed for CSS @font-face
-		// for (int j = 0; j < list.size(); ++j) {
-		// FontSource source = (FontSource) list.get(j);
-		// String[] aliases = source.getAliases();
-		// if (aliases != null) {
-		// for (int i = 0; i < aliases.length; ++i) {
-		// String name = FontUtils.normalizeName(aliases[i]);
-		// if (m.contains(name)) {
-		// continue;
-		// }
-		// MultimapUtils.putDirect(this.nameToFonts, name, source);
-		// m.add(name);
-		// }
-		// }
-		// String name = FontUtils.normalizeName(source.getFontName());
-		// if (m.contains(name)) {
-		// continue;
-		// }
-		// MultimapUtils.putDirect(this.nameToFonts, name, source);
-		// m.add(name);
-		// }
 	}
 
 	private static <T> T await(final Future<T> future) throws IOException {

@@ -70,9 +70,6 @@ public class EmojiFontSource extends AbstractFontSource {
 						}
 					}
 				}
-			} else {
-				// System.err.println("Warning: emoji.zip not found. Emoji support will be
-				// disabled.");
 			}
 		} catch (final Exception e) {
 			// Continue with empty maps: emoji fall back to the text fonts

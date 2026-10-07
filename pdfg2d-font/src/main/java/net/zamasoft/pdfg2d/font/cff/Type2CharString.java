@@ -143,8 +143,6 @@ public class Type2CharString {
 
 	public static final byte TYPE_INTEGER = 2;
 
-	private static final boolean DEBUG = false;
-
 	private final RandomAccessFile raf;
 
 	private final Type2Stack operandStack = new Type2Stack();
@@ -192,9 +190,6 @@ public class Type2CharString {
 	 */
 	public Glyph getGlyph(final int ix, final int offset, final short upm, final int[] globalSubrOffsets,
 			final int[] localSubrOffsets) {
-		if (DEBUG) {
-			System.err.println("GLYPH: " + ix);
-		}
 		ByteArrayOutputStream buff = new ByteArrayOutputStream();
 		GeneralPath path = new GeneralPath();
 		path.moveTo(0, 0);
@@ -212,17 +207,11 @@ public class Type2CharString {
 						case RMOVETO: {
 							if (!closed) {
 								path.closePath();
-								if (DEBUG) {
-									System.err.println("closePath");
-								}
 								closed = true;
 							}
 							cx += this.operandStack.get(this.operandStack.size() - 2);
 							cy += -this.operandStack.get(this.operandStack.size() - 1);
 							path.moveTo(cx, cy);
-							if (DEBUG) {
-								System.err.println("rmoveto " + cx + " " + cy);
-							}
 							this.operandStack.writeTo(buff, op, 2);
 							this.operandStack.clear();
 						}
@@ -230,16 +219,10 @@ public class Type2CharString {
 						case HMOVETO: {
 							if (!closed) {
 								path.closePath();
-								if (DEBUG) {
-									System.err.println("closePath");
-								}
 								closed = true;
 							}
 							cx += this.operandStack.get(this.operandStack.size() - 1);
 							path.moveTo(cx, cy);
-							if (DEBUG) {
-								System.err.println("hmoveTo " + cx + " " + cy);
-							}
 							this.operandStack.writeTo(buff, op, 1);
 							this.operandStack.clear();
 						}
@@ -247,16 +230,10 @@ public class Type2CharString {
 						case VMOVETO: {
 							if (!closed) {
 								path.closePath();
-								if (DEBUG) {
-									System.err.println("closePath");
-								}
 								closed = true;
 							}
 							cy += -this.operandStack.get(this.operandStack.size() - 1);
 							path.moveTo(cx, cy);
-							if (DEBUG) {
-								System.err.println("vmoveTo " + cx + " " + cy);
-							}
 							this.operandStack.writeTo(buff, op, 1);
 							this.operandStack.clear();
 						}
@@ -269,9 +246,6 @@ public class Type2CharString {
 								cx += this.operandStack.get(i);
 								cy += -this.operandStack.get(i + 1);
 								path.lineTo(cx, cy);
-								if (DEBUG) {
-									System.err.println("rlineto " + cx + " " + cy);
-								}
 							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
@@ -289,9 +263,6 @@ public class Type2CharString {
 									cy += -this.operandStack.get(i);
 								}
 								path.lineTo(cx, cy);
-								if (DEBUG) {
-									System.err.println("hlineto " + cx + " " + cy);
-								}
 							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
@@ -309,9 +280,6 @@ public class Type2CharString {
 									cx += this.operandStack.get(i);
 								}
 								path.lineTo(cx, cy);
-								if (DEBUG) {
-									System.err.println("vlineto " + cx + " " + cy);
-								}
 							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
@@ -330,10 +298,6 @@ public class Type2CharString {
 								float x3 = cx += this.operandStack.get(i + 4);
 								float y3 = cy += -this.operandStack.get(i + 5);
 								path.curveTo(x1, y1, x2, y2, x3, y3);
-								if (DEBUG) {
-									System.err.println(
-											"rrcurveto " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-								}
 							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
@@ -359,10 +323,6 @@ public class Type2CharString {
 								float x3 = cx += this.operandStack.get(i + 3);
 								float y3 = cy;
 								path.curveTo(x1, y1, x2, y2, x3, y3);
-								if (DEBUG) {
-									System.err.println(
-											"hhcurveto " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-								}
 							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
@@ -399,10 +359,6 @@ public class Type2CharString {
 									}
 								}
 								path.curveTo(x1, y1, x2, y2, x3, y3);
-								if (DEBUG) {
-									System.err.println(
-											"hvcurveto " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-								}
 							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
@@ -421,17 +377,10 @@ public class Type2CharString {
 								float x3 = cx += this.operandStack.get(i + 4);
 								float y3 = cy += -this.operandStack.get(i + 5);
 								path.curveTo(x1, y1, x2, y2, x3, y3);
-								if (DEBUG) {
-									System.err.println("rcurveline " + x1 + " " + y1 + " " + x2 + " " + y2 + " "
-											+ x3 + " " + y3);
-								}
 							}
 							cx += this.operandStack.get(this.operandStack.size() - 2);
 							cy += -this.operandStack.get(this.operandStack.size() - 1);
 							path.lineTo(cx, cy);
-							if (DEBUG) {
-								System.err.println("rcurveline " + cx + " " + cy);
-							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
 							closed = false;
@@ -446,9 +395,6 @@ public class Type2CharString {
 								cx += this.operandStack.get(i);
 								cy += -this.operandStack.get(i + 1);
 								path.lineTo(cx, cy);
-								if (DEBUG) {
-									System.err.println("rlinecurve " + cx + " " + cy);
-								}
 							}
 							float x1 = cx += this.operandStack.get(i);
 							float y1 = cy += -this.operandStack.get(i + 1);
@@ -457,10 +403,6 @@ public class Type2CharString {
 							float x3 = cx += this.operandStack.get(i + 4);
 							float y3 = cy += -this.operandStack.get(i + 5);
 							path.curveTo(x1, y1, x2, y2, x3, y3);
-							if (DEBUG) {
-								System.err.println(
-										"rlinecurve " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
 							closed = false;
@@ -496,10 +438,6 @@ public class Type2CharString {
 									}
 								}
 								path.curveTo(x1, y1, x2, y2, x3, y3);
-								if (DEBUG) {
-									System.err.println(
-											"vwcurveto " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-								}
 							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
@@ -525,10 +463,6 @@ public class Type2CharString {
 								float x3 = cx;
 								float y3 = cy += -this.operandStack.get(i + 3);
 								path.curveTo(x1, y1, x2, y2, x3, y3);
-								if (DEBUG) {
-									System.err.println(
-											"vvcurveto " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-								}
 							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
@@ -549,13 +483,7 @@ public class Type2CharString {
 							float x6 = cx += this.operandStack.get(10);
 							float y6 = cy += -this.operandStack.get(11);
 							path.curveTo(x1, y1, x2, y2, x3, y3);
-							if (DEBUG) {
-								System.err.println("flex " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-							}
 							path.curveTo(x4, y4, x5, y5, x6, y6);
-							if (DEBUG) {
-								System.err.println("flex " + x4 + " " + y4 + " " + x5 + " " + y5 + " " + x6 + " " + y6);
-							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
 							closed = false;
@@ -581,15 +509,7 @@ public class Type2CharString {
 							float x6 = cx += this.operandStack.get(6);
 							float y6 = cy;
 							path.curveTo(x1, y1, x2, y2, x3, y3);
-							if (DEBUG) {
-								System.err
-										.println("hflex " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-							}
 							path.curveTo(x4, y4, x5, y5, x6, y6);
-							if (DEBUG) {
-								System.err
-										.println("hflex " + x4 + " " + y4 + " " + x5 + " " + y5 + " " + x6 + " " + y6);
-							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
 							closed = false;
@@ -613,15 +533,7 @@ public class Type2CharString {
 							float x6 = cx += this.operandStack.get(8);
 							float y6 = cy = hflex1StartY;
 							path.curveTo(x1, y1, x2, y2, x3, y3);
-							if (DEBUG) {
-								System.err
-										.println("hflex1 " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-							}
 							path.curveTo(x4, y4, x5, y5, x6, y6);
-							if (DEBUG) {
-								System.err
-										.println("hflex1 " + x4 + " " + y4 + " " + x5 + " " + y5 + " " + x6 + " " + y6);
-							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
 							closed = false;
@@ -658,15 +570,7 @@ public class Type2CharString {
 								y6 = cy += -this.operandStack.get(10);
 							}
 							path.curveTo(x1, y1, x2, y2, x3, y3);
-							if (DEBUG) {
-								System.err
-										.println("flex1 " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + x3 + " " + y3);
-							}
 							path.curveTo(x4, y4, x5, y5, x6, y6);
-							if (DEBUG) {
-								System.err
-										.println("flex1 " + x4 + " " + y4 + " " + x5 + " " + y5 + " " + x6 + " " + y6);
-							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size());
 							this.operandStack.clear();
 							closed = false;
@@ -678,9 +582,6 @@ public class Type2CharString {
 						case HSTEMHM:
 						case VSTEMHM: {
 							hintCount += this.operandStack.size() / 2;
-							if (DEBUG) {
-								System.err.println("hintCount: " + hintCount);
-							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size() / 2 * 2);
 							this.operandStack.clear();
 							break;
@@ -689,15 +590,9 @@ public class Type2CharString {
 						case HINTMASK:
 						case CNTRMASK: {
 							hintCount += this.operandStack.size() / 2;
-							if (DEBUG) {
-								System.err.println("hintCount: " + hintCount);
-							}
 							this.operandStack.writeTo(buff, op, this.operandStack.size() / 2 * 2);
 							this.operandStack.clear();
 							int maskBytes = (hintCount + 7) / 8;
-							if (DEBUG) {
-								System.err.println("maskBytes: " + maskBytes);
-							}
 							for (int i = 0; i < maskBytes; ++i) {
 								buff.write(this.raf.read());
 							}
@@ -713,9 +608,6 @@ public class Type2CharString {
 							} else {
 								six += 32768;
 							}
-							if (DEBUG) {
-								System.err.println("callsubr: " + six + "|" + this.execDepth);
-							}
 							this.execStack[this.execDepth++] = (int) this.raf.getFilePointer();
 							this.raf.seek(localSubrOffsets[six]);
 						}
@@ -730,9 +622,6 @@ public class Type2CharString {
 							} else {
 								six += 32768;
 							}
-							if (DEBUG) {
-								System.err.println("callgsubr: " + six + "|" + this.execDepth);
-							}
 							this.execStack[this.execDepth++] = (int) this.raf.getFilePointer();
 							this.raf.seek(globalSubrOffsets[six]);
 						}
@@ -740,9 +629,6 @@ public class Type2CharString {
 
 						case RETURN:
 							this.raf.seek(this.execStack[--this.execDepth]);
-							if (DEBUG) {
-								System.err.println("return: " + this.execDepth);
-							}
 							break;
 
 						default:
@@ -752,9 +638,6 @@ public class Type2CharString {
 				}
 				if (!closed) {
 					path.closePath();
-					if (DEBUG) {
-						System.err.println("closePath");
-					}
 				}
 			} catch (IOException e) {
 				throw new RuntimeException(e);
@@ -763,12 +646,6 @@ public class Type2CharString {
 
 		buff.write(ENDCHAR);
 		byte[] charString = buff.toByteArray();
-		if (DEBUG) {
-			for (byte b : charString) {
-				System.err.print(Integer.toHexString((int) b & 0xFF) + " ");
-			}
-			System.err.println();
-		}
 		return new Glyph(path, charString);
 	}
 

@@ -200,7 +200,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	private boolean acroFormNeedsAppearances = false;
 
 	/** Shared standard-font references for form default resources (/DR). */
-	private ObjectRef helvFontRef, zadbFontRef;
+	private ObjectRef helvFontRef;
 
 	/**
 	 * Registers an AcroForm field object reference and notes whether the form
@@ -226,14 +226,6 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			this.helvFontRef = this.writeStandardFont("Helvetica");
 		}
 		return this.helvFontRef;
-	}
-
-	/** Returns the shared ZapfDingbats font reference (checkbox marks). */
-	ObjectRef zadbFontRef() throws IOException {
-		if (this.zadbFontRef == null) {
-			this.zadbFontRef = this.writeStandardFont("ZapfDingbats");
-		}
-		return this.zadbFontRef;
 	}
 
 	private ObjectRef writeStandardFont(final String baseFont) throws IOException {
@@ -2262,10 +2254,6 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 				if (this.helvFontRef != null) {
 					this.catalogFlow.writeName("Helv");
 					this.catalogFlow.writeObjectRef(this.helvFontRef);
-				}
-				if (this.zadbFontRef != null) {
-					this.catalogFlow.writeName("ZaDb");
-					this.catalogFlow.writeObjectRef(this.zadbFontRef);
 				}
 				this.catalogFlow.endHash();
 				this.catalogFlow.endHash();

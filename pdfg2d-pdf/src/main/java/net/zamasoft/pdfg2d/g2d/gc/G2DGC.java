@@ -160,8 +160,6 @@ public class G2DGC implements GC {
 
 	protected final Graphics2D g;
 
-	protected boolean drewAnything = false;
-
 	/**
 	 * 既定は黒。{@link net.zamasoft.pdfg2d.pdf.gc.PDFGC}と同じ契約で、
 	 * 明示的に設定される前でも{@code null}を返さない。状態を保存して元へ戻す
@@ -230,23 +228,9 @@ public class G2DGC implements GC {
 	}
 
 	/**
-	 * Returns {@code true} if any rendering operation has been performed since the
-	 * last top-level {@link #begin()} call.
-	 *
-	 * @return {@code true} if something has been drawn
-	 */
-	public boolean drewAnything() {
-		return this.drewAnything;
-	}
-
-	/**
-	 * Saves the current graphics state onto the internal stack and resets the
-	 * {@code drewAnything} flag when the stack was empty before this call.
+	 * Saves the current graphics state onto the internal stack.
 	 */
 	public State begin() {
-		if (this.stack.isEmpty()) {
-			this.drewAnything = false;
-		}
 		this.stack.add(new GraphicsState(this));
 		return new State() {
 			private boolean closed;
@@ -447,7 +431,6 @@ public class G2DGC implements GC {
 	}
 
 	public void drawImage(Image image) throws GraphicsException {
-		this.drewAnything = true;
 
 		Composite composite = this.g.getComposite();
 		this.g.setComposite(BlendComposite.getInstance(this.blendMode, this.fillAlpha));
@@ -467,7 +450,6 @@ public class G2DGC implements GC {
 			this.drawImage(image);
 			return;
 		}
-		this.drewAnything = true;
 		final AffineTransform at = this.g.getTransform();
 		final double blurSigma = RasterEffects.deviceSigma(at, effects.blurSigma());
 		final GroupEffects.DropShadow shadow = effects.dropShadow();
@@ -588,7 +570,6 @@ public class G2DGC implements GC {
 			this.fill(shape);
 			return;
 		}
-		this.drewAnything = true;
 		final int pad = RasterEffects.kernelRadius(deviceSigma);
 		final Rectangle region = this.deviceRegion(at.createTransformedShape(shape).getBounds2D(), pad);
 		if (region == null) {
@@ -663,7 +644,6 @@ public class G2DGC implements GC {
 	}
 
 	public void fill(Shape shape) {
-		this.drewAnything = true;
 		java.awt.Paint paint = this.g.getPaint();
 		this.g.setPaint(this.awtFillPaint);
 
@@ -691,7 +671,6 @@ public class G2DGC implements GC {
 	}
 
 	public void draw(Shape shape) {
-		this.drewAnything = true;
 		if (this.strokeAt != null) {
 			AffineTransform saveAt = g.getTransform();
 			this.g.transform(this.strokeAt);
@@ -713,7 +692,6 @@ public class G2DGC implements GC {
 	}
 
 	public void drawText(Text text, double x, double y) throws GraphicsException {
-		this.drewAnything = true;
 
 		try (final var gcState = this.begin()) {
 			this.transform(AffineTransform.getTranslateInstance(x, y));

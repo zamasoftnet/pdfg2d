@@ -204,14 +204,6 @@ public class ASCII85OutputStream extends FilterOutputStream {
 		// and write this.out the first n+1 bytes from the result
 		if (this.pos > 0) {
 			int rest = this.pos;
-			/*
-			 * byte[] lastdata = new byte[4]; int i = 0; for (int j = 0; j < 4; j++) { if (j
-			 * < rest) { lastdata[j] = data[i++]; } else { lastdata[j] = 0; } }
-			 * 
-			 * long val = ((lastdata[0] < < 24) & 0xff000000L) + ((lastdata[1] < < 16) &
-			 * 0xff0000L) + ((lastdata[2] < < 8) & 0xff00L) + (lastdata[3] & 0xffL);
-			 */
-
 			byte[] conv;
 			// special rule for handling zeros at the end
 			if (this.buffer != 0) {

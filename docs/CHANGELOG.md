@@ -5,7 +5,7 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
 
 ## 2026-09-12 — 縦組みの字形ごとの縦原点
 
-- `GlyphBounds` と `ShapedFont.getGlyphBounds(gid)` を追加。1000単位・y下向き・変換前の字面をdoubleで返し、OpenType・埋め込みsubset CID・Identityで空字形を含め同期キャッシュする（[G0実装報告](./GLYPH_BOUNDS_STAGE_REPORT.md)）。
+- `GlyphBounds` と `ShapedFont.getGlyphBounds(gid)` を追加。1000単位・y下向き・変換前の字面をdoubleで返し、OpenType・埋め込みsubset CID・Identityで空字形を含め同期キャッシュする（[G0実装報告](./history/2026-09-12-glyph-bounds-stage-report.md)）。
 - `Font.getVerticalOrigin(gid)` を追加。OpenTypeの縦書きではCFFのVORG、または
   TrueTypeのglyf境界／CFF輪郭とvmtxの上側ベアリングから、1000単位の縦原点を求める。
   横書き・縦メトリクスのない書体・空字形は既定の880を使う。
@@ -16,7 +16,7 @@ pdfg2d の機能追加・改善の実施記録。提案と計画は [`PROPOSALS.
   次の文字と重なる問題を修正。ImageFontの位置と回転フラグ値2は維持し、無効な平行移動救済を撤去。
   異なるダッシュ間のkerningにも原点差を反映する。
 - 対応範囲は設計のV1〜V3。foliojet4側と実物・製品回帰検証（V4）は別担当へ引き継ぐ。
-  検証結果・制約は[`VERTICAL_ORIGIN_STAGE_REPORT.md`](./VERTICAL_ORIGIN_STAGE_REPORT.md)を参照。
+  検証結果・制約は[`history/2026-09-12-vertical-origin-stage-report.md`](./history/2026-09-12-vertical-origin-stage-report.md)を参照。
 - 欠落字形の代用箱(`MissingCIDFont`)は `getGlyphBounds` を null にし、字面として測らせない。約物の詰めの上限を字面で決める利用側で、書体が無い文書の配置が変わらないようにする。
 
 ## 2026-09-05 — PDF/X 色管理 I3（画像・/DefaultRGB・APP14）

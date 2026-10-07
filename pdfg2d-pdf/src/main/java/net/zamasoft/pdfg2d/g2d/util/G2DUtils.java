@@ -15,7 +15,6 @@ import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
@@ -294,23 +293,6 @@ public final class G2DUtils {
 				return ffe.getName();
 		}
 
-	}
-
-	/**
-	 * Converts FontStyle to an array of AWT Fonts.
-	 * 
-	 * @param fontStyle FontStyle
-	 * @return Array of AWT Fonts
-	 */
-	public static final Font[] toFonts(FontStyle fontStyle) {
-		Map<TextAttribute, Object> atts = new HashMap<TextAttribute, Object>();
-		setFontAttributes(atts, fontStyle);
-		Font[] fonts = new Font[fontStyle.getFamily().getLength()];
-		for (int i = 0; i < fonts.length; ++i) {
-			atts.put(TextAttribute.FAMILY, G2DUtils.toAwtFamilyName(fontStyle.getFamily().get(i)));
-			fonts[i] = new Font(atts);
-		}
-		return fonts;
 	}
 
 	/**
