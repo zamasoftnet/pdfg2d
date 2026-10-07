@@ -1,0 +1,425 @@
+{
+  "net.zamasoft.pdfg2d.font.AbstractFontSource#setWidthClass(int)": {
+    "ja": "幅級を設定します(2026-08-29)。範囲外の値はOS/2の未定義値\n(0や旧仕様の値)として通常幅に丸める。\n\n@param widthClass OS/2 usWidthClass"
+  },
+  "net.zamasoft.pdfg2d.font.AbstractFontSource#widthClass": {
+    "ja": "幅級(OS/2 usWidthClass 1..9)。索引復元・face宣言で上書きされる(2026-08-29)。"
+  },
+  "net.zamasoft.pdfg2d.font.FontFile#close()": {
+    "ja": "開いた書体を閉じ、WOFF/WOFF2 を解凍した一時ファイルを消します(2026-10-05)。生の TTF/TTC は消さない。\n\n<p>\n{@link #getSfntFile()} だけを使う呼び出し(可変フォントの判定・写しの生成)は、これで閉じないと解凍結果の\n持ち主がいない——書体を開いていなければ {@link OpenTypeFont} の後始末も走らず、常駐するサーバーでは\nプロセスが終わるまで残った。閉じた後は使わないこと。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.font.FontFile#getSfntFile()": {
+    "ja": "解凍済みの sfnt ファイルを返します(WOFF/WOFF2 は一時ファイル、\n生の TTF/TTC はそのまま。2026-08-20、可変フォントの静的\nインスタンス化が sfnt バイト列を必要とするため公開)。"
+  },
+  "net.zamasoft.pdfg2d.font.FontSource#DEFAULT_VERTICAL_ORIGIN": {
+    "ja": "縦書きの原点(横書きの原点からの高さ、1000単位)。VORG 表が無い書体の\n既定で、CIDフォントの W2 と縦組みの字形の平行移動が同じ値を使う\n(2026-09-02: 以前は OpenTypeFont・CIDUtils・WebFontSubset に別々にあった)。"
+  },
+  "net.zamasoft.pdfg2d.font.FontSource#NORMAL_WIDTH_CLASS": {
+    "ja": "OS/2 {@code usWidthClass}の通常幅(medium)。"
+  },
+  "net.zamasoft.pdfg2d.font.FontSource#getWidthClass()": {
+    "ja": "幅級(OpenType OS/2 {@code usWidthClass}、1=ultra-condensed〜\n9=ultra-expanded、5=normal)を返します(2026-08-29)。CSSの\n{@code font-stretch}による書体選択に使う。OS/2表を持たない\nソース(Type1/CFF単体・AWT経由)は通常幅とみなす。\n\n@return 幅級 1..9"
+  },
+  "net.zamasoft.pdfg2d.font.FontSourceProvider": {
+    "ja": "クラスパス上のモジュールが追加フォントを供給するためのSPIです\n(2026-08-01、90点計画増分7)。\n\n<p>\n旧実装は絵文字フォントを{@code Class.forName(\"...EmojiFontSource\")}+\npublicフィールド反射で取り込んでいた——モジュール境界(pdfg2d-pdfは\npdfg2d-svgに依存できない)を跨ぐための継ぎ目だが、クラス名文字列と\nフィールド名に暗黙依存していた。{@link java.util.ServiceLoader}経由の\n型付き契約に置換する。実装は\n{@code META-INF/services/net.zamasoft.pdfg2d.font.FontSourceProvider}で\n登録する。\n</p>\n\n@author MIYABE Tatsuhiko"
+  },
+  "net.zamasoft.pdfg2d.font.FontSourceProvider#fontSources()": {
+    "ja": "このプロバイダが供給するフォントを返します。フォントデータベース\n構築のたびに呼ばれるため、生成コストの高いソースはプロバイダ側で\n共有インスタンスを返すこと。\n\n@return 供給するフォント(空可)"
+  },
+  "net.zamasoft.pdfg2d.font.Glyph#isBlank()": {
+    "ja": "描かれる輪郭を1つも持たないglyphかどうかを返します。\n\n<p>\ncmapに登録がありながら字形が空のフォントが実在します\n(JejuGothic系の漢字、Adobe Blankの全字)。これを「表示できる」と\n扱うと代替フォントへ落ちず警告も出ないまま文字が消えるため、\nフォント選択がこの判定を使います(2026-09-01)。\n</p>\n\n@return 移動と閉じだけで、線も曲線も無いなら{@code true}"
+  },
+  "net.zamasoft.pdfg2d.font.VariableFontInstancer": {
+    "ja": "可変フォント(OpenType Font Variations)の静的インスタンス化です\n(2026-08-20新設)。\n\n<p>\n指定の軸座標(例: {@code wght=700})で fvar/avar/gvar を評価し、\nglyf のアウトライン座標と hmtx の送り幅を書き換えた<b>静的な\nTrueType フォント</b>を生成します(WeasyPrint が fonttools の\ninstancer で行っているのと同じ「pinned instance」方式)。可変系の\nテーブル(fvar/gvar/avar/HVAR/MVAR/STAT/cvar)は出力から除きます。\n</p>\n\n<p>\n<b>対応範囲</b>: TrueType アウトライン(glyf)のみ。CFF2 は対象外\n(isVariable が false を返す)。送り幅は gvar のファントムポイント\n(各グリフ末尾の4点)から更新し、HVAR は評価せず削除する——Google\nFonts 配信の TrueType 可変フォントは gvar にファントムのデルタを\n持つのが通例で、実測(Mulish/Segoe UI VF)でも幅が一致する。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.font.VariableFontInstancer#axisRange(File,String)": {
+    "ja": "軸の範囲をユーザー座標で返します(2026-10-04)。\n\n@param sfnt 解凍済みの sfnt ファイル\n@param tag 軸タグ(例: {@code \"wght\"})\n@return {@code {min, default, max}}。インスタンス化できる可変フォントでないか、軸が無ければ null"
+  },
+  "net.zamasoft.pdfg2d.font.VariableFontInstancer#axisTags(File)": {
+    "ja": "fvar の軸タグ列を返します(可変でなければ空)。"
+  },
+  "net.zamasoft.pdfg2d.font.VariableFontInstancer#instantiate(File,Map)": {
+    "ja": "指定軸座標の静的インスタンスを生成して一時ファイルへ書き出します。\n\n@param sfnt 解凍済みの sfnt ファイル(TTC 不可、単一フォント)\n@param userAxes 軸タグ→ユーザー座標(例: {@code {\"wght\": 700}})。\n       指定の無い軸は既定値で固定される\n@return 生成された静的フォントの一時ファイル。消すのは呼び出し側(2026-10-05 までは deleteOnExit で\n        プロセスの終わりまで残した——変換ごとに作る呼び出しでは常駐するサーバーに溜まる)"
+  },
+  "net.zamasoft.pdfg2d.font.VariableFontInstancer#isVariable(File)": {
+    "ja": "sfnt(TTF/OTF)ファイルが fvar と glyf を持つ可変フォントか。"
+  },
+  "net.zamasoft.pdfg2d.font.cff.CFFTable#getGlyphUnitsPerEm(short)": {
+    "ja": "charstringの座標が何単位で1emかを返します。\n\n<p>\nTop DICTに{@code FontMatrix}があればそれが基準\n(既定の{@code 0.001}なら1000)。無い場合、OpenType/CFFでは\n{@code head}の{@code unitsPerEm}が基準になります(FreeType等の実装と\n同じ扱い)。両者が食い違うフォントが実在し、Pretendardは\n{@code unitsPerEm=2048}でFontMatrixを持たないため、CFFの既定値\n1000で読むと字形だけが2.048倍になります(2026-09-01)。\n</p>\n\n@param headUnitsPerEm {@code head}テーブルのunitsPerEm\n@return charstring座標系の1em(通常は1000または2048)"
+  },
+  "net.zamasoft.pdfg2d.font.emoji.EmojiFontSourceProvider": {
+    "ja": "絵文字フォントをフォントデータベースへ供給します(2026-08-01、\n旧Class.forName継ぎ目のServiceLoader化)。\n\n@author MIYABE Tatsuhiko"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#substituteVertical(int,int)": {
+    "ja": "必須縦字形を適用し、横線の縦字形を持たないフォントでは対応する\n縦線の字形を代用します。\n\n<p>EM DASH(U+2014)はHORIZONTAL BAR(U+2015)の縦字形を、BOX DRAWINGS\nLIGHT HORIZONTAL(U+2500)はLIGHT VERTICAL(U+2502)の横組み字形(縦線)を使います。\nU+2502も無い場合は{@link #verticalShapeFlags(int, int)}で元の横線を\n回転します。ToUnicodeには代用前の文字を保持します。</p>"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#verticalDashKerning(int,int)": {
+    "ja": "縦組みで連続するダッシュ・横罫線の字面間の空きを詰めます。\n固定値ではなく、実際の縦字形の輪郭端と縦advanceから求めるため、\nフォントごとのサイドベアリング差に追従します。"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#verticalShapeFlags(int,int)": {
+    "ja": "元の文字と選択済みグリフから、縦組み用の輪郭変換フラグを返します。\n埋め込みサブセットのCIDへこの値を保持することで、縦横共有の物理フォントを\nType0ラッパーの出力順に依存させません。\n\n@param codePoint 元の文字\n@param gid       縦字形代用後のグリフID\n@return 輪郭変換フラグ"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource#OpenTypeFontSource(File,int,Direction,short,BBox,String,String[],boolean,net.zamasoft.pdfg2d.gc.font.FontStyle.Weight,Panose,short,short,short,GenericCmapFormat,UvsCmapFormat)": {
+    "ja": "永続フォント索引からの再構築コンストラクタです(2026-08-01)。\nファイルI/Oを一切行わない——グリフ実データが必要になったとき\n({@link #getOpenTypeFont()}経由)に初めてフォントファイルを開く。\n\n@param file         フォントファイル(この時点では開かない)\n@param index        TTC内インデックス\n@param direction    組方向\n@param upm          units per em\n@param bbox         フォントBBox(1000upm正規化済み)\n@param fontName     PostScript名\n@param aliases      別名(ソート済み)\n@param italic       斜体か\n@param weight       ウェイト\n@param panose       PANOSE分類\n@param ascent       アセント(1000upm正規化済み)\n@param descent      ディセント(同)\n@param spaceAdvance 空白幅(同)\n@param cmap         文字→GID写像(圧縮範囲)\n@param uvsCmap      UVS写像、無ければnull"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource#canDisplayUpright(int)": {
+    "ja": "縦組のmixed用除外を掛けず、基礎cmapに字形があるかを返す。\ntext-orientation: uprightのフォント選択だけが使う。\n\n<p>\n縦組みの組み方を持たない書体({@link #hasVerticalLayout()}が偽、STIX Two Text のような欧文書体)は\n正立の半角の字を受け持たない(2026-10-06)。縦の送りも原点も無く横組みの書体として書き出されるので、\n正立に置くと字が次の字に重なった。font-family の次の書体へ回す。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource#fileToFont": {
+    "ja": "パース済みフォントファイルのキャッシュです。\n\n<p>\n旧実装は{@code WeakHashMap<File, FontFile>}だったが、キーのFile\nインスタンスを各FontSourceが{@code this.file}として強参照するため\nエントリが決して回収されず、実質的に永久キャッシュだった——\n全宣言フォントの全テーブル(loca・GSUB・name等)がヒープに残る\n(290フォントで約66MB、2026-08-01実測)。パス文字列キー+\nSoftReference値に変更: 使用中のフォントはヒープ圧まで温存され、\n未使用フォントの表はOutOfMemoryErrorより先に回収される。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource#getVariation()": {
+    "ja": "可変フォントの固定座標を返します。\n\n@return 軸タグ→ユーザー座標、固定していなければ null"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource#hasVerticalLayout()": {
+    "ja": "縦組みの組み方(縦組みの元で、vrt2 か vert の置き換えと vmtx)を持つか(2026-10-06)。\n{@link net.zamasoft.pdfg2d.font.otf.OpenTypeFont} が縦組みの書体として組み・書き出す条件と同じ。\n\n@return 縦組みの書体として使えるなら{@code true}"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource#isSidewaysHalfWidth(int)": {
+    "ja": "縦組みで横倒しにする半角の字か(U+00FF 以下と半角形 U+FF60〜U+FFDF)。縦組みの元は{@link #canDisplay(int)}で\nこれらを外し(横組みの書体を回して置く)、{@code text-orientation: upright}のときだけ受け持つ\n({@link #canDisplayUpright(int)})。\n\n@param c 字\n@return 半角の字なら{@code true}"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource#release(File)": {
+    "ja": "{@code file} から開いた書体をキャッシュから外して閉じます(2026-10-05)。文書ごとに作った書体ファイル\n({@code @font-face} の取得結果・可変フォントの写し)の持ち主が、消す前に呼ぶ。外さないと、キャッシュが\n解凍した一時ファイルを握ったまま、常駐するサーバーに溜まった。\n\n@param file 書体ファイル"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource#setVariation(Map)": {
+    "ja": "可変フォントの軸を固定します。単一フォント(TTC でない)のファイルに限ります。\n\n@param variation 軸タグ→ユーザー座標(例: {@code {\"wght\": 700}})、null で解除"
+  },
+  "net.zamasoft.pdfg2d.font.table.GenericCmapFormat": {
+    "ja": "文字コード→GID写像の圧縮範囲表現です(2026-08-01に全文字HashMap展開から\n置換)。\n\n<p>\n従来はどのformatも{@code HashMap<Integer, Integer>}へ1文字=1エントリで\n展開していたため、CJKフォント1つで数MB、290フォントの起動で約350MBを\n保持していた(実測)。cmap format 12/13と同型の範囲(先頭コード・末尾\nコード・GID基点・GID固定フラグ)の並びに圧縮すると数KB/フォントになり、\n参照({@link #mapCharCode})もboxingなしの二分探索になる。\n</p>\n\n@param starts   各範囲の先頭文字コード(昇順)\n@param ends     各範囲の末尾文字コード(両端含む)\n@param gids     各範囲のGID基点\n@param constant 真なら範囲内の全コードが同じGID(format 13の多対一)、\n                偽ならコードとともにGIDも+1ずつ進む\n@since 1.0\n@author <a href=\"mailto:david@steadystate.co.uk\">David Schweinsberg</a>"
+  },
+  "net.zamasoft.pdfg2d.font.table.GenericCmapFormat#getCharacterCode(int)": {
+    "ja": "Returns the character code for the given GID, or null if there is none.\n複数のコードが同じGIDへ写る場合は最小のコードを返します(旧実装は\nformatにより挙動が揺れていた——挿入順の最初または最後)。\n\n@param gid glyph id\n@return character code"
+  },
+  "net.zamasoft.pdfg2d.font.table.UvsCmapFormat": {
+    "ja": "UVS (Unicode Variation Sequence) cmap format.\n\n<p>\n2026-08-01にboxed Map/Setからプリミティブ索引({@link LongIntLookup}+\nソート済みint[])へ圧縮({@link GenericCmapFormat}と同方針)。IVS\nコレクションを持つCJKフォントは数千〜数万対を持つため、boxed実装は\nフォントあたり数百KBの保持と参照毎のboxingを生んでいた。\n</p>\n\n@param codeToGlyphId {@code (unicodeValue << 32) | varSelector} →GIDの索引\n@param selectors     異体字セレクタの昇順配列"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.BlendComposite": {
+    "ja": "Java2D 用のブレンド合成(PDF 1.7 §11.3.5 / CSS Compositing Level 1、2026-08-29)。\n\n<p>\n{@link AlphaComposite} は SrcOver しか持たないので、\n{@link BlendMode#NORMAL} 以外はこのクラスが画素単位で\n{@code Cr = (1 - αs)·Cb + αs·((1 - αb)·Cs + αb·B(Cb, Cs))} を計算する。\nソース・デスティネーションの色モデルは問わず({@link ColorModel#getRGB(Object)}\n経由で非乗算 sRGB に揃える)、定数アルファ({@code alpha})はソースの\nアルファに掛かる。NORMAL のときは {@link AlphaComposite} を返すので\n既存の描画経路は一切変わらない。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.BlendComposite#blend(int,int)": {
+    "ja": "非乗算 ARGB 1画素のブレンド。テスト用に公開。\n\n@param s ソース(非乗算 ARGB)\n@param d デスティネーション(非乗算 ARGB)\n@return 合成結果(非乗算 ARGB)"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.BlendComposite#blendColor(BlendMode,float[],float[],float[])": {
+    "ja": "ブレンド関数 B(Cb, Cs) を計算する(0..1 の sRGB、非乗算)。\n\n@param mode モード\n@param cb   背景色 (r, g, b)\n@param cs   前景色 (r, g, b)\n@param out  結果 (r, g, b)"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.BlendComposite#getInstance(BlendMode,float)": {
+    "ja": "ブレンドモードと定数アルファに対応する {@link Composite} を返す。\n\n@param mode  ブレンドモード。null は NORMAL\n@param alpha 定数アルファ 0..1\n@return NORMAL なら {@link AlphaComposite}(SrcOver)、それ以外はブレンド合成"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.BridgeGraphics2D#baseTransform": {
+    "ja": "このGraphics2D用に直近の{@link GC#begin()}を呼んだ時点の変換。\n<p>\n{@link GC#resetState()}はBridgeGraphics2Dの構築時ではなく、直近の\n{@code begin()}へ戻る。従って子コンテキストで絶対変換を復元するときは、\nこの基準変換からの差分だけをGCへ適用する。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.BridgeGraphics2D#fontPolicy": {
+    "ja": "Java2D由来の文字にも呼出側のPDFフォント方針を適用する。"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.BridgeGraphics2D#gcState": {
+    "ja": "{@link #create()}時に積んだGC状態のハンドル。{@link #dispose()}で閉じる。\n<p>\nGraphics2Dの契約ではcreate()で得た子コンテキストの状態変更(クリップ・\n変換等)はdispose()で破棄されるが、GCのクリップは交差のみで狭める方向\nにしか変更できないため、create()時に{@link GC#begin()}で状態を保存し\ndispose()で復元しないと子のクリップが親へ漏れる。Batik(SVG)は\nクリップ付き要素ごとにcreate()→clip()→描画→dispose()を繰り返すため、\nこの対応がないと2つ目以降のクリップが前のクリップと交差し続けて\n描画が消える(2026-08-07、yahoo.co.jpのアイコンで発覚)。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.G2DGC#blendMode": {
+    "ja": "ブレンドモード(2026-08-29)。NORMAL 以外は {@link BlendComposite} で画素合成する。"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.G2DGC#drawImage(Image,GroupEffects)": {
+    "ja": "層に効果(色行列 → ぼかし → 落とし影 → 不透明度)を掛けて描く(2026-08-29)。\n画像をデバイス空間の ARGB 層へ描いてから画素処理し、恒等変換でクリップと\nブレンドモード・fillAlpha を効かせて戻す。σ と影のずれはユーザー空間で\n受け取り、現在の変換でデバイス空間へ写す。"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.G2DGC#fillBlurred(Shape,double)": {
+    "ja": "形を現在の塗りで層へ描き、ガウスぼかしを掛けて戻す(2026-08-29)。\nσ はユーザー空間単位で、現在の変換でデバイス空間へ写す。"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.G2DGC#fillPaint": {
+    "ja": "既定は黒。理由は{@link #strokePaint}と同じ。"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.G2DGC#strokePaint": {
+    "ja": "既定は黒。{@link net.zamasoft.pdfg2d.pdf.gc.PDFGC}と同じ契約で、\n明示的に設定される前でも{@code null}を返さない。状態を保存して元へ戻す\n呼び出し側(擬似ボールドの{@code FontUtils.drawText}など)は、読み出した値を\nそのまま{@code setStrokePaint}へ渡すため、{@code null}だと復元で落ちる。"
+  },
+  "net.zamasoft.pdfg2d.g2d.gc.G2DGC#supports(Capability)": {
+    "ja": "Java2D はラスタなので、ぼかし・円錐グラデーション・繰り返し・層フィルタ・\n落とし影・ブレンドのすべてを厳密に描ける(2026-08-29)。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.ConicGradientPaint": {
+    "ja": "{@link ConicGradient} を厳密に描く Java2D の {@link java.awt.Paint}(2026-08-29)。\n\n<p>\nデバイス画素の中心を(GCの変換 ∘ グラデーションの変換)の逆で\nグラデーション空間へ戻し、中心 (cx, cy) から見た角度を「真上=0、時計回り」\nで測って {@code startAngle} を引き、1周=1 に正規化した位置で色を引く。\n色は CSS と同じく非乗算 sRGB で線形補間し、同じ位置の色停止は硬い境界になる。\n{@link SpreadMethod#PAD} は色停止の範囲外を端の色で埋め(CSS の\nconic-gradient で停止が 0..1 を覆わない場合と同じ)、REPEAT / REFLECT は\n停止範囲を周期として繰り返す。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.ConicGradientPaint#colorAt(double)": {
+    "ja": "1周を 0..1 とした位置 {@code t}(任意の実数)の色を非乗算 ARGB で返す。\nテスト用に公開。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.G2DUtils#toAwtPaint(ConicGradient)": {
+    "ja": "円錐グラデーションを厳密に描く AWT Paint へ変換する(2026-08-29)。\n\n@param gradient 円錐グラデーション\n@return AWT Paint"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.G2DUtils#toCycleMethod(SpreadMethod)": {
+    "ja": "{@link SpreadMethod} を Java2D の周期指定へ写す(2026-08-29)。\nPAD→NO_CYCLE、REPEAT→REPEAT、REFLECT→REFLECT。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects": {
+    "ja": "層(ARGB ラスタ)に掛ける画素効果(2026-08-29)。ガウスぼかし・色行列・落とし影。\n\n<p>\n作業表現は {@code float[4][w*h]}(0=A, 1=R, 2=G, 3=B、0..1)。ぼかしと合成は\n乗算済み(premultiplied)で行い縁が暗くならないようにし、色行列だけは\nCSS/SVG(feColorMatrix)と同じ非乗算 RGBA に対して掛ける。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#applyColorMatrix(float[][],float[])": {
+    "ja": "4×5 の色行列(行優先、CSS/SVG feColorMatrix と同じ並び、値域 0..1)を\n非乗算の面に掛けて 0..1 に丸める。\n\n<pre>\nR' = m0·R + m1·G + m2·B + m3·A + m4\nG' = m5·R + ...              + m9\nB' = m10·R + ...             + m14\nA' = m15·R + ...             + m19\n</pre>"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#blurPremultiplied(BufferedImage,double)": {
+    "ja": "乗算済み TYPE_INT_ARGB_PRE 画像をぼかした新しい画像を返す。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#deviceSigma(AffineTransform,double)": {
+    "ja": "ユーザー空間のσをデバイス空間へ写す(変換の面積倍率の平方根)。\n異方性のある変換(縦横で倍率が違う)は平均化される。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#dropShadow(float[][],int,int,double,double,double,float[])": {
+    "ja": "乗算済みの層に落とし影を付ける(層のシルエットをずらしてぼかし、色を付けて\n層の下に置く)。層自体は書き換えず、合成結果の新しい面を返す。\n\n@param p     乗算済みの層\n@param dx    デバイス空間のずれ\n@param sigma デバイス空間のσ\n@param rgba  影の色(非乗算、0..1)"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#gaussianBlur(float[],int,int,double)": {
+    "ja": "1面をガウスぼかしする(分離可能な畳み込み、面の外は 0)。\n\n@param plane w*h の値。書き換えられる"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#gaussianBlur(float[][],int,int,double)": {
+    "ja": "4面すべてをぼかす。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#gaussianKernel(double)": {
+    "ja": "正規化したガウス核(長さ 2r+1)。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#kernelRadius(double)": {
+    "ja": "ぼかし半径(3σ)を超える成分は無視できるとみなす。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#premultiply(float[][])": {
+    "ja": "非乗算 → 乗算済み。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#scale(float[][],float)": {
+    "ja": "全面を係数倍する(不透明度)。乗算済みの面に使う。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#shift(float[],int,int,double,double)": {
+    "ja": "面を (dx, dy) 画素ずらした新しい面を返す(双一次補間、外は 0)。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#toPlanes(BufferedImage)": {
+    "ja": "TYPE_INT_ARGB / TYPE_INT_ARGB_PRE の画像を面へ展開する。\n画像が乗算済みなら面も乗算済み、そうでなければ非乗算のまま。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#toPremultipliedImage(float[][],int,int)": {
+    "ja": "乗算済みの面を TYPE_INT_ARGB_PRE の画像にする。"
+  },
+  "net.zamasoft.pdfg2d.gc.GC#drawImage(Image,GroupEffects)": {
+    "ja": "画像(通常は {@link #createGroupImage} で描いた層)に効果を掛けて描く。\n対応しない出力先では効果を無視して {@link #drawImage(Image)} する。"
+  },
+  "net.zamasoft.pdfg2d.gc.GC#fillBlurred(Shape,double)": {
+    "ja": "現在の塗りで形をガウスぼかし付きで塗る(box-shadow/text-shadowのblur用)。\n{@link Capability#GAUSSIAN_BLUR} に対応しない出力先では単に {@link #fill(Shape)} する。\n\n@param shape 塗る形\n@param sigma ぼかしの標準偏差(ユーザー空間単位)"
+  },
+  "net.zamasoft.pdfg2d.gc.GC#supports(Capability)": {
+    "ja": "出力先が{@code capability}を厳密に描けるなら true。既定は false。"
+  },
+  "net.zamasoft.pdfg2d.gc.GC.Capability": {
+    "ja": "出力先が厳密に描ける描画機能(2026-08-29)。\n\n<p>\n出力形式ごとに厳密化できる機能が異なる。PDF は生成画像によるぼかし・\n要素単位のフィルタ合成と Type 4 メッシュによる円錐グラデーションに対応する。\n利用側はまずこれで問い合わせ、できるなら\n厳密経路({@link #supports(Capability)}がtrueの機能用のAPI)へ、\nできなければ近似へ進み、近似したことを利用者へ知らせる。\n既定は全てfalse(=近似)。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.gc.GC.Capability#BLEND_GROUP": {
+    "ja": "要素全体を1つの層としてブレンドする(mix-blend-mode/isolation)。"
+  },
+  "net.zamasoft.pdfg2d.gc.GC.Capability#CONIC_GRADIENT": {
+    "ja": "円錐グラデーション(conic-gradient)のPaint。"
+  },
+  "net.zamasoft.pdfg2d.gc.GC.Capability#DROP_SHADOW": {
+    "ja": "描いた内容のシルエットからの落とし影(filter:drop-shadow())。"
+  },
+  "net.zamasoft.pdfg2d.gc.GC.Capability#GAUSSIAN_BLUR": {
+    "ja": "ガウスぼかし(box-shadow/text-shadowのblur、filter:blur())。"
+  },
+  "net.zamasoft.pdfg2d.gc.GC.Capability#GROUP_FILTER": {
+    "ja": "要素全体を1つの層にしてから色行列・ぼかし等を掛けるフィルタ合成。"
+  },
+  "net.zamasoft.pdfg2d.gc.GC.Capability#REPEATING_GRADIENT": {
+    "ja": "周期を無限に繰り返すグラデーション(repeating-*)。"
+  },
+  "net.zamasoft.pdfg2d.gc.GroupEffects": {
+    "ja": "1枚の層(グループ画像)にまとめて掛ける効果(CSSのfilter相当、2026-08-29)。\n\n<p>\n適用順は CSS の filter 関数列に合わせ、利用側が「色行列 → ぼかし → 落とし影」\nの順で1つに畳んで渡す。どれも null / 0 なら効果なし。出力先が\n{@link GC.Capability#GROUP_FILTER} / {@link GC.Capability#GAUSSIAN_BLUR} /\n{@link GC.Capability#DROP_SHADOW} に対応するときだけ厳密に描かれる。\n</p>\n\n@param colorMatrix 4×5 の色行列(行優先、20要素)。null なら恒等\n@param blurSigma   ガウスぼかしの標準偏差(ユーザー空間単位)。0 以下なら無し\n@param dropShadow  落とし影。null なら無し\n@param opacity     層全体の不透明度 0..1"
+  },
+  "net.zamasoft.pdfg2d.gc.GroupEffects.DropShadow": {
+    "ja": "落とし影: 層のシルエットを (dx, dy) ずらし sigma でぼかして color で塗り、層の下に置く。"
+  },
+  "net.zamasoft.pdfg2d.gc.RecorderGC.DrawImageEffects": {
+    "ja": "効果付きの画像描画(2026-08-29)。再生先が対応すれば厳密に、しなければ効果なしで描かれる。"
+  },
+  "net.zamasoft.pdfg2d.gc.RecorderGC.FillBlurred": {
+    "ja": "ぼかし塗り(2026-08-29)。再生先が対応しなければ普通の塗りになる。"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontFace#variationSettings": {
+    "ja": "可変フォントの軸座標です(font-variation-settingsディスクリプタ、\n2026-08-20)。nullなら既定値。指定があれば静的インスタンス化\n({@code VariableFontInstancer})の座標に使われる。"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontFace#widthClass": {
+    "ja": "{@code font-stretch}ディスクリプタの幅級(OS/2 usWidthClass 1..9、\n5=normal、2026-08-29)。@font-face経路ではファイルのOS/2でなく\nこの宣言値が書体の幅級になる(weight/styleと同じ扱い)。"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontStyle#getTextOrientation()": {
+    "ja": "縦組中の字形方向を返す。既存実装は従来挙動(mixed)を保つ。"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontStyle#getWidthClass()": {
+    "ja": "幅級(CSS {@code font-stretch}をOS/2 {@code usWidthClass}の1..9へ\n丸めた値、5=normal)を返します(2026-08-29)。既存実装は通常幅。\n\n@return 幅級 1..9"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontStyle.TextOrientation": {
+    "ja": "縦組中の字形方向。横組では参照されない。"
+  },
+  "net.zamasoft.pdfg2d.gc.font.util.FontUtils#createSidewaysTransform(FontSource,double)": {
+    "ja": "縦組みで横書きフォントを横倒しにする変換を作成します。\n90度回転後の字面が行の中央に来るよう、フォントのBBox中央で補正します。\n\n@param source   フォントソース\n@param fontSize フォントサイズ\n@return 横倒し用の変換"
+  },
+  "net.zamasoft.pdfg2d.gc.image.Image#getIntrinsic()": {
+    "ja": "固有寸法の種別を返します({@link Intrinsic}参照)。\n{@link #getWidth()}/{@link #getHeight()}はRATIO/NONEでも描画用の\n具体値(viewBox寸法・既定300x150)を返す——本メソッドは\nその値が「固有寸法」か「代用値」かを区別する。\n\n@return 固有寸法の種別"
+  },
+  "net.zamasoft.pdfg2d.gc.image.Image.Intrinsic": {
+    "ja": "固有寸法の種別です(css-images-3 §sizing、2026-08-27)。\nラスタ画像は常にSIZE。SVGはwidth/height属性が無ければviewBoxの\n縦横比だけを持ち(RATIO)、viewBoxも無ければ寸法情報なし(NONE)。\n背景描画のbackground-size:autoはこれで既定サイズ規則を分岐する\n(SIZE=原寸、RATIO=contain制約、NONE=配置領域いっぱい)。"
+  },
+  "net.zamasoft.pdfg2d.gc.image.WrappedImage#getIntrinsic()": {
+    "ja": "固有寸法の種別は元画像へ委譲します(2026-08-27)。委譲しないと\n既定のSIZEになり、px→ptの{@code TransformedImage}で包まれた\nviewBoxのみのSVGが背景描画で原寸扱いされる。"
+  },
+  "net.zamasoft.pdfg2d.gc.imposition.PrinterMarks": {
+    "ja": "Draws printer's marks (トンボ) for imposed sheets: Japanese-style double\ncorner marks (コーナートンボ), center marks (センタートンボ), spine marks\nand the marginal note line.\n<p>\nAll coordinates are relative to the top-left corner of the <em>trim\narea</em> including its margins — i.e. the same origin the page content\nuses <em>before</em> translating by {@link Trims#left()}/{@link Trims#top()}.\nThe page area of size {@code pageWidth} × {@code pageHeight} sits at\n{@code (trims.left, trims.top)}. This matches the historical Foliojet\nimposition geometry, from which this code was ported.\n</p>\n\n@author MIYABE Tatsuhiko\n@since 1.2"
+  },
+  "net.zamasoft.pdfg2d.gc.imposition.PrinterMarks#drawCrop(GC,double,double,Trims)": {
+    "ja": "Draws the four Japanese double corner marks (コーナートンボ) around the\npage area. The inner line of each pair marks the finished size and the\nouter line the bleed (cutting margin).\n\n@param gc         the graphics context\n@param pageWidth  the trimmed page width\n@param pageHeight the trimmed page height\n@param trims      the trim margins hosting the marks\n@throws GraphicsException if drawing fails"
+  },
+  "net.zamasoft.pdfg2d.gc.imposition.PrinterMarks#drawCross(GC,double,double,Trims)": {
+    "ja": "Draws the four center marks (センタートンボ) at the middles of the page\nedges.\n\n@param gc         the graphics context\n@param pageWidth  the trimmed page width\n@param pageHeight the trimmed page height\n@param trims      the trim margins hosting the marks\n@throws GraphicsException if drawing fails"
+  },
+  "net.zamasoft.pdfg2d.gc.imposition.PrinterMarks#drawSpine(GC,double,double,Trims,double)": {
+    "ja": "Draws the spine marks (背トンボ) for a cover spread: vertical lines\nmarking both edges of the spine at the top and bottom trim margins.\n\n@param gc         the graphics context\n@param pageWidth  the trimmed spread width (including the spine)\n@param pageHeight the trimmed page height\n@param trims      the trim margins hosting the marks\n@param spineWidth the spine width; nothing is drawn when {@code <= 0}\n@throws GraphicsException if drawing fails"
+  },
+  "net.zamasoft.pdfg2d.gc.imposition.Trims": {
+    "ja": "Trim margins around a finished page on an imposed sheet: the space between\nthe paper edge and the trimmed (finished) page area, which hosts crop\nmarks and the printer's note line.\n<p>\nThe {@code cuttingMargin} (ドブ, bleed allowance) is the innermost part of\neach trim margin: printed content extends into it so that cutting\ninaccuracies do not leave white slivers. Crop marks are drawn outside the\ncutting margin so they never touch bleeding content.\n</p>\n\n@param top           trim margin above the page, in points\n@param right         trim margin to the right of the page, in points\n@param bottom        trim margin below the page, in points\n@param left          trim margin to the left of the page, in points\n@param cuttingMargin bleed allowance inside each trim margin, in points\n@author MIYABE Tatsuhiko\n@since 1.2"
+  },
+  "net.zamasoft.pdfg2d.gc.paint.ConicGradient": {
+    "ja": "円錐グラデーション(CSSのconic-gradient、2026-08-29)。\n\n<p>\n中心 (cx, cy) から角度で色が変わる。角度は {@code startAngle}(ラジアン、\n真上=0)から時計回りに増え、{@code fractions} は 0..1 で1周に対応する。\n{@code transform} はユーザー空間へ写す変換(楕円化・回転用)。\nPDFでは Type 4 Gouraud メッシュで表現される。利用側は\n{@link net.zamasoft.pdfg2d.gc.GC.Capability#CONIC_GRADIENT} を確認してから使う。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.gc.paint.LinearGradient#LinearGradient(double,double,double,double,double[],Color[],AffineTransform)": {
+    "ja": "定義域外は端の色で埋める(PAD)。"
+  },
+  "net.zamasoft.pdfg2d.gc.paint.RadialGradient#RadialGradient(double,double,double,double,double,double[],Color[],AffineTransform)": {
+    "ja": "定義域外は端の色で埋める(PAD)。"
+  },
+  "net.zamasoft.pdfg2d.gc.paint.SpotColor": {
+    "ja": "A spot color (特色): a named printing colorant with an alternate color for\noutputs that cannot produce the actual ink.\n<p>\nPDF output realizes this as a {@code /Separation} color space with the\ncolorant name and a tint transform to the alternate color; every other\noutput (screen preview, raster images, SVG) sees the {@code Color}\ninterface, whose components are the alternate color scaled by the tint —\nso code that does not know about separations still renders a faithful\napproximation.\n</p>\n<p>\nThe same colorant name always resolves to the same color space resource\nwithin a document; use {@link #tint(float)} to derive screen percentages\nof one plate.\n</p>\n\n@param name      the colorant name (e.g. {@code \"PANTONE 185 C\"}, or\n                 {@code \"All\"} for the registration color)\n@param alternate the alternate color shown when the colorant is\n                 unavailable (typically CMYK)\n@param tint      the tint (screen percentage) in {@code 0..1}\n@param overprint the overprint mode, as in {@link CMYKColor}\n@author MIYABE Tatsuhiko\n@since 1.2"
+  },
+  "net.zamasoft.pdfg2d.gc.paint.SpreadMethod": {
+    "ja": "グラデーションの定義域外の塗り方(SVGのspreadMethod相当、2026-08-29)。"
+  },
+  "net.zamasoft.pdfg2d.gc.paint.SpreadMethod#PAD": {
+    "ja": "端の色で埋める(既定)。"
+  },
+  "net.zamasoft.pdfg2d.gc.paint.SpreadMethod#REFLECT": {
+    "ja": "折り返して繰り返す。"
+  },
+  "net.zamasoft.pdfg2d.gc.paint.SpreadMethod#REPEAT": {
+    "ja": "周期を繰り返す(CSSのrepeating-*-gradient)。"
+  },
+  "net.zamasoft.pdfg2d.gc.text.GlyphAdvances": {
+    "ja": "グリフ毎の送り量調整の読み取り専用ビューです(2026-08-01、90点計画\n増分12)。\n\n<p>\n従来はレンダラ・計測系へ{@code double[]}の生配列を渡していたため、\nどこからでも変更できた(和文詰めとjustificationの二重適用バグの\n温床——B5c-2系の教訓)。読み取りはこの型、書き込みは\n{@link TextImpl#addXAdvance(int, double)}等の意味のある操作だけに\n限定することで、不変条件(長さ=グリフ数、変更主体はレイアウト層のみ)を\n型で守る。\n</p>\n\n@author MIYABE Tatsuhiko"
+  },
+  "net.zamasoft.pdfg2d.gc.text.GlyphAdvances#get(int)": {
+    "ja": "グリフの送り量調整を返します。\n\n@param glyphIndex グリフ位置(0始まり)\n@return 調整量(詰めは負)"
+  },
+  "net.zamasoft.pdfg2d.gc.text.GlyphAdvances#size()": {
+    "ja": "グリフ数(調整配列の論理長)を返します。"
+  },
+  "net.zamasoft.pdfg2d.gc.text.Text#xAdvances()": {
+    "ja": "Returns the per-glyph extra advance adjustments as a read-only view,\nor {@code null} if no adjustments have been applied.\n生配列公開({@code getXAdvances(boolean)})の置換(2026-08-01)——\n書き込みは{@link TextImpl}の意味のある操作\n({@code addXAdvance}/{@code resetXAdvances})に限定する。\n\n@return the per-glyph x-advance view, or {@code null}"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextImpl#resetXAdvances()": {
+    "ja": "全グリフの送り量調整をゼロへ戻します(旧{@code getXAdvances(true)}の\n置換。ルビの均等配置のように調整を作り直す書き込み側が使う)。"
+  },
+  "net.zamasoft.pdfg2d.pdf.PDFOutput#writeRealCoefficient(double)": {
+    "ja": "Writes a transformation matrix coefficient (scale/shear) with high\nprecision, independent of the stream's coordinate precision.\n\n<p>\n係数の丸め誤差は座標値に<b>乗算</b>される。座標既定の小数2桁で\n係数を書くと(例: 0.375→0.38)、ページ反転を合成した平行移動項\n(丸め前の係数×ページ寸法で計算される)と食い違い、拡大縮小された\n画像・SVGがページ寸法×誤差ぶん(A4で最大4pt超)ずれてクリップに\nかかる——MDNのマスクアイコンが上に欠ける形で発覚(2026-08-27)。\n平行移動項の丸め誤差は加算されるだけ(最大0.005pt)なので従来precision\nのままでよい。\n</p>\n\n@param number the coefficient\n@throws IOException if an I/O error occurs"
+  },
+  "net.zamasoft.pdfg2d.pdf.color.ColorConverter": {
+    "ja": "sRGBの色を出力インテントのCMYK ICCプロファイルへ変換します。\n<p>\nJDKの公開APIではrendering intentを選択できず、\n{@link ICC_ColorSpace#fromRGB(float[])} はperceptual固定です。\nこのクラスは{@code PDFWriterImpl}ごとに1個所有されるため、キャッシュは同期せず、\nインスタンス自体もスレッドセーフではありません。\n</p>\n\n@author MIYABE Tatsuhiko\n@since 1.3"
+  },
+  "net.zamasoft.pdfg2d.pdf.color.ColorConverter#ColorConverter(byte[])": {
+    "ja": "CMYK ICCプロファイルを使う変換器を作成します。入力値はJDKが定める\n{@link ColorSpace#CS_sRGB}の成分として扱われます。\n\n@param cmykProfile CMYK ICCプロファイルのバイト列\n@throws NullPointerException     プロファイルが{@code null}の場合\n@throws IllegalArgumentException ICCプロファイルでない、またはCMYKでない場合"
+  },
+  "net.zamasoft.pdfg2d.pdf.color.ColorConverter#toCMYK(float,float,float)": {
+    "ja": "sRGBをCMYKへ変換します。厳密に無彩色({@code r == g == b})なら、\n墨文字などがリッチブラックにならないようK単色を返します。\n\n@return 呼び出し側専用の新しい4成分配列"
+  },
+  "net.zamasoft.pdfg2d.pdf.color.ColorConverter#toCMYKImage(BufferedImage)": {
+    "ja": "RGB画像を出力インテントのCMYK色空間へ全画素変換します。画像の色空間が\n{@link ICC_ColorSpace}ならそのプロファイルを入力に使い、それ以外はsRGBと\nして扱います。アルファは変換せず出力画像へ保持します。\n\n@param source RGB画像\n@return 8bit CMYK（アルファがあればCMYK+A）の画像"
+  },
+  "net.zamasoft.pdfg2d.pdf.color.ColorConverter#toCMYKNoNeutralRule(float,float,float)": {
+    "ja": "無彩色のK単色化を行わず、sRGBを純粋にICC変換します。\nグラデーション停止色とメッシュ頂点の変換に使用します。\n\n@return 呼び出し側専用の新しい4成分配列"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.FontIndex": {
+    "ja": "フォントディレクトリスキャンの永続索引です(2026-08-01)。\n\n<p>\nfonts.xmlの{@code <font-dir>}は従来、JVM起動のたびに全フォント\nファイルを開いてname/OS2/cmap等をパースしていた(O(ファイル数)、\n290フォントで約1秒・数千フォントで数十秒)。この索引は選択に必要な\nメタデータ(名前・別名・weight/italic/PANOSE・メトリクス・圧縮cmap)を\n(パス, サイズ, mtime, スキャン条件)キーで永続化し、ヒット時は\nフォントファイルを一切開かずに{@link OpenTypeFontSource}を再構築する。\nグリフ実データが必要になった時点で初めてファイルが開かれる。\n</p>\n\n<p>\n設定ファイル(fonts.xml)の仕様変更はない——{@code DirectSession}が\n従来から渡していた{@code fonts.xml.db}のパス(長らく無視されていた\n引数)をそのまま使う。索引の読み込み失敗・バージョン不一致・\n鮮度不一致は全て「その項目だけ従来どおりパース」へ静かに縮退する。\n書き込みは一時ファイル+renameで、壊れた索引が残らないようにする。\n</p>\n\n@author MIYABE Tatsuhiko"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.FontIndex#FontIndex(File)": {
+    "ja": "索引を読み込みます。ファイルが無い・読めない・形式が違う場合は\n空の索引になる(致命的エラーにはしない)。\n\n@param file 索引ファイル(通常はfonts.xml.db)"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.FontIndex#lookup(File,String)": {
+    "ja": "ファイルの鮮度とスキャン条件が一致する索引項目を探し、あれば\nFontSource列を再構築して返します。\n\n@param fontFile フォントファイル\n@param scanKey  スキャン条件(types+face属性のダイジェスト)\n@return 再構築したFontSource列(記録時の順序)、索引ミスならnull"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.FontIndex#put(File,String,int,List)": {
+    "ja": "スキャン結果を索引に記録します。OpenType系以外のソースが混じって\nいた場合はそのファイルを索引対象外とする(次回も通常パース)。\n\n@param fontFile フォントファイル\n@param scanKey  スキャン条件\n@param numFonts TTC内のフォント数\n@param sources  スキャンで構築したソース列(face属性適用済み)"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.FontIndex#save()": {
+    "ja": "変更があれば索引をファイルへ書き出します(一時ファイル+rename)。\n失敗しても警告のみ(次回起動が遅いだけで機能に影響しない)。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.FontLoader#readTTF(List,FontFace,Type,File,int,Map,boolean)": {
+    "ja": "{@code styleFromFile}=trueのとき、italic/weightをfaceの既定値でなく\nフォントファイル自身のOS/2(fsSelectionのitalicビット・usWeightClass)\nから導出します(2026-08-27)。{@code <font-dir>}走査ではfaceに宣言が\n無いため従来は全フォントがnormal/400として登録され、同族に複数の\nウェイト・斜体があるとどれを選ぶかが登録順まかせになっていた\n(Google Fonts一式を収録した内部Dockerで、Robotoの通常体が\nItalicで描かれる等の実害)。@font-face経路はディスクリプタが\nfaceの値を定義する仕様のため従来どおりfalseで呼ぶ。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.FontManagerImpl#setCoreFontsLast(boolean)": {
+    "ja": "字形を持たない中核書体(Type 1 の AFM だけの書体)を、選んだ書体の候補の最後に回します。\n<p>\nラスタ出力(PNG・JPEG)では中核書体を Java2D の書体で描くが、Times-Roman のような名前は\nJava2D が知らず sans の既定(Dialog)で描かれ、それを AFM の送り幅で並べるので字形も字間も\n崩れた(既定の欧文が Times)。字形を持つ書体が候補にあればそちらで描き、無ければ従来どおり\n中核書体を使う(字が消えない)。PDF は中核書体を閲覧ソフトが描くので変えない。\n</p>\n\n@param coreFontsLast 回すなら true"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.PDFFontSourceManager#close()": {
+    "ja": "この管理が作った書体ファイル(取得結果・可変フォントの写し)を、開いた書体ごと消します。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.PDFFontSourceManager#resolveGenericFamily(String,Locale)": {
+    "ja": "言語別の汎用ファミリ連鎖を、完全一致、言語+スクリプト、言語のみの順で選ぶ。\n同じ優先度では文書順で先の設定を保持する。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.PDFFontSourceManager.SelectionKey": {
+    "ja": "フォント選択はfamily/weight/style/direction/text-orientation/policy/width/langを読む(size・\nOpenType featureは整形の話で選択に関与しない)ため、キャッシュキーは\nその成分に限定する——FontStyle全体をキーにするとfeature集合や\nサイズ違いだけの大量のstyleで無駄に分裂する(2026-07-31、\nconsult-codex-2026-07-31-font-features.txt §3.8)。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.cid.CIDTable#toCID": {
+    "ja": "CID表のキャッシュです。WeakReferenceだとGCのたびに消えて重い\nCID表パースが繰り返されるため、SoftReference(ヒープ圧まで温存、\nOutOfMemoryErrorより先に回収)へ変更(2026-08-01)。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.cid.embedded.OpenTypeEmbeddedCIDFontSource#OpenTypeEmbeddedCIDFontSource(File,int,Direction,short,net.zamasoft.pdfg2d.font.BBox,String,String[],boolean,net.zamasoft.pdfg2d.gc.font.FontStyle.Weight,net.zamasoft.pdfg2d.gc.font.Panose,short,short,short,net.zamasoft.pdfg2d.font.table.GenericCmapFormat,net.zamasoft.pdfg2d.font.table.UvsCmapFormat)": {
+    "ja": "永続フォント索引からの再構築です(2026-08-01、FontIndex参照)。\nファイルI/Oを行わない。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.cid.identity.OpenTypeCIDIdentityFontSource#OpenTypeCIDIdentityFontSource(File,int,Direction,short,net.zamasoft.pdfg2d.font.BBox,String,String[],boolean,net.zamasoft.pdfg2d.gc.font.FontStyle.Weight,net.zamasoft.pdfg2d.gc.font.Panose,short,short,short,net.zamasoft.pdfg2d.font.table.GenericCmapFormat,net.zamasoft.pdfg2d.font.table.UvsCmapFormat)": {
+    "ja": "永続フォント索引からの再構築です(2026-08-01、FontIndex参照)。\nファイルI/Oを行わない。"
+  },
+  "net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl#colorConverter()": {
+    "ja": "出力インテントのCMYK ICC変換器を返します。\n\n@return このwriterが所有する変換器\n@throws IOException 既定ICCプロファイルを読み込めない場合"
+  },
+  "net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl#pdfXRGBProfileRef()": {
+    "ja": "PDF/XでRGBを残す文書の共有sRGBプロファイル参照を返します(それ以外は\n{@code null})。文書を開いたときに作成済みなので、別オブジェクトの\n書き出し中(シェーディング辞書の途中など)でも安全に参照できます。\n\n@return {@code [/ICCBased ref]} に使う参照、または{@code null}"
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.GridPDFImposition": {
+    "ja": "Places logical pages onto a rows × columns grid of cells per sheet\n(多面付け). Each logical page is written as a Form XObject the moment it\nis closed — its content streams straight to the output — and sheets are\nassembled from tiny placement dictionaries afterwards. Out-of-order\nlayouts such as saddle-stitch booklets therefore run with constant memory\nregardless of the document length, which is exactly the workload the\nfragmented output architecture was designed for.\n<p>\nOrdering strategies:\n</p>\n<ul>\n<li>{@link Order#SEQUENTIAL} — fill the grid row-major; a sheet is emitted\nwhenever it is full (handouts, N-up printing).</li>\n<li>{@link Order#REPEAT} — every logical page fills a whole sheet with\ncopies of itself (business cards, postcards, labels).</li>\n<li>{@link Order#SADDLE_STITCH} — 中綴じ: fixed 1 × 2 grid; pages are\nreordered into printer spreads at {@link #finish()}, with optional creep\ncompensation. Signature (折り丁) imposition with folding schemes is out of\nscope by design.</li>\n</ul>\n\n@author MIYABE Tatsuhiko\n@since 1.2"
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.GridPDFImposition.BoundSide#LEFT": {
+    "ja": "左綴じ (Western/horizontal text)."
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.GridPDFImposition.BoundSide#RIGHT": {
+    "ja": "右綴じ (Japanese vertical text)."
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.GridPDFImposition.Order#CUT_AND_STACK": {
+    "ja": "Cut &amp; stack (断裁後に重ねると通し順になる配置): cell {@code j}\nof sheet {@code s} carries page {@code j*S + s} for {@code S}\nsheets total — used for numbered tickets, forms and VDP output."
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.PDFImposition": {
+    "ja": "Base class for placing logical pages onto physical PDF pages (imposition,\n面付け), drawing printer's marks and maintaining the PDF page boxes\n(MediaBox / BleedBox / TrimBox) consistently with the trim configuration.\n<p>\nUsage: configure the instance, then repeat {@link #nextPage()} — draw —\n{@link #closePage()} for every logical page, and call {@link #finish()}\nonce at the end (required for impositions that buffer sheet layouts, such\nas booklets).\n</p>\n\n@author MIYABE Tatsuhiko\n@since 1.2"
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.PDFImposition#crop": {
+    "ja": "Corner marks (コーナートンボ)."
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.PDFImposition#cross": {
+    "ja": "Center marks (センタートンボ)."
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.PDFImposition#setCrop(boolean)": {
+    "ja": "Enables the corner marks (コーナートンボ)."
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.PDFImposition#setCross(boolean)": {
+    "ja": "Enables the center marks (センタートンボ)."
+  },
+  "net.zamasoft.pdfg2d.pdf.imposition.SinglePagePDFImposition": {
+    "ja": "One logical page per sheet with printer's marks — the layout used for\nprepress submission (トンボ付き入稿データ). In addition to drawing the\nmarks it maintains the PDF page boxes: MediaBox is the paper, TrimBox the\nfinished page and BleedBox the finished page expanded by the cutting\nmargin, so PDF/X box validation and the marks always agree.\n\n@author MIYABE Tatsuhiko\n@since 1.2"
+  },
+  "net.zamasoft.pdfg2d.svg.SVGImage#SVGImage(GraphicsNode,double,double)": {
+    "ja": "固有寸法ありとして構築します(従来互換)。"
+  },
+  "net.zamasoft.pdfg2d.util.LongIntLookup": {
+    "ja": "ソート済みlongキー→int値の不変引きです(2026-08-01、95点計画増分1)。\n\n<p>\nboxed {@code Map<Long, Integer>}の置換先。UVS cmap・GSUB合字索引の\nように「構築後は読むだけ」の写像を、追加オブジェクトなしの2本の\nプリミティブ配列+二分探索で表す。構築時のソートはキー・値を随伴\nさせたin-place実装で、一時オブジェクトを作らない。\n</p>\n\n@author MIYABE Tatsuhiko"
+  },
+  "net.zamasoft.pdfg2d.util.LongIntLookup#fromUnsorted(long[],int[],int)": {
+    "ja": "未整列のキー・値の並びから構築します。渡した配列はソートに使われる\nため呼び出し後は所有権を手放すこと(コピーしない)。\n\n@param keys   キー(長さsize以上)\n@param values キーに随伴する値(同)\n@param size   有効要素数\n@return 構築した索引"
+  },
+  "net.zamasoft.pdfg2d.util.LongIntLookup#getOrDefault(long,int)": {
+    "ja": "キーに対応する値を返します。\n\n@param key     キー\n@param missing キーが無い場合に返す値\n@return 値"
+  },
+  "net.zamasoft.pdfg2d.util.LongIntLookup#keyAt(int)": {
+    "ja": "i番目(キー昇順)のキーを返します(直列化用)。"
+  },
+  "net.zamasoft.pdfg2d.util.LongIntLookup#size()": {
+    "ja": "要素数を返します。"
+  },
+  "net.zamasoft.pdfg2d.util.LongIntLookup#valueAt(int)": {
+    "ja": "i番目(キー昇順)の値を返します(直列化用)。"
+  }
+}
