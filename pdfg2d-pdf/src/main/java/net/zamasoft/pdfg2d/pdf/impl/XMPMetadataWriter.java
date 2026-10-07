@@ -54,6 +54,9 @@ final class XMPMetadataWriter {
 				case '&' -> sb.append("&amp;");
 				case '<' -> sb.append("&lt;");
 				case '>' -> sb.append("&gt;");
+				// XML parsers turn a raw CR into LF, so the value would no longer match
+				// the Info dictionary (PDF/A and PDF/X require the two to match).
+				case '\r' -> sb.append("&#13;");
 				default -> sb.append(c);
 			}
 		}
