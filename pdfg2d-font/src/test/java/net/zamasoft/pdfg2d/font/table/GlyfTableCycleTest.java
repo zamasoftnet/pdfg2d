@@ -13,26 +13,26 @@ import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 /**
- * 合成グリフが自分自身を指すフォントで、字形の読み出しが止まることを押さえます。
+ * Ensures that reading glyphs terminates for fonts with self-referencing composite glyphs.
  *
  * <p>
- * 2026-09-01、本番のフォント一覧が{@code StackOverflowError}で500になった。
- * 書体ごとに代表符号位置の字形を引いて{@code scripts}を名乗るようにしたところ、
- * フォントパックの1書体で合成グリフの成分が循環していて、
- * {@code GlyfCompositeDescript.read}→{@code GlyfTable.getDescription}が
- * 無限再帰した。入れ子に上限を入れて断ってある。
+ * On 2026-09-01, the production font list returned HTTP 500 due to {@code StackOverflowError}.
+ * After adding {@code scripts} identification by looking up representative code point glyphs for each font,
+ * a font in the font pack had cyclic composite glyph components,
+ * causing infinite recursion from {@code GlyfCompositeDescript.read} to {@code GlyfTable.getDescription}.
+ * A nesting limit rejects this.
  * </p>
  */
 public class GlyfTableCycleTest {
 
-	/** 自分自身を1つだけ成分に持つ合成グリフ。 */
+	/** Composite glyph with a single component referencing itself. */
 	private static byte[] selfReferencingComposite() {
 		return new byte[] { //
-				(byte) 0xFF, (byte) 0xFF, // numberOfContours = -1(合成)
+				(byte) 0xFF, (byte) 0xFF, // numberOfContours = -1 (composite).
 				0, 0, 0, 0, 0, 0, 0, 0, // xMin, yMin, xMax, yMax
-				0, 0x02, // flags = ARGS_ARE_XY_VALUES のみ(MORE_COMPONENTSなし)
-				0, 0, // glyphIndex = 0 ← 自分自身
-				0, 0 // argument1, argument2(1バイトずつ)
+				0, 0x02, // flags = ARGS_ARE_XY_VALUES only (no MORE_COMPONENTS).
+				0, 0, // glyphIndex = 0 <- itself.
+				0, 0 // argument1, argument2 (one byte each).
 		};
 	}
 
@@ -47,11 +47,11 @@ public class GlyfTableCycleTest {
 				final DirectoryEntry de = new DirectoryEntry(Table.GLYF, 0, 0, glyf.length);
 				final GlyfTable glyfTable = new GlyfTable(de, loca, raf);
 
-				// 循環を切れていなければStackOverflowErrorになるか、返ってこない
+				// Without breaking the cycle, this throws StackOverflowError or never returns.
 				assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
 					final var desc = glyfTable.getDescription(0);
 					assertNotNull(desc);
-					// 自分へ戻る唯一の成分は落ちるので、点も輪郭も無い
+					// The sole component that leads back to itself is dropped, leaving no points or contours.
 					assertEquals(0, desc.getPointCount());
 					assertEquals(0, desc.getContourCount());
 				});

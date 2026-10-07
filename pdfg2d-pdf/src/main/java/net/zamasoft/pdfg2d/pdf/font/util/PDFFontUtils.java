@@ -94,15 +94,15 @@ public class PDFFontUtils {
 			double xadvance = xadvances == null ? 0 : xadvances.get(i);
 			if (i > 0) {
 				xadvance -= fm.getKerning(gids[i - 1], gids[i]);
-				// palt等のfeature由来の詰めもkerningと同型のTJ調整で再現する
-				// (ベースのペン移動は/W幅=素のグリフ幅から来るため)。行内の
-				// 最終グリフの調整は後続が無く不要——次のrunは配置座標が
-				// レイアウト(metrics=調整込み)から決まる
+				// Reproduce spacing reductions from features such as palt with TJ adjustments like kerning
+				// (the base pen movement comes from /W widths, i.e. unadjusted glyph widths). The final glyph
+				// in a line needs no adjustment because nothing follows; the next run's position
+				// comes from layout (metrics include adjustments).
 				xadvance += fm.getAdvanceAdjustment(gids[i - 1]);
 			}
-			// 字面の視覚シフト(palt xPlacement——増分⑤): ペンは進めないため、
-			// グリフの前でシフトし、次の境界で戻す(前後の対のTJ調整)。
-			// 最終グリフの戻しは不要(同上)
+			// Visual shift of glyph bounds (ink) (palt xPlacement, increment ⑤): the pen does not advance,
+			// so shift before the glyph and restore at the next boundary (paired TJ adjustments before and after).
+			// No restoration is needed for the final glyph (as above).
 			final double placement = fm.getPlacementAdjustment(gids[i]);
 			xadvance += placement - prevPlacement;
 			prevPlacement = placement;
@@ -152,7 +152,7 @@ public class PDFFontUtils {
 		TextMode textMode = gc.getTextMode();
 
 		if (direction == Direction.TB) {
-			// 横書きフォントを縦組みの行へ横倒しにする
+			// Turn a horizontal writing font sideways for a vertical writing line.
 			gc.transform(FontUtils.createSidewaysTransform(fontSource, fontSize));
 		}
 		if (xadvances != null && xadvances.get(0) != 0) {

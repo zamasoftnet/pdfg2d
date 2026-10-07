@@ -14,24 +14,23 @@ import org.junit.jupiter.api.Test;
 import net.zamasoft.pdfg2d.pdf.PDFMetaInfo;
 
 /**
- * {@code withXxx}が、変えない項目をすべて引き継ぐことを確かめます。
+ * Verifies that {@code withXxx} preserves every component it does not change.
  *
  * <p>
- * {@link PDFParams}はレコードで、項目は後から足されてきました。
- * {@code withXxx}は新しいインスタンスを組み直すので、<b>足した項目を
- * 引数へ書き足し忘れると、そのメソッドを呼んだ瞬間に黙って既定へ戻ります。</b>
- * 実際に{@code withTagged}が4項目、{@code withDeflateLevel}が3項目、
- * {@code withObjectStreams}が2項目を落としており、レンダリングインテントの
- * 指定が消えていました。
+ * {@link PDFParams} is a record whose components have been added over time.
+ * {@code withXxx} constructs a new instance, so <b>if a newly added component is omitted
+ * from the arguments, calling the method silently resets it to its default.</b>
+ * In fact, {@code withTagged} dropped four components, {@code withDeflateLevel} dropped three,
+ * and {@code withObjectStreams} dropped two, causing the rendering intent setting to be lost.
  * </p>
  *
  * <p>
- * 目で見て気づける類ではないので、全部の{@code withXxx}を機械的に当たります。
- * 項目を足したら、この試験が落ちて教えてくれます。
+ * Visual inspection cannot catch this reliably, so check every {@code withXxx} mechanically.
+ * When a component is added, this test fails and alerts you.
  * </p>
  */
 class PDFParamsWithMethodsTest {
-	/** どの項目も既定と違う値にしたPDFParamsを作ります。 */
+	/** Creates PDFParams with every component set to a value different from its default. */
 	private static PDFParams distinctive() {
 		return PDFParams.createDefault()
 				.withVersion(PDFParams.Version.V_1_5)
@@ -62,12 +61,12 @@ class PDFParamsWithMethodsTest {
 			try {
 				after = (PDFParams) method.invoke(before, argument);
 			} catch (final Exception e) {
-				// 組み合わせが成り立たない指定は、ここでは扱わない
+				// Do not handle incompatible combinations of settings here
 				continue;
 			}
-			// 変えた項目の名前。withFooBar -> fooBar。
-			// withRGBProfile -> rgbProfile のように頭字語では綴りが揃わないので、
-			// 大文字小文字を無視して突き合わせる
+			// Name of the changed component: withFooBar -> fooBar.
+			// Acronyms can differ in case, as in withRGBProfile -> rgbProfile,
+			// so compare case-insensitively
 			final String changed = method.getName().substring(4);
 			for (final RecordComponent component : components) {
 				if (component.getName().equalsIgnoreCase(changed)) {
@@ -85,7 +84,7 @@ class PDFParamsWithMethodsTest {
 
 	private static final Object NO_SAMPLE = new Object();
 
-	/** 型ごとに「いまと違う値」を1つ用意します。作れない型は飛ばします。 */
+	/** Supplies one value different from the current value for each type. Skips types it cannot instantiate. */
 	private static Object sampleFor(final Class<?> type) {
 		if (type == boolean.class) {
 			return Boolean.TRUE;
@@ -109,7 +108,7 @@ class PDFParamsWithMethodsTest {
 		if (type == byte[].class) {
 			return new byte[] { 1, 2, 3, 4 };
 		}
-		// フォント管理や暗号化のように、ここで安全に作れないものは対象外
+		// Exclude objects that cannot be safely created here, such as font managers and encryption
 		return NO_SAMPLE;
 	}
 }

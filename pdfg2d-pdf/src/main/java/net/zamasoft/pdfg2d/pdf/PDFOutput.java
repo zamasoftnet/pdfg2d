@@ -263,7 +263,7 @@ public class PDFOutput extends FilterOutputStream {
 		this.buffFlush();
 	}
 
-	/** 行列係数の最低精度(小数桁)。{@link #writeRealCoefficient}参照。 */
+	/** Minimum precision for matrix coefficients (decimal places). See {@link #writeRealCoefficient}. */
 	private static final int COEFFICIENT_PRECISION = 6;
 
 	/**
@@ -271,13 +271,14 @@ public class PDFOutput extends FilterOutputStream {
 	 * precision, independent of the stream's coordinate precision.
 	 *
 	 * <p>
-	 * 係数の丸め誤差は座標値に<b>乗算</b>される。座標既定の小数2桁で
-	 * 係数を書くと(例: 0.375→0.38)、ページ反転を合成した平行移動項
-	 * (丸め前の係数×ページ寸法で計算される)と食い違い、拡大縮小された
-	 * 画像・SVGがページ寸法×誤差ぶん(A4で最大4pt超)ずれてクリップに
-	 * かかる——MDNのマスクアイコンが上に欠ける形で発覚(2026-08-27)。
-	 * 平行移動項の丸め誤差は加算されるだけ(最大0.005pt)なので従来precision
-	 * のままでよい。
+	 * Coefficient rounding errors <b>multiply</b> coordinate values. Writing coefficients
+	 * with the default coordinate precision of two decimal places (e.g. 0.375 -> 0.38)
+	 * creates a mismatch with translation terms composed with the page flip
+	 * (computed from unrounded coefficients × page dimensions). Scaled images and SVGs
+	 * shift by page dimensions × error (over 4 pt at worst on A4) and are clipped.
+	 * Found when MDN's mask icons were cut off at the top (2026-08-27).
+	 * Translation rounding errors are only additive (at most 0.005 pt),
+	 * so translation can retain the existing precision.
 	 * </p>
 	 *
 	 * @param number the coefficient

@@ -21,12 +21,12 @@ import net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource;
 import net.zamasoft.pdfg2d.gc.font.FontFace;
 
 /**
- * 永続フォント索引({@link FontIndex})の等価性テストです(2026-08-01)。
+ * Equivalence test for the persistent font index ({@link FontIndex}) (2026-08-01).
  *
  * <p>
- * 実フォント(IPAex明朝)を直接パースして構築したFontSourceと、
- * 索引にput→save→再読込→lookupで再構築したFontSourceが、選択・整形に
- * 使われる全メタデータと文字→GID写像で一致することを固定する。
+ * Ensures that a FontSource built by directly parsing a real font (IPAex Mincho) matches a FontSource
+ * reconstructed through put→save→reload→lookup in the index, for all metadata used for selection
+ * and shaping and for the character→GID mapping.
  * </p>
  */
 public class FontIndexTest {
@@ -77,7 +77,7 @@ public class FontIndexTest {
 			assertEquals(a.getEmbeddingLicenseFlags(), b.getEmbeddingLicenseFlags());
 			assertEquals(a.getDirection(), b.getDirection());
 			assertEquals(a.getIndex(), b.getIndex());
-			// 文字→GID写像: BMP全域+補助面の代表を突き合わせ
+			// Character→GID mapping: compare the entire BMP and representative characters from supplementary planes
 			for (int c = 0; c <= 0xFFFF; ++c) {
 				assertEquals(a.getCmapFormat().mapCharCode(c), b.getCmapFormat().mapCharCode(c), "code=" + c);
 			}
@@ -98,7 +98,7 @@ public class FontIndexTest {
 		index.save();
 
 		final FontIndex reloaded = new FontIndex(dbFile);
-		// スキャン条件が変わればミス(face属性の変更が古い値で残らない)
+		// Changed scan conditions cause a miss (changes to face attributes do not leave stale values)
 		assertNull(reloaded.lookup(FONT, "other-key"));
 	}
 

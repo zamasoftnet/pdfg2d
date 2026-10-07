@@ -181,8 +181,8 @@ public class CFFTable implements Table {
 	private final Type2CharString charString;
 
 	/**
-	 * Top DICTの{@code FontMatrix}が与えるcharstringのem単位(=1/xx)。
-	 * 指定が無いフォントでは0。
+	 * Charstring em units (=1/xx) given by the Top DICT {@code FontMatrix}.
+	 * Zero for fonts that do not specify it.
 	 */
 	private double glyphUnitsPerEm;
 
@@ -256,7 +256,7 @@ public class CFFTable implements Table {
 						fdSelectOffset = this.stack.get(0).intValue();
 						break;
 					case FONT_MATRIX:
-						// xx yx xy yy dx dy。charstringの座標系は1/xx単位のem
+						// xx yx xy yy dx dy. The charstring coordinate system has 1/xx units per em.
 						if (this.stack.size() >= 4) {
 							final double xx = this.stack.get(0).doubleValue();
 							if (xx > 0) {
@@ -286,13 +286,13 @@ public class CFFTable implements Table {
 			// Parse Global Subrs INDEX
 			{
 				int count = this.readCard16();
-				// **countが0のINDEXは2バイトだけ**(CFF仕様 §5「INDEX Data」
-				// ——count==0 のとき offSize も offset 配列もデータも無い)。
-				// 2026-08-05まで無条件に offSize を読んでいたため、
-				// **大域subrを持たないCFFフォントで次の構造の1バイトを
-				// offSize と誤読**し、`OffSize must be 1-4: 0` で
-				// 「フォントが読めない」になっていた。症状はまるで別の話に
-				// 見えるが、原因はこの分岐の欠落。
+				// **An INDEX with count 0 is only 2 bytes** (CFF specification §5 "INDEX Data":
+				// when count==0, there is no offSize, offset array, or data).
+				// Until 2026-08-05, offSize was read unconditionally, so
+				// **CFF fonts without global subrs had a byte of the next structure
+				// misread as offSize**, producing `OffSize must be 1-4: 0`
+				// and making the font unreadable. The symptoms looked unrelated,
+				// but the cause was this missing branch.
 				if (count == 0) {
 					gso = new int[0];
 				} else {
@@ -345,7 +345,7 @@ public class CFFTable implements Table {
 					this.raf.seek(de.offset() + localSubrsOffset);
 					int count = this.readCard16();
 					if (count == 0) {
-						// 上と同じ——空のINDEXは2バイトだけ
+						// As above: an empty INDEX is only 2 bytes.
 						lso = null;
 					} else {
 						int offSize = this.readOffSize();
@@ -495,19 +495,19 @@ public class CFFTable implements Table {
 	}
 
 	/**
-	 * charstringの座標が何単位で1emかを返します。
+	 * Returns the number of charstring coordinate units per em.
 	 *
 	 * <p>
-	 * Top DICTに{@code FontMatrix}があればそれが基準
-	 * (既定の{@code 0.001}なら1000)。無い場合、OpenType/CFFでは
-	 * {@code head}の{@code unitsPerEm}が基準になります(FreeType等の実装と
-	 * 同じ扱い)。両者が食い違うフォントが実在し、Pretendardは
-	 * {@code unitsPerEm=2048}でFontMatrixを持たないため、CFFの既定値
-	 * 1000で読むと字形だけが2.048倍になります(2026-09-01)。
+	 * If the Top DICT has a {@code FontMatrix}, that determines the scale
+	 * (1000 for the default {@code 0.001}). Otherwise, OpenType/CFF uses
+	 * {@code head}'s {@code unitsPerEm} (as in implementations such as FreeType).
+	 * Real fonts exist where these differ: Pretendard has {@code unitsPerEm=2048}
+	 * and no FontMatrix, so reading it with the CFF default of 1000
+	 * scales only the glyphs by 2.048 (2026-09-01).
 	 * </p>
 	 *
-	 * @param headUnitsPerEm {@code head}テーブルのunitsPerEm
-	 * @return charstring座標系の1em(通常は1000または2048)
+	 * @param headUnitsPerEm unitsPerEm from the {@code head} table
+	 * @return one em in the charstring coordinate system (usually 1000 or 2048)
 	 */
 	public double getGlyphUnitsPerEm(final short headUnitsPerEm) {
 		if (this.glyphUnitsPerEm > 0) {

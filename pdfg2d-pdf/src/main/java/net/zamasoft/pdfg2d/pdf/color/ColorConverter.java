@@ -14,12 +14,12 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * sRGBの色を出力インテントのCMYK ICCプロファイルへ変換します。
+ * Converts sRGB colors to the output intent's CMYK ICC profile.
  * <p>
- * JDKの公開APIではrendering intentを選択できず、
- * {@link ICC_ColorSpace#fromRGB(float[])} はperceptual固定です。
- * このクラスは{@code PDFWriterImpl}ごとに1個所有されるため、キャッシュは同期せず、
- * インスタンス自体もスレッドセーフではありません。
+ * The JDK public API cannot select a rendering intent;
+ * {@link ICC_ColorSpace#fromRGB(float[])} always uses perceptual.
+ * Each {@code PDFWriterImpl} owns one instance, so the cache is unsynchronized
+ * and the instance itself is not thread-safe.
  * </p>
  *
  * @author MIYABE Tatsuhiko
@@ -39,12 +39,12 @@ public final class ColorConverter {
 	private final Map<RGBKey, float[]> cache = new HashMap<>();
 
 	/**
-	 * CMYK ICCプロファイルを使う変換器を作成します。入力値はJDKが定める
-	 * {@link ColorSpace#CS_sRGB}の成分として扱われます。
+	 * Creates a converter using a CMYK ICC profile. Treats input values as components
+	 * of the JDK-defined {@link ColorSpace#CS_sRGB}.
 	 *
-	 * @param cmykProfile CMYK ICCプロファイルのバイト列
-	 * @throws NullPointerException     プロファイルが{@code null}の場合
-	 * @throws IllegalArgumentException ICCプロファイルでない、またはCMYKでない場合
+	 * @param cmykProfile bytes of the CMYK ICC profile
+	 * @throws NullPointerException     if the profile is {@code null}
+	 * @throws IllegalArgumentException if not an ICC profile or not CMYK
 	 */
 	public ColorConverter(final byte[] cmykProfile) {
 		Objects.requireNonNull(cmykProfile, "cmykProfile");
@@ -56,10 +56,10 @@ public final class ColorConverter {
 	}
 
 	/**
-	 * sRGBをCMYKへ変換します。厳密に無彩色({@code r == g == b})なら、
-	 * 墨文字などがリッチブラックにならないようK単色を返します。
+	 * Converts sRGB to CMYK. For exactly achromatic colors ({@code r == g == b}),
+	 * returns K-only output so black text and similar content do not become rich black.
 	 *
-	 * @return 呼び出し側専用の新しい4成分配列
+	 * @return a new four-component array owned exclusively by the caller
 	 */
 	public float[] toCMYK(final float red, final float green, final float blue) {
 		if (red == green && green == blue) {
@@ -69,10 +69,10 @@ public final class ColorConverter {
 	}
 
 	/**
-	 * 無彩色のK単色化を行わず、sRGBを純粋にICC変換します。
-	 * グラデーション停止色とメッシュ頂点の変換に使用します。
+	 * Performs pure ICC conversion from sRGB without mapping achromatic colors to K-only output.
+	 * Used for gradient stops and mesh vertices.
 	 *
-	 * @return 呼び出し側専用の新しい4成分配列
+	 * @return a new four-component array owned exclusively by the caller
 	 */
 	public float[] toCMYKNoNeutralRule(final float red, final float green, final float blue) {
 		final var key = RGBKey.of(red, green, blue);
@@ -89,12 +89,12 @@ public final class ColorConverter {
 	}
 
 	/**
-	 * RGB画像を出力インテントのCMYK色空間へ全画素変換します。画像の色空間が
-	 * {@link ICC_ColorSpace}ならそのプロファイルを入力に使い、それ以外はsRGBと
-	 * して扱います。アルファは変換せず出力画像へ保持します。
+	 * Converts all pixels of an RGB image to the output intent's CMYK color space.
+	 * If the image color space is {@link ICC_ColorSpace}, uses its profile as input;
+	 * otherwise, treats it as sRGB. Preserves alpha in the output image without conversion.
 	 *
-	 * @param source RGB画像
-	 * @return 8bit CMYK（アルファがあればCMYK+A）の画像
+	 * @param source RGB image
+	 * @return 8-bit CMYK image (CMYK+A if alpha is present)
 	 */
 	public BufferedImage toCMYKImage(final BufferedImage source) {
 		Objects.requireNonNull(source, "source");

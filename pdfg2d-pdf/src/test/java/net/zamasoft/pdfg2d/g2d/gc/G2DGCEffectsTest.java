@@ -26,7 +26,7 @@ import net.zamasoft.pdfg2d.gc.paint.RGBColor;
 import net.zamasoft.pdfg2d.gc.paint.SpreadMethod;
 
 /**
- * Java2D 出力の厳密描画(ぼかし・円錐・繰り返し・層効果・ブレンド)の画素検査(2026-08-29)。
+ * Pixel checks for exact Java2D rendering (blur, conic and repeating gradients, layer effects, blending) (2026-08-29).
  */
 class G2DGCEffectsTest {
 	private static final Color RED = RGBColor.create(1, 0, 0);
@@ -73,7 +73,7 @@ class G2DGCEffectsTest {
 		}
 	}
 
-	// (a) ぼかし塗り
+	// (a) Blurred fill
 
 	@Test
 	void fillBlurredSpreadsAlphaSmoothlyAndPreservesCoverage() {
@@ -132,7 +132,7 @@ class G2DGCEffectsTest {
 
 	@Test
 	void fillBlurredScalesSigmaWithTheTransform() {
-		// 2倍拡大でσ=1.5 → デバイスではσ=3 の結果と同じ広がり
+		// At 2x scale, σ=1.5 has the same spread as σ=3 in device space
 		final BufferedImage scaled = canvas(60, 60);
 		final G2DGC gc = gc(scaled);
 		gc.setFillPaint(BLACK);
@@ -147,7 +147,7 @@ class G2DGCEffectsTest {
 		assertEquals(alpha(reference, 13, 30), alpha(scaled, 13, 30), 1);
 	}
 
-	// (b) 円錐グラデーション
+	// (b) Conic gradients
 
 	private static ConicGradient quadrants(final double startAngle) {
 		return new ConicGradient(50, 50, startAngle, new double[] { 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1 },
@@ -164,7 +164,7 @@ class G2DGCEffectsTest {
 		assertEquals(ARGB_GREEN, canvas.getRGB(70, 70), "90..180deg (down-right) is green");
 		assertEquals(ARGB_BLUE, canvas.getRGB(30, 70), "180..270deg (down-left) is blue");
 		assertEquals(ARGB_YELLOW, canvas.getRGB(30, 30), "270..360deg (up-left) is yellow");
-		// 境界のすぐ両側
+		// Immediately on either side of the boundary
 		assertEquals(ARGB_RED, canvas.getRGB(51, 10));
 		assertEquals(ARGB_YELLOW, canvas.getRGB(48, 10));
 	}
@@ -178,7 +178,7 @@ class G2DGCEffectsTest {
 		assertEquals(ARGB_YELLOW, rotated.getRGB(70, 30), "start angle 90deg rotates the wheel clockwise");
 		assertEquals(ARGB_RED, rotated.getRGB(70, 70));
 
-		// GC の変換で中心が動く(中心を(0,0)に置き、平行移動で(50,50)へ)
+		// The GC transform moves the center (place it at (0,0), then translate it to (50,50))
 		final BufferedImage moved = canvas(100, 100);
 		final G2DGC gcMoved = gc(moved);
 		gcMoved.transform(AffineTransform.getTranslateInstance(50, 50));
@@ -188,7 +188,7 @@ class G2DGCEffectsTest {
 		assertEquals(ARGB_RED, moved.getRGB(70, 30));
 		assertEquals(ARGB_BLUE, moved.getRGB(30, 70));
 
-		// 線
+		// Stroke
 		final BufferedImage stroked = canvas(100, 100);
 		final G2DGC gcStroke = gc(stroked);
 		gcStroke.setStrokePaint(quadrants(0));
@@ -198,7 +198,7 @@ class G2DGCEffectsTest {
 		assertEquals(ARGB_YELLOW, stroked.getRGB(30, 30));
 		assertEquals(0, stroked.getRGB(70, 70));
 
-		// グループ画像の中
+		// Inside a group image
 		final BufferedImage grouped = canvas(100, 100);
 		final G2DGC gcGroup = gc(grouped);
 		final GroupImageGC group = gcGroup.createGroupImage(100, 100);
@@ -216,10 +216,10 @@ class G2DGCEffectsTest {
 		gc.setFillPaint(new ConicGradient(50, 50, 0, new double[] { 0, 1 }, new Color[] { RED, BLUE },
 				new AffineTransform()));
 		gc.fill(new Rectangle2D.Double(0, 0, 100, 100));
-		// 真下(180deg)は中間色
+		// Directly below (180deg) is the intermediate color
 		assertRgbNear(0xFF800080, canvas.getRGB(50, 90), 4);
 
-		// 停止が 0.25..0.75 しか覆わない: 外側は端の色(CSS と同じ)
+		// Stops cover only 0.25..0.75: use the endpoint colors outside this range (as in CSS)
 		final BufferedImage padded = canvas(100, 100);
 		final G2DGC gcPad = gc(padded);
 		gcPad.setFillPaint(new ConicGradient(50, 50, 0, new double[] { 0.25, 0.75 }, new Color[] { GREEN, BLUE },
@@ -229,23 +229,23 @@ class G2DGCEffectsTest {
 		assertEquals(ARGB_BLUE, padded.getRGB(30, 30), "after the last stop: last color");
 		assertRgbNear(0xFF008080, padded.getRGB(50, 90), 4);
 
-		// REPEAT: 0.25 周期で繰り返す
+		// REPEAT: repeat with a period of 0.25
 		final BufferedImage repeated = canvas(100, 100);
 		final G2DGC gcRep = gc(repeated);
 		gcRep.setFillPaint(new ConicGradient(50, 50, 0, new double[] { 0, 0.25 }, new Color[] { RED, BLUE },
 				new AffineTransform(), SpreadMethod.REPEAT));
 		gcRep.fill(new Rectangle2D.Double(0, 0, 100, 100));
-		// 画素中心がちょうど 45/135/225/315deg に乗る画素: 各周期の中点=中間色
+		// Pixel centers lie exactly at 45/135/225/315deg: each period's midpoint has the intermediate color
 		assertRgbNear(0xFF800080, repeated.getRGB(60, 39), 1);
 		assertRgbNear(0xFF800080, repeated.getRGB(60, 60), 1);
 		assertRgbNear(0xFF800080, repeated.getRGB(39, 60), 1);
 		assertRgbNear(0xFF800080, repeated.getRGB(39, 39), 1);
-		// 周期の始まりは赤、終わりは青
+		// Each period starts red and ends blue
 		assertRgbNear(ARGB_RED, repeated.getRGB(50, 10), 8);
 		assertRgbNear(ARGB_BLUE, repeated.getRGB(89, 49), 8);
 	}
 
-	// (c) 繰り返し線形グラデーション
+	// (c) Repeating linear gradients
 
 	@Test
 	void repeatLinearGradientRepeatsWithItsPeriod() {
@@ -261,7 +261,7 @@ class G2DGCEffectsTest {
 		assertTrue((canvas.getRGB(2, 5) & 0xFF) < (canvas.getRGB(7, 5) & 0xFF), "brightness rises within a period");
 		assertTrue((canvas.getRGB(12, 5) & 0xFF) < (canvas.getRGB(17, 5) & 0xFF), "and again in the next period");
 
-		// PAD は端の色で埋める
+		// PAD fills with the endpoint colors
 		final BufferedImage padded = canvas(40, 10);
 		final G2DGC gcPad = gc(padded);
 		gcPad.setFillPaint(new LinearGradient(0, 0, 10, 0, new double[] { 0, 1 }, new Color[] { BLACK, RGBColor.create(1, 1, 1) },
@@ -270,7 +270,7 @@ class G2DGCEffectsTest {
 		assertEquals(0xFFFFFFFF, padded.getRGB(30, 5));
 	}
 
-	// (d) 層効果
+	// (d) Layer effects
 
 	private static Image redSquare(final G2DGC gc, final double size) {
 		final GroupImageGC group = gc.createGroupImage(size, size);
@@ -307,7 +307,7 @@ class G2DGCEffectsTest {
 		assertEquals(0, canvas.getRGB(33, 19));
 		assertEquals(0, canvas.getRGB(39, 39));
 
-		// ぼかした半透明の影
+		// Blurred translucent shadow
 		final BufferedImage soft = canvas(60, 60);
 		final G2DGC gcSoft = gc(soft);
 		gcSoft.transform(AffineTransform.getTranslateInstance(20, 20));
@@ -340,7 +340,7 @@ class G2DGCEffectsTest {
 		assertEquals(128, alpha(faded, 25, 25), 2);
 		assertEquals(0xFF0000, faded.getRGB(25, 25) & 0xFFFFFF);
 
-		// 恒等効果は普通の drawImage と同じ
+		// Identity effects behave like a normal drawImage
 		final BufferedImage plain = canvas(50, 50), identity = canvas(50, 50);
 		final G2DGC gcPlain = gc(plain), gcIdentity = gc(identity);
 		gcPlain.transform(AffineTransform.getTranslateInstance(20, 20));
@@ -350,7 +350,7 @@ class G2DGCEffectsTest {
 		assertArrayEquals(plain.getRGB(0, 0, 50, 50, null, 0, 50), identity.getRGB(0, 0, 50, 50, null, 0, 50));
 	}
 
-	// (e) ブレンド
+	// (e) Blending
 
 	@Test
 	void multiplyBlendOfTwoFillsGivesTheProduct() {
@@ -372,7 +372,7 @@ class G2DGCEffectsTest {
 		assertRgbNear(0xFF4E4E1D, canvas.getRGB(2, 18), 1, "strokes blend too");
 		assertRgbNear(0xFFC86432, canvas.getRGB(2, 2), 0);
 
-		// 復元後は普通に上書き
+		// After restoring, overwrite normally
 		gc.setFillPaint(RGBColor.create(100 / 255f, 200 / 255f, 150 / 255f));
 		gc.fill(new Rectangle2D.Double(0, 0, 3, 3));
 		assertRgbNear(0xFF64C896, canvas.getRGB(1, 1), 0);
@@ -397,7 +397,7 @@ class G2DGCEffectsTest {
 		assertRgbNear(0xFF4E4E1D, canvas.getRGB(5, 10), 1, "the group multiplies the backdrop");
 		assertRgbNear(0xFF64C896, canvas.getRGB(15, 10), 0, "over a transparent backdrop the source shows unchanged");
 
-		// 定数アルファと併用
+		// Combine with constant alpha
 		final BufferedImage half = canvas(20, 20);
 		final G2DGC gcHalf = gc(half);
 		gcHalf.setFillPaint(RGBColor.create(1, 1, 1));
@@ -416,13 +416,13 @@ class G2DGCEffectsTest {
 		final BlendComposite difference = (BlendComposite) BlendComposite.getInstance(BlendMode.DIFFERENCE, 1);
 		assertRgbNear(0xFF646464, difference.blend(0xFF64C896, 0xFFC86432), 0);
 		final BlendComposite luminosity = (BlendComposite) BlendComposite.getInstance(BlendMode.LUMINOSITY, 1);
-		// 灰(0.5)の輝度を赤へ: SetLum(red, 0.5) = (1, 0.286, 0.286) after ClipColor
+		// Apply the luminosity of gray (0.5) to red: SetLum(red, 0.5) = (1, 0.286, 0.286) after ClipColor
 		assertRgbNear(0xFFFF4A4A, luminosity.blend(0xFF808080, 0xFFFF0000), 1);
 		final BlendComposite hue = (BlendComposite) BlendComposite.getInstance(BlendMode.HUE, 1);
-		// 背景が灰(彩度0)なら色相を移しても灰のまま
+		// A gray backdrop (saturation 0) stays gray even after transferring the hue
 		assertRgbNear(0xFF808080, hue.blend(0xFFFF0000, 0xFF808080), 1);
 		assertTrue(BlendComposite.getInstance(BlendMode.NORMAL, 1) instanceof java.awt.AlphaComposite);
-		// 透明なソースは背景をそのまま
+		// A transparent source leaves the backdrop unchanged
 		assertEquals(0xFFC86432, screen.blend(0x00FFFFFF, 0xFFC86432));
 	}
 }

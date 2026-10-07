@@ -14,16 +14,16 @@ import java.awt.geom.PathIterator;
 public record Glyph(GeneralPath path, byte[] charString) {
 
 	/**
-	 * 描かれる輪郭を1つも持たないglyphかどうかを返します。
+	 * Returns whether the glyph has no drawable outlines.
 	 *
 	 * <p>
-	 * cmapに登録がありながら字形が空のフォントが実在します
-	 * (JejuGothic系の漢字、Adobe Blankの全字)。これを「表示できる」と
-	 * 扱うと代替フォントへ落ちず警告も出ないまま文字が消えるため、
-	 * フォント選択がこの判定を使います(2026-09-01)。
+	 * Some fonts have cmap entries with empty glyphs (kanji in the JejuGothic family,
+	 * all characters in Adobe Blank). Treating them as displayable makes characters disappear
+	 * without falling back to another font or issuing a warning, so font selection
+	 * uses this check (2026-09-01).
 	 * </p>
 	 *
-	 * @return 移動と閉じだけで、線も曲線も無いなら{@code true}
+	 * @return {@code true} if there are only moves and closes, with no lines or curves
 	 */
 	public boolean isBlank() {
 		if (this.path == null) {

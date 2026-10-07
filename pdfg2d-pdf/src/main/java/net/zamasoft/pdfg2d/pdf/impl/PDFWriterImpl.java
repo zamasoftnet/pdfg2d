@@ -83,7 +83,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 	private FontManagerImpl fontManager = null;
 
-	/** Writer単位で遅延生成する、出力インテント用のCMYK変換器。 */
+	/** CMYK converter for the output intent, created lazily per writer. */
 	private ColorConverter colorConverter = null;
 
 	/** XRef Table. */
@@ -278,15 +278,14 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		return ref;
 	}
 
-	/** PDF/UA: 文書タイトルをウィンドウタイトルに使う要件(検証済み計画)。 */
+	/** PDF/UA: requirement to use the document title as the window title (validated plan). */
 	private final boolean forceDisplayDocTitle;
 
 	/**
-	 * PDF/Xの明示的な出力インテントを完全に検証します(fail closed)。出力
-	 * インテントは印刷条件を表すので、DestOutputProfileは解析できるCMYKの
-	 * 出力用(class prtr)プロファイルでなければなりません。foliojet4は
-	 * 入出力プロパティの段階で同じ検査(ERROR 0x380E)をしますが、pdfg2dを
-	 * 直接使う呼び出しにも同じ前提を課します(codexレビュー2026-09-05)。
+	 * Fully validates an explicit PDF/X output intent (fail closed). The output intent describes
+	 * printing conditions, so DestOutputProfile must be a parseable CMYK output (class prtr) profile.
+	 * foliojet4 performs the same check at the I/O property stage (ERROR 0x380E),
+	 * but direct pdfg2d callers must meet the same preconditions (codex review 2026-09-05).
 	 */
 	private static void validatePdfXOutputIntent(final OutputIntent intent, final PDFParams.Version version) {
 		// The identifiers name a printing condition (ICC registry names are all
@@ -323,8 +322,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	/**
-	 * 出力開始前の妥当性検証です(2026-08-01)。ここで弾かれる組合せは
-	 * 1バイトも書かずにIllegalArgumentExceptionで失敗する。
+	 * Validates before output starts (2026-08-01). Rejected combinations fail with
+	 * IllegalArgumentException without writing a single byte.
 	 */
 	private static void validate(final PDFParams params) {
 		final var pdfVersion = params.version();
@@ -381,17 +380,17 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	/**
-	 * Catalog骨格が割り当てた間接参照です(2026-08-01、増分11——
-	 * コンストラクタのフェーズ間受け渡しをrecordで明示する)。
+	 * Indirect references allocated by the Catalog skeleton (2026-08-01, increment 11:
+	 * a record makes the handoff between constructor phases explicit).
 	 *
-	 * @param pages        ページツリーのルート
-	 * @param metadata     XMPメタデータ(PDF 1.4未満ではnull)
-	 * @param outputIntent OutputIntent辞書(PDF 1.4未満ではnull)
+	 * @param pages        page tree root
+	 * @param metadata     XMP metadata (null before PDF 1.4)
+	 * @param outputIntent OutputIntent dictionary (null before PDF 1.4)
 	 */
 	private record CatalogRefs(ObjectRef pages, ObjectRef metadata, ObjectRef outputIntent) {
 	}
 
-	/** PDFヘッダとバイナリ識別コメントを書き出します。 */
+	/** Writes the PDF header and binary identification comment. */
 	private void writeHeader(final PDFParams.Version pdfVersion) throws IOException {
 		this.mainFlow.write(HEADER);
 		this.mainFlow.write(pdfVersion.baseVersion().getBytes(java.nio.charset.StandardCharsets.US_ASCII));
@@ -408,9 +407,9 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	/**
-	 * Catalog辞書の骨格(Type/Version/Pages/Metadata/OutputIntentsの参照)を
-	 * 書き出し、割り当てた参照を返します。オブジェクト番号の割当順は
-	 * 従来と同一(Pages→Metadata→OutputIntent)。
+	 * Writes the Catalog dictionary skeleton (Type/Version/Pages/Metadata/OutputIntents references)
+	 * and returns the allocated references. Object numbers are allocated in the same order as before
+	 * (Pages -> Metadata -> OutputIntent).
 	 */
 	private CatalogRefs beginCatalog(final PDFParams.Version pdfVersion) throws IOException {
 		this.mainFlow.startHash();
@@ -462,10 +461,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 
 	public PDFWriterImpl(final FragmentedOutput builder, final PDFParams params) throws IOException {
 		var resolvedParams = (params != null) ? params : PDFParams.createDefault();
-		// PDF/X-3・PDF/X-4以降はICC-managed RGBを許す——RGBプロファイル未指定の
-		// PRESERVEには既定のsRGBプロファイルを補う(2026-08-18)。これが
-		// 無いとeffectiveColorMode()がCMYKへ倒れ、素朴なRGB→CMYK変換で
-		// 全体が暗くなる(書籍の表紙で実測。X-1aは仕様上CMYKのままが正)
+		// PDF/X-3 and PDF/X-4 onward allow ICC-managed RGB; supply the default sRGB profile
+		// for PRESERVE when no RGB profile is specified (2026-08-18). Without it,
+		// effectiveColorMode() falls back to CMYK, and simple RGB-to-CMYK conversion
+		// darkens the entire output (observed on a book cover; X-1a correctly remains CMYK by specification).
 		if (resolvedParams.version() != null && resolvedParams.version().isPdfX()
 				&& resolvedParams.version() != PDFParams.Version.V_PDFX1A
 				&& resolvedParams.colorMode() == PDFParams.ColorMode.PRESERVE
@@ -476,16 +475,16 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.params = resolvedParams;
 		this.builder = builder.supportsPositionInfo() ? builder : new PositionTrackingOutput(builder);
 
-		// 妥当性検証は1バイトも書く前に済ませる(2026-08-01——従来は
-		// 暗号化の不正な組合せがヘッダとCatalogを書き始めた後で失敗していた)
+		// Complete validation before writing any bytes (2026-08-01: previously, invalid encryption
+		// combinations failed only after the header and Catalog had started to be written).
 		validate(this.params);
 
 		final var tagged = this.params.tagged();
 		this.structure = (tagged != null) ? new StructureTreeBuilder(tagged.pdfuaPart() >= 2) : null;
 		// PDF/UA requires the window title to come from the document title
-		// rather than the file name. 従来はここで呼び出し側の
-		// ViewerPreferencesをsetDisplayDocTitle(true)で直接変更していた——
-		// 副作用を除去し、書き出し時の判定(ViewerPreferencesWriter)へ移した
+		// rather than the file name. Previously, this directly modified the caller's
+		// ViewerPreferences with setDisplayDocTitle(true).
+		// Removed that side effect and moved the decision to output time (ViewerPreferencesWriter).
 		this.forceDisplayDocTitle = tagged != null && tagged.pdfua();
 
 		final var id = this.nextId();
@@ -518,8 +517,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			// We will fill this later in closeLinearized
 		}
 
-		// Catalog骨格(参照の割当と書き出しはbeginCatalogに集約——
-		// 以降のフェーズはこのrecordの参照だけに依存する)
+		// Catalog skeleton (reference allocation and output are centralized in beginCatalog;
+		// subsequent phases depend only on this record's references).
 		final CatalogRefs catalogRefs = this.beginCatalog(pdfVersion);
 		this.rootPageRef = catalogRefs.pages();
 		final ObjectRef xmpmetaRef = catalogRefs.metadata();
@@ -534,7 +533,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			fileId = new byte[16];
 			RND.nextBytes(fileId);
 		} else {
-			// 呼び出し側の配列と別名共有しない(浅い不変性の穴を塞ぐ)
+			// Do not alias the caller's array (close a gap in shallow immutability).
 			fileId = fileId.clone();
 		}
 		this.fileid = new byte[][] { fileId, fileId };
@@ -543,7 +542,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		this.mainFlow.endHash();
 		this.mainFlow.endObject();
 
-		// Encryption(妥当性はvalidate()で検証済み)
+		// Encryption (already validated by validate()).
 		final var encryptionParams = this.params.encryption();
 		if (encryptionParams != null) {
 			this.encryption = new Encryption(this.mainFlow, this.xref, this.fileid, encryptionParams);
@@ -560,8 +559,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			this.xmpmetaFlow = null;
 		}
 
-		// OutputIntents(辞書とICCプロファイルの書き出しはOutputIntentWriterへ
-		// 抽出——ViewerPreferencesWriter/XMPMetadataWriterと同じ様式)
+		// OutputIntents (dictionary and ICC profile output extracted to OutputIntentWriter,
+		// following the same pattern as ViewerPreferencesWriter/XMPMetadataWriter).
 		if (outputIntentRef != null) {
 			OutputIntentWriter.write(this.mainFlow, this.xref, this.params, outputIntentRef);
 		}
@@ -756,21 +755,22 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	/**
-	 * 同梱リソースのキャッシュ(2026-07-29)。
+	 * Cache of bundled resources (2026-07-29).
 	 *
 	 * <p>
-	 * 読み元はJAR内の<b>不変な</b>リソース(ICCプロファイル)なので、
-	 * 変換のたびに読み直す理由がない。しかも
-	 * {@code Class.getResourceAsStream}はJARの場合
-	 * {@code sun.net.www.protocol.jar.URLJarFile}を経由し、これが
-	 * <b>同期されている</b>ため、並行変換が互いを待つ。
+	 * The sources are <b>immutable</b> resources (ICC profiles) in the JAR,
+	 * so there is no reason to reread them for each conversion.
+	 * Moreover, {@code Class.getResourceAsStream} accesses JARs through
+	 * {@code sun.net.www.protocol.jar.URLJarFile}, which is <b>synchronized</b>,
+	 * making concurrent conversions wait for each other.
 	 * </p>
 	 *
 	 * <p>
-	 * 実測(2026-07-29、掃過24スレッドのスレッドダンプ): PDFWriterの
-	 * 初期化でここに7スレッドが滞留していた。1変換につき1回とはいえ、
-	 * JARロック+deflate展開(146KB)を毎回払っていた。
-	 * <b>製品はサーバとして並行変換する</b>ので、本番のスループットにも効く。
+	 * Measurements (2026-07-29, thread dump of a 24-thread sweep): seven threads
+	 * were stalled here during PDFWriter initialization. Even once per conversion,
+	 * each paid for JAR locking and deflate decompression (146 KB).
+	 * <b>The product performs concurrent conversions as a server</b>,
+	 * so this also affects production throughput.
 	 * </p>
 	 */
 	private static final java.util.concurrent.ConcurrentMap<String, byte[]> RESOURCE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
@@ -786,8 +786,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	static byte[] loadResource(final String name) throws IOException {
 		final byte[] cached = RESOURCE_CACHE.get(name);
 		if (cached != null) {
-			// 呼び出し側が書き換えても他へ波及しないよう複製を渡す
-			// (JARロックとdeflateは消え、残るのはメモリ複製だけ)
+			// Return a copy so changes by the caller do not affect others
+			// (eliminates JAR locking and deflate; only memory copying remains).
 			return cached.clone();
 		}
 		final byte[] bytes;
@@ -802,10 +802,10 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	/**
-	 * 出力インテントのCMYK ICC変換器を返します。
+	 * Returns the output intent's CMYK ICC converter.
 	 *
-	 * @return このwriterが所有する変換器
-	 * @throws IOException 既定ICCプロファイルを読み込めない場合
+	 * @return converter owned by this writer
+	 * @throws IOException if the default ICC profile cannot be read
 	 */
 	public ColorConverter colorConverter() throws IOException {
 		if (this.colorConverter == null) {
@@ -904,8 +904,8 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	private ObjectRef generatedImageRGBProfileRef = null;
 
 	/**
-	 * PDF/XでRGBを残す文書だけがResourcesに/DefaultRGBを置きます。通常PDFと
-	 * PDF/Aは従来どおり(生成画像のsRGBプロファイル参照があっても足さない)。
+	 * Only PDF/X documents that retain RGB place /DefaultRGB in Resources. Regular PDF and PDF/A
+	 * retain their previous behavior (no addition even if generated images reference an sRGB profile).
 	 */
 	private ObjectRef defaultRGBProfileRef() {
 		return this.params.version().isPdfX()
@@ -915,11 +915,12 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	/**
-	 * PDF/XでRGBを残す文書の共有sRGBプロファイル参照を返します(それ以外は
-	 * {@code null})。文書を開いたときに作成済みなので、別オブジェクトの
-	 * 書き出し中(シェーディング辞書の途中など)でも安全に参照できます。
+	 * Returns the shared sRGB profile reference for PDF/X documents that retain RGB
+	 * ({@code null} otherwise). Already created when the document opens,
+	 * so it is safe to reference while writing another object
+	 * (e.g. in the middle of a shading dictionary).
 	 *
-	 * @return {@code [/ICCBased ref]} に使う参照、または{@code null}
+	 * @return reference used in {@code [/ICCBased ref]}, or {@code null}
 	 */
 	public ObjectRef pdfXRGBProfileRef() {
 		return this.defaultRGBProfileRef();

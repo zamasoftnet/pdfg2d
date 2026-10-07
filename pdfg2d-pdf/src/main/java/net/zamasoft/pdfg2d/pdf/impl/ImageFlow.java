@@ -435,10 +435,10 @@ class ImageFlow {
 			while (iri.hasNext()) {
 				final var reader = iri.next();
 				reader.setInput(imageIn);
-				// 画素数の上限はICCや型の判定より前に、ヘッダの寸法で
-				// 見る(2026-10-03)。大きいと分かったら他のリーダは
-				// 試さない。寸法を読めないリーダは従来どおり次へ回し、
-				// 選んだリーダで下でもう一度判定する
+				// Check the pixel limit from header dimensions before inspecting ICC or image type
+				// (2026-10-03). If the image is known to be too large, do not try other readers.
+				// If a reader cannot read the dimensions, try the next one as before;
+				// check again below with the selected reader.
 				try {
 					G2DUtils.checkPixelLimit(reader, pixelLimit);
 				} catch (final ImageTooLargeException e) {
@@ -463,10 +463,10 @@ class ImageFlow {
 							continue;
 						}
 						if (reader.getClass().getName().startsWith("com.sun.imageio.plugins.jpeg.")) {
-							// JDK標準のJPEGリーダはCMYK(4成分)を読めないため
-							// 後回しにする。ImageIOレジストリの登録順は環境で
-							// 変わる(デーモンではJDKが先に並ぶことを実測)ので、
-							// 順序に依存せずTwelveMonkeys優先を保証する(2026-08-10)
+							// Defer the standard JDK JPEG reader because it cannot read CMYK (four components).
+							// ImageIO registry order varies by environment
+							// (the JDK reader was observed first in the daemon), so guarantee
+							// TwelveMonkeys priority regardless of order (2026-08-10).
 							jdkJpeg = reader;
 							continue;
 						}
@@ -490,7 +490,7 @@ class ImageFlow {
 			} else if (cir != null) {
 				cir.dispose();
 			}
-			// 選んだリーダでの判定。寸法を読めなければ、上限があるときは断る
+			// Check with the selected reader. If dimensions cannot be read and a limit is set, reject the image.
 			try {
 				G2DUtils.checkPixelLimit(ir, pixelLimit);
 			} catch (final ImageTooLargeException e) {
@@ -623,13 +623,13 @@ class ImageFlow {
 				// Re-load image if we only had the reader
 				if (ir != null) {
 					imageIn.seek(0);
-					// loadImageはreaderの所有権を引き取り、自分のfinallyで
-					// disposeする。ここでnullにしないと本メソッドのfinallyが
-					// 二重disposeし、TwelveMonkeysのJPEGリーダが
-					// IllegalStateException(use after dispose)を投げて——
-					// 画像データを書き終えた後なのに——読込全体が失敗扱いに
-					// なり画像が脱落していた(PDF/X等の再圧縮経路で全JPEGが
-					// 消える。2026-08-18、書籍の扉写真で実測)
+					// loadImage takes ownership of reader and disposes it in its own finally.
+					// Without setting it to null here, this method's finally disposes it again,
+					// causing the TwelveMonkeys JPEG reader to throw
+					// IllegalStateException (use after dispose). Even though image data
+					// had already been written, the entire load was treated as a failure
+					// and the image was omitted (all JPEGs disappeared in recompression paths such as PDF/X;
+					// 2026-08-18, observed in a book's title-page photograph).
 					final ImageReader owned = ir;
 					ir = null;
 					image = G2DUtils.loadImage(owned, imageIn, pixelLimit);
@@ -643,8 +643,8 @@ class ImageFlow {
 						height = maxHeight;
 
 					if (resizedColorModel.getNumColorComponents() == 4) {
-						// CMYK は RGB を経由せず成分ごとに補間する。getScaledInstance は
-						// RGB 往復で版構成を変える(灰 K 単色が 4 色になる。codex レビュー 2026-09-05)
+						// Interpolate CMYK per component without passing through RGB. getScaledInstance changes plate composition
+						// through an RGB round trip (K-only gray becomes four colors; codex review 2026-09-05).
 						image = scaleComponents(image, width, height);
 					} else {
 						final var scaled = image.getScaledInstance(width, height, java.awt.Image.SCALE_SMOOTH);
@@ -703,10 +703,10 @@ class ImageFlow {
 			ObjectRef imageRGBProfileRef = null;
 			if (outputColorComponents == 3 && (pdfXPreservesRGB
 					|| (generated && pdfVersion.v >= PDFParams.Version.V_1_3.v))) {
-				// 再圧縮経路はColorModelのgetRed/Green/Blue()でsRGBへ変換した値を
-				// 書くので、タグも常に共有のsRGBにする。入力画像固有のICCを
-				// 埋めると画素とタグが食い違い、表示時に二重変換される
-				// (codexレビュー2026-09-05)。素通しJPEGのAPP2も転記しない(D3の非目標)
+				// The recompression path writes values converted to sRGB by ColorModel's getRed/Green/Blue(),
+				// so always tag them with the shared sRGB profile. Embedding the input image's own ICC profile
+				// would mismatch pixels and tags, causing double conversion on display
+				// (codex review 2026-09-05). Do not copy APP2 from pass-through JPEGs either (a D3 non-goal).
 				imageRGBProfileRef = this.pdfWriter.useGeneratedImageRGBProfile();
 			}
 			pdfImage = new PDFImage(name, orgWidth, orgHeight);
@@ -1193,7 +1193,7 @@ class ImageFlow {
 				try {
 					ir.dispose();
 				} catch (final RuntimeException e) {
-					// disposeの失敗で(すでに完了した)画像出力を壊さない
+					// Do not let dispose failures break already completed image output.
 					LOG.log(Level.FINE, "ImageReader.dispose failed", e);
 				}
 			}

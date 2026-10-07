@@ -29,12 +29,12 @@ import net.zamasoft.zstream.resolver.composite.CompositeSourceResolver;
 import net.zamasoft.zstream.resolver.util.URIHelper;
 
 /**
- * fonts.xmlの宣言からフォントデータベースを構築する実行側です
- * (2026-08-01、90点計画増分8——593行のSAXハンドラがXML構文解釈と
- * ファイル解決・フォントパース・索引更新・登録を全部抱えていたのを
- * 分離した)。SAXハンドラ({@link PDFFontSourceManagerConfigurationHandler})は
- * 属性を型へ変換してこのクラスを呼ぶだけになり、こちらはXMLなしで
- * 単体テストできる。
+ * Builds the font database from fonts.xml declarations
+ * (2026-08-01, 90-point plan increment 8). Separated XML syntax interpretation
+ * from file resolution, font parsing, index updates, and registration,
+ * which the 593-line SAX handler previously handled together.
+ * The SAX handler ({@link PDFFontSourceManagerConfigurationHandler}) now only converts
+ * attributes to typed values and calls this class, which can be unit-tested without XML.
  *
  * @author MIYABE Tatsuhiko
  */
@@ -45,7 +45,7 @@ final class FontCatalogBuilder {
 
 	private final SourceResolver resolver;
 
-	/** font-dirスキャンの永続索引(nullなら索引なしで毎回パース)。 */
+	/** Persistent index for font-dir scanning (null means parse every time without an index). */
 	private final FontIndex fontIndex;
 
 	private final Map<String, Encoding> nameToEncoding = new HashMap<>();
@@ -83,7 +83,7 @@ final class FontCatalogBuilder {
 		}
 	}
 
-	/** {@code <encoding src>}: コードと文字名の対応表を読み込みます。 */
+	/** {@code <encoding src>}: loads the mapping from codes to character names. */
 	void addEncoding(final String src) throws IOException, URISyntaxException {
 		Source source = null;
 		try {
@@ -97,7 +97,7 @@ final class FontCatalogBuilder {
 		}
 	}
 
-	/** {@code <core-fonts>}: 既定エンコーディングとUnicode対応表を設定します。 */
+	/** {@code <core-fonts>}: sets the default encoding and Unicode mapping. */
 	void beginCoreFonts(final String encoding, final String unicodeSrc) throws IOException, URISyntaxException {
 		this.defaultEncoding = this.nameToEncoding.get(encoding);
 		final Source source = this.resolve(unicodeSrc);
@@ -108,7 +108,7 @@ final class FontCatalogBuilder {
 		}
 	}
 
-	/** {@code <letter-font>}: AFMの欧文コアフォントを構築します。 */
+	/** {@code <letter-font>}: builds an AFM core font for Latin text. */
 	FontSource letterFont(final String src, final String encoding)
 			throws IOException, URISyntaxException, java.text.ParseException {
 		Source source = null;
@@ -123,7 +123,7 @@ final class FontCatalogBuilder {
 		}
 	}
 
-	/** {@code <symbol-font>}: AFMのシンボルコアフォントを構築します。 */
+	/** {@code <symbol-font>}: builds an AFM symbol core font. */
 	FontSource symbolFont(final String src, final String encodingSrc)
 			throws IOException, URISyntaxException, java.text.ParseException {
 		Source source = null, encodingSource = null;
@@ -141,14 +141,14 @@ final class FontCatalogBuilder {
 		}
 	}
 
-	/** {@code <cmap>}: CMapを読み込みます。 */
+	/** {@code <cmap>}: loads a CMap. */
 	void addCMap(final String src, final String javaEncoding) throws IOException, URISyntaxException {
 		final Source source = this.resolve(src);
 		final CMap cmap = new CMap(source, javaEncoding);
 		this.nameToCMap.put(cmap.getEncoding(), cmap);
 	}
 
-	/** {@code <cid-keyed-font>}: 論理CIDフォントを構築します。 */
+	/** {@code <cid-keyed-font>}: builds a logical CID-keyed font. */
 	PDFFontSource[] cidKeyedFont(final FontFace face, final String warraySrc)
 			throws IOException, URISyntaxException {
 		Source source = null;
@@ -162,7 +162,7 @@ final class FontCatalogBuilder {
 		}
 	}
 
-	/** {@code <font-file>}: TTF/OTF/TTCファイルからフォントを構築します。 */
+	/** {@code <font-file>}: builds fonts from a TTF/OTF/TTC file. */
 	List<FontSource> fontFile(final String src, final String types, final int index, final FontFace face)
 			throws IOException, URISyntaxException {
 		final File ttfFile = this.toFile(src);
@@ -180,8 +180,8 @@ final class FontCatalogBuilder {
 	}
 
 	/**
-	 * {@code <font-dir>}: ディレクトリを走査して全フォントを登録します
-	 * (永続索引が有効ならヒット分はファイルを開かない)。
+	 * {@code <font-dir>}: scans a directory and registers all fonts
+	 * (if the persistent index is enabled, index hits do not open files).
 	 */
 	void fontDir(final String dir, final String types, final FontFace face, final String scanKey)
 			throws IOException, URISyntaxException {
@@ -205,7 +205,7 @@ final class FontCatalogBuilder {
 			try {
 				List<FontSource> list = null;
 				if (this.fontIndex != null) {
-					// 索引ヒット: フォントファイルを開かずに再構築
+					// Index hit: reconstruct without opening the font file.
 					list = this.fontIndex.lookup(ttfFile, scanKey);
 				}
 				if (list == null) {
@@ -224,8 +224,8 @@ final class FontCatalogBuilder {
 					}
 
 					for (int j = 0; j < numFonts; ++j) {
-						// ディレクトリ走査はfaceに宣言が無いため、italic/weightを
-						// ファイルのOS/2から導出する(FontLoader.readTTFのjavadoc参照)
+						// Directory scans have no face declarations, so derive italic/weight
+						// from the file's OS/2 (see FontLoader.readTTF's Javadoc).
 						if (types.indexOf("cid-identity") != -1) {
 							FontLoader.readTTF(list, face, FontLoader.Type.CID_IDENTITY, ttfFile, j, this.nameToCMap,
 									true);
@@ -249,7 +249,7 @@ final class FontCatalogBuilder {
 		}
 	}
 
-	/** {@code <system-font>}: AWT経由でシステムフォントを構築します。 */
+	/** {@code <system-font>}: builds a system font through AWT. */
 	List<FontSource> systemFont(final String src, final String file, final String dir, final String types,
 			final FontFace face) throws IOException, URISyntaxException, java.awt.FontFormatException {
 		final List<FontSource> list = new ArrayList<>();
@@ -279,7 +279,7 @@ final class FontCatalogBuilder {
 		return list;
 	}
 
-	/** {@code <all-system-fonts>}: 全システムフォントを登録します。 */
+	/** {@code <all-system-fonts>}: registers all system fonts. */
 	void allSystemFonts(final String dir, final String types, final FontFace face)
 			throws IOException, URISyntaxException {
 		java.awt.Font[] fonts;
@@ -302,8 +302,8 @@ final class FontCatalogBuilder {
 		}
 		for (final java.awt.Font font : fonts) {
 			try {
-				// 従来の挙動どおり、こちらはラッパーをallFontsにも入れる
-				// (font-dirは生ソース——歴史的な非対称を挙動保存)
+				// Preserve the previous behavior: this path also adds wrappers to allFonts
+				// (font-dir adds raw sources; retain this historical asymmetry).
 				if (types.indexOf("cid-keyed") != -1) {
 					this.register(new PDFFontSourceManagerConfigurationHandler.PdfFontSourceWrapper(
 							FontLoader.readSystemFont(face, FontLoader.Type.CID_KEYED, font, this.nameToCMap)));
@@ -322,17 +322,17 @@ final class FontCatalogBuilder {
 		}
 	}
 
-	/** {@code <generic-fonts>}の1エントリを登録します。 */
+	/** Registers one {@code <generic-fonts>} entry. */
 	void genericFamily(final String genericFamily, final FontFamilyList family) {
 		this.genericFamily(genericFamily, null, family);
 	}
 
 	/**
-	 * {@code <generic-fonts>}の言語別エントリを文書順で登録します。
-	 * {@code lang}は空白区切りで複数のBCP-47タグを並べられます
-	 * ({@code lang="zh-Hant zh-TW zh-MO"})——地域だけのタグ({@code zh-TW})は
-	 * スクリプト付きのタグ({@code zh-Hant})と機械的には結び付かないため、
-	 * どのタグを同じ連鎖へ寄せるかは設定側で明示します。
+	 * Registers language-specific {@code <generic-fonts>} entries in document order.
+	 * {@code lang} can list multiple whitespace-separated BCP-47 tags
+	 * ({@code lang="zh-Hant zh-TW zh-MO"}). Region-only tags ({@code zh-TW}) do not
+	 * automatically link to tags with a script ({@code zh-Hant}),
+	 * so the configuration explicitly specifies which tags share a chain.
 	 */
 	void genericFamily(final String genericFamily, final String lang, final FontFamilyList family) {
 		if (lang == null || lang.isBlank()) {
@@ -346,15 +346,15 @@ final class FontCatalogBuilder {
 		}
 	}
 
-	/** フォントを名前索引と全フォント一覧へ登録します。 */
+	/** Registers a font in the name index and the list of all fonts. */
 	void register(final FontSource source) {
 		this.allFonts.add(source);
 		FontLoader.add(source, this.nameToFonts);
 	}
 
 	/**
-	 * font-dir走査結果を登録します(従来の挙動どおり、全フォント一覧には
-	 * 生のソース・名前索引にはラッパーが入る)。
+	 * Registers font-dir scan results (preserving the previous behavior:
+	 * raw sources in the list of all fonts, wrappers in the name index).
 	 */
 	private void registerAll(final List<FontSource> list) {
 		this.allFonts.addAll(list);

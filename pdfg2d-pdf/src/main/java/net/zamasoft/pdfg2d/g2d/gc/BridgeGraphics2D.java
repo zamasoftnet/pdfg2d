@@ -63,15 +63,15 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	protected GC gc;
 
 	/**
-	 * {@link #create()}時に積んだGC状態のハンドル。{@link #dispose()}で閉じる。
+	 * Handle to the GC state pushed by {@link #create()}. Closed by {@link #dispose()}.
 	 * <p>
-	 * Graphics2Dの契約ではcreate()で得た子コンテキストの状態変更(クリップ・
-	 * 変換等)はdispose()で破棄されるが、GCのクリップは交差のみで狭める方向
-	 * にしか変更できないため、create()時に{@link GC#begin()}で状態を保存し
-	 * dispose()で復元しないと子のクリップが親へ漏れる。Batik(SVG)は
-	 * クリップ付き要素ごとにcreate()→clip()→描画→dispose()を繰り返すため、
-	 * この対応がないと2つ目以降のクリップが前のクリップと交差し続けて
-	 * 描画が消える(2026-08-07、yahoo.co.jpのアイコンで発覚)。
+	 * The Graphics2D contract discards state changes (clip, transform, etc.) in a child context
+	 * obtained via create() when dispose() is called. However, GC clips can only shrink through intersection,
+	 * so create() must save the state with {@link GC#begin()} and dispose() must restore it;
+	 * otherwise, the child's clip leaks into the parent. Batik (SVG) repeats
+	 * create() -> clip() -> draw -> dispose() for each clipped element.
+	 * Without this handling, each subsequent clip keeps intersecting the previous clip,
+	 * causing drawings to disappear (2026-08-07, found in yahoo.co.jp icons).
 	 * </p>
 	 */
 	protected GC.State gcState;
@@ -83,11 +83,11 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	protected AffineTransform transform = new AffineTransform();
 
 	/**
-	 * このGraphics2D用に直近の{@link GC#begin()}を呼んだ時点の変換。
+	 * Transform at the most recent {@link GC#begin()} call for this Graphics2D.
 	 * <p>
-	 * {@link GC#resetState()}はBridgeGraphics2Dの構築時ではなく、直近の
-	 * {@code begin()}へ戻る。従って子コンテキストで絶対変換を復元するときは、
-	 * この基準変換からの差分だけをGCへ適用する。
+	 * {@link GC#resetState()} returns to the most recent {@code begin()},
+	 * not to the construction of BridgeGraphics2D. When restoring an absolute transform
+	 * in a child context, apply only the difference from this base transform to GC.
 	 * </p>
 	 */
 	protected AffineTransform baseTransform = new AffineTransform();
@@ -108,7 +108,7 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 
 	protected Font font = new Font("serif", Font.PLAIN, 12);
 
-	/** Java2D由来の文字にも呼出側のPDFフォント方針を適用する。 */
+	/** Applies the caller's PDF font policy to text originating from Java2D as well. */
 	protected FontPolicyList fontPolicy = BRIDGE_FONT_POLICY;
 
 	public BridgeGraphics2D(final GC gc, final GraphicsConfiguration config) {
@@ -125,9 +125,9 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	}
 
 	/**
-	 * GCを直近の{@link GC#begin()}へ戻し、このGraphics2Dの絶対状態を復元する。
-	 * {@code resetState()}は構築時の状態へは戻らないため、変換は保存点からの
-	 * 差分({@code baseTransform^-1 * transform})として適用する。
+	 * Resets GC to the most recent {@link GC#begin()} and restores this Graphics2D's absolute state.
+	 * Since {@code resetState()} does not return to the state at construction,
+	 * applies the transform as a difference from the saved state ({@code baseTransform^-1 * transform}).
 	 */
 	private void restoreState() {
 		this.gc.resetState();
@@ -412,14 +412,14 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	}
 
 	/**
-	 * AWTフォントをこのライブラリのフォント系へ写します。
-	 * {@link Font#getFamily()}は使わない——AWTは実在しないフォント名
-	 * (例: OkapiBarcode既定の"Helvetica")を論理フォントへ置換し、
-	 * getFamily()が"SansSerif"等の<b>AWT論理名</b>を返す。これをそのまま
-	 * ファミリ名として解決すると一致するフォントがなく、数字ですら
-	 * 欠落グリフの豆腐になる(2026-08-07、バーコードの人間可読行で発覚)。
-	 * 要求された名前({@link Font#getName()})を尊重し、AWT論理名だけ
-	 * CSSの総称ファミリへ写す。
+	 * Maps AWT fonts to this library's font system.
+	 * Does not use {@link Font#getFamily()}: AWT replaces nonexistent font names
+	 * (e.g. OkapiBarcode's default "Helvetica") with logical fonts,
+	 * so getFamily() returns an <b>AWT logical name</b> such as "SansSerif".
+	 * Resolving that directly as a family name finds no matching font, making even digits
+	 * appear as missing-glyph boxes (2026-08-07, found in the human-readable line of a barcode).
+	 * Honors the requested name ({@link Font#getName()}) and maps only AWT logical names
+	 * to CSS generic families.
 	 */
 	private static String toFamilyName(final Font font) {
 		final String name = font.getName();
@@ -438,12 +438,12 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	}
 
 	/**
-	 * AWT橋渡しテキストのフォントポリシー。
-	 * {@link TextLayoutHandler#DEFAULT_FONT_POLICY}には{@code CORE}が
-	 * 含まれず、"Helvetica"等のコア14フォントへ到達できないため、
-	 * どのプロファイルでも全グリフが欠落枠になっていた(2026-08-07、
-	 * バーコードの人間可読行で発覚)。既定の優先順位の末尾へCOREを
-	 * 最後の受け皿として足す。
+	 * Font policy for text bridged from AWT.
+	 * {@link TextLayoutHandler#DEFAULT_FONT_POLICY} does not include {@code CORE},
+	 * so it could not reach Core 14 fonts such as "Helvetica", and all glyphs
+	 * became missing-glyph boxes under every profile (2026-08-07,
+	 * found in the human-readable line of a barcode). Adds CORE to the end
+	 * of the default priority order as a final fallback.
 	 */
 	private static final net.zamasoft.pdfg2d.gc.font.FontPolicyList BRIDGE_FONT_POLICY = new net.zamasoft.pdfg2d.gc.font.FontPolicyList(
 			new net.zamasoft.pdfg2d.gc.font.FontPolicyList.FontPolicy[] {
@@ -583,8 +583,8 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	public Graphics create() {
 		try {
 			BridgeGraphics2D g = (BridgeGraphics2D) this.clone();
-			// 子の状態変更(特にクリップ)をdispose()で復元できるように
-			// GC状態を保存する(gcStateフィールドのコメント参照)
+			// Save the GC state so dispose() can restore child state changes (especially the clip)
+			// (see the comment on the gcState field).
 			g.baseTransform = new AffineTransform(this.transform);
 			g.gcState = this.gc.begin();
 			return g;
@@ -719,7 +719,7 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 
 	public void dispose() {
 		if (this.gcState != null) {
-			// create()で保存したGC状態を復元する(クリップ・変換の巻き戻し)
+			// Restore the GC state saved by create() (revert clip and transform).
 			this.gcState.close();
 			this.gcState = null;
 		}
@@ -732,7 +732,7 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 		BridgeGraphics2D clone = (BridgeGraphics2D) super.clone();
 		clone.transform = new AffineTransform(clone.transform);
 		clone.baseTransform = new AffineTransform(clone.baseTransform);
-		// GC状態ハンドルは複製しない(closeの責務は元のインスタンスにある)
+		// Do not copy the GC state handle (the original instance is responsible for closing it).
 		clone.gcState = null;
 		return clone;
 	}

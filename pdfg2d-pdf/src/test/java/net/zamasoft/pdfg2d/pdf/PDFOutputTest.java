@@ -84,15 +84,15 @@ public class PDFOutputTest {
 
 	@Test
 	public void testCoefficientKeepsHighPrecisionAndRestoresStreamPrecision() throws Exception {
-		// 行列係数(scale/shear)の丸め誤差は座標値に乗算される。座標既定の
-		// 低精度(例: 0.375→0.4)で係数を書くと、丸め前の係数×ページ寸法で
-		// 計算された平行移動項と食い違い、拡大縮小されたSVG・画像が
-		// ページ寸法×誤差ぶんずれてクリップにかかる(A4で4pt超。MDNの
-		// マスクアイコンが上に欠ける形で発覚、2026-08-27)
+		// Rounding errors in matrix coefficients (scale/shear) are multiplied by coordinate values. Writing
+		// coefficients at the default low coordinate precision (e.g., 0.375→0.4) makes them inconsistent with
+		// translations computed as unrounded coefficients × page dimensions. Scaled SVGs and images then
+		// shift by page dimensions × error and get clipped (over 4 pt on A4). This surfaced as clipping
+		// at the top of MDN mask icons (2026-08-27)
 		final var o = create();
 		o.setPrecision(2);
 		o.writeRealCoefficient(0.375);
-		o.writeReal(513.1275); // 座標・平行移動は従来precisionのまま
+		o.writeReal(513.1275); // Coordinates and translations retain the existing precision
 		assertEquals("0.375 513.13", result());
 	}
 

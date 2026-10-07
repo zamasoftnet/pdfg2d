@@ -42,11 +42,11 @@ import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 import net.zamasoft.zstream.resolver.protocol.file.FileSource;
 
 /**
- * PDF/X 色管理 I3: 画像 XObject の色空間・画素配列・{@code /Decode}・
- * {@code /DefaultRGB} が版ごとに正しいことを検査します。
+ * PDF/X color management I3: checks image XObject color spaces, pixel arrays, {@code /Decode},
+ * and {@code /DefaultRGB} for each version.
  * <p>
- * 画像は 1 文書 1 枚で生成し、X-1a(CMYK モード)・X-4(PRESERVE)・通常 PDF
- * の 3 版で同じ入力を比べます。
+ * Generates one image per document and compares the same input in three versions:
+ * X-1a (CMYK mode), X-4 (PRESERVE), and regular PDF.
  */
 public class PdfXImageTest {
 
@@ -71,9 +71,9 @@ public class PdfXImageTest {
 		grayJpeg = writeJpeg("gray.jpg", sampleGray());
 		final var cmyk = stripApp14(writeCmykJpeg(false));
 		cmykJpegNoApp14 = write("cmyk-noapp14.jpg", cmyk);
-		// Adobe の慣習: APP14 付き CMYK JPEG は反転して格納される
+		// Adobe convention: CMYK JPEGs with APP14 store inverted components.
 		cmykJpegAdobe = write("cmyk-adobe.jpg", insertApp14(stripApp14(writeCmykJpeg(true)), 0));
-		// transform=2 のマーカーだけを差した資材(画素は YCCK ではない)。経路の選択だけを見る
+		// A fixture with only a transform=2 marker inserted (pixels are not YCCK). Checks only path selection.
 		ycckJpeg = write("ycck-adobe.jpg", insertApp14(cmyk, 2));
 	}
 
@@ -101,7 +101,7 @@ public class PdfXImageTest {
 			assertNull(image.getItem(COSName.DECODE));
 			final var pixels = decoded(image);
 			assertEquals(W * H * 4, pixels.length);
-			// JPEG の量子化誤差を許して性質だけ見る
+			// Check only the properties, allowing for JPEG quantization error.
 			final var whiteK = pixels[3 * 4 + 3] & 0xFF;
 			assertTrue(whiteK < 40, "white pixel K must be near 0, was " + whiteK);
 		}
@@ -223,7 +223,7 @@ public class PdfXImageTest {
 		}
 	}
 
-	// ---- X-3 (PRESERVE、PDF 1.4 基底で透明なし) -----------------------
+	// ---- X-3 (PRESERVE, based on PDF 1.4 without transparency) -----------------------
 
 	@Test
 	public void testX3RgbPngUsesIccBasedAndDefaultRgb() throws Exception {
@@ -246,7 +246,7 @@ public class PdfXImageTest {
 
 	@Test
 	public void testX3Jpeg2000RequestFallsBackToJpeg() throws Exception {
-		// JPXDecode は PDF 1.5 以降。PDF 1.4 基底の X-3 では JPEG へ落とす
+		// JPXDecode requires PDF 1.5 or later. Fall back to JPEG for X-3, which is based on PDF 1.4.
 		final var params = params(PDFParams.Version.V_PDFX3)
 				.withImageCompression(PDFParams.ImageCompression.JPEG2000).withImageCompressionLossless(0);
 		try (final var loaded = singleImage(generate("x3-jpx-request.pdf", params, rgbPng, false))) {
@@ -300,7 +300,7 @@ public class PdfXImageTest {
 			final var pixels = decoded(loaded.image());
 			assertEquals(0, pixels[0] & 0xFF);
 			assertEquals(255, pixels[W * H - 1] & 0xFF);
-			// (x+y*W)*255/7: 36, 72, 109 ... の等間隔。LUT を通ると 128 が 188 になる
+			// (x+y*W)*255/7: evenly spaced values 36, 72, 109 ... . Passing through the LUT turns 128 into 188.
 			assertEquals(109, pixels[3] & 0xFF, 1);
 		}
 	}
@@ -328,7 +328,7 @@ public class PdfXImageTest {
 		}
 	}
 
-	/** CMYK 画像の縮小は成分ごと(RGB 往復で灰 K が 4 色にならない)。 */
+	/** Downsamples CMYK images per component (no RGB round trip turning gray K into four colors). */
 	@Test
 	public void testCmykResizeKeepsPlates() throws Exception {
 		final var cmykSpace = new java.awt.color.ICC_ColorSpace(java.awt.color.ICC_Profile.getInstance(
@@ -455,7 +455,7 @@ public class PdfXImageTest {
 
 	// ---- fixtures ----------------------------------------------------
 
-	/** 上段: 半透明の赤・緑・青・白、下段: 黒・灰・黄・シアン。 */
+	/** Top row: translucent red, green, blue, white; bottom row: black, gray, yellow, cyan. */
 	private static BufferedImage sampleRgb(final int type) {
 		final var image = new BufferedImage(W, H, type);
 		final var alpha = type == BufferedImage.TYPE_INT_ARGB;
@@ -474,8 +474,8 @@ public class PdfXImageTest {
 		final var image = new BufferedImage(W, H, BufferedImage.TYPE_BYTE_GRAY);
 		for (var y = 0; y < H; ++y) {
 			for (var x = 0; x < W; ++x) {
-				// setRGB() は sRGB→線形の LUT を通す(128→55)ので、ファイルに書く
-				// 値を決めるためにサンプルへ直接置く(gamma 付き gray PNG と同じ形)
+				// setRGB() passes through the sRGB-to-linear LUT (128->55), so put values directly into the samples
+				// to control what is written to the file (the same form as a gray PNG with gamma).
 				image.getRaster().setSample(x, y, 0, (x + y * W) * 255 / (W * H - 1));
 			}
 		}
@@ -500,7 +500,7 @@ public class PdfXImageTest {
 		return file;
 	}
 
-	/** JDK の JPEG writer に 4 バンドの Raster を渡して 4 成分 JPEG を作る(色変換なし)。 */
+	/** Passes a four-band Raster to the JDK JPEG writer to create a four-component JPEG (without color conversion). */
 	private static byte[] writeCmykJpeg(final boolean inverted) throws Exception {
 		final var raster = Raster.createInterleavedRaster(DataBuffer.TYPE_BYTE, W, H, 4, null);
 		final int[][] cmyk = {
@@ -534,7 +534,7 @@ public class PdfXImageTest {
 		return out.toByteArray();
 	}
 
-	/** APP14 セグメントを全部取り除く。 */
+	/** Removes all APP14 segments. */
 	private static byte[] stripApp14(final byte[] jpeg) {
 		final var out = new ByteArrayOutputStream();
 		out.write(jpeg, 0, 2);
@@ -557,7 +557,7 @@ public class PdfXImageTest {
 		return out.toByteArray();
 	}
 
-	/** SOI 直後に Adobe APP14(transform 指定)を差し込む。 */
+	/** Inserts Adobe APP14 (with the specified transform) immediately after SOI. */
 	private static byte[] insertApp14(final byte[] jpeg, final int transform) {
 		final byte[] app14 = { (byte) 0xFF, (byte) 0xEE, 0x00, 0x0E, 'A', 'd', 'o', 'b', 'e', 0x00, 0x64, 0x00, 0x00,
 				0x00, 0x00, (byte) transform };
@@ -570,7 +570,7 @@ public class PdfXImageTest {
 
 	// ---- assertions --------------------------------------------------
 
-	/** 文書を開いたまま画像を保持する(閉じると PDFBox のストリームが読めなくなる)。 */
+	/** Retains the image with the document open (closing it makes PDFBox streams unreadable). */
 	private record Loaded(PDDocument document, COSStream image) implements AutoCloseable {
 		@Override
 		public void close() throws Exception {
@@ -642,7 +642,7 @@ public class PdfXImageTest {
 		}
 	}
 
-	/** SOF セグメントの成分数。 */
+	/** Component count in the SOF segment. */
 	private static int jpegComponents(final byte[] jpeg) {
 		var pos = 2;
 		while (pos + 4 <= jpeg.length && (jpeg[pos] & 0xFF) == 0xFF) {
@@ -662,7 +662,7 @@ public class PdfXImageTest {
 		}
 	}
 
-	/** 白→全 0、黒→K が最大成分、赤→M,Y が 200 超(4 バイト/画素、上段の並び)。 */
+	/** White -> all 0; black -> K is largest; red -> M,Y exceed 200 (4 bytes/pixel, top-row order). */
 	private static void assertCmykProperties(final byte[] p) {
 		// (3,0) white
 		final var white = 3 * 4;

@@ -25,14 +25,14 @@ import net.zamasoft.pdfg2d.pdf.font.cid.embedded.OpenTypeEmbeddedCIDFontSource;
 import net.zamasoft.pdfg2d.pdf.font.util.MultimapUtils;
 
 /**
- * {@code font-stretch}の幅級(OS/2 usWidthClass)による書体選択を固定します
- * (2026-08-29)。同族でitalic/weightが同点の面が複数あるとき、要求幅級に
- * 近い面——通常幅以下の要求なら狭い側を先に、広い要求なら広い側を先に
- * (css-fonts-4 §5.2 step 1)——を選ぶ。
+ * Ensures font selection by {@code font-stretch} width class (OS/2 usWidthClass)
+ * (2026-08-29). When multiple faces in the same family tie on italic/weight, choose a face
+ * close to the requested width class: prefer narrower faces for requests at or below normal
+ * width, and wider faces for wider requests (css-fonts-4 §5.2 step 1).
  */
 public class FontStretchSelectionTest {
 	private static final File FONT = new File("../pdfg2d-demo/src/main/resources/ipaexm.ttf");
-	/** WSL/Ubuntuの標準フォント。あればOS/2からの幅級読取りも検査する。 */
+	/** Standard WSL/Ubuntu font. If available, also checks width class reading from OS/2. */
 	private static final File DEJAVU_CONDENSED = new File(
 			"/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf");
 	private static final FontPolicyList EMBEDDED = new FontPolicyList(
@@ -50,7 +50,7 @@ public class FontStretchSelectionTest {
 		}
 	}
 
-	/** 同じ字形ファイルから、幅級だけ違う同族の面を作る。 */
+	/** Creates faces in the same family from the same glyph file, differing only in width class. */
 	private static OpenTypeEmbeddedCIDFontSource face(final int widthClass) throws Exception {
 		final var source = new OpenTypeEmbeddedCIDFontSource(FONT, 0, FontStyle.Direction.LTR);
 		source.setFontName(FAMILY);
@@ -67,15 +67,15 @@ public class FontStretchSelectionTest {
 	@Test
 	public void widthPenaltyPrefersNarrowerForCondensedAndWiderForExpanded() {
 		assertEquals(0, PDFFontSourceManager.widthPenalty(3, 3));
-		// 要求condensed(3): 狭い側(1,2)はどれも広い側(4..)より先
+		// Requested condensed (3): all narrower classes (1,2) precede wider classes (4..)
 		assertTrue(PDFFontSourceManager.widthPenalty(3, 1) < PDFFontSourceManager.widthPenalty(3, 4));
 		assertTrue(PDFFontSourceManager.widthPenalty(3, 2) < PDFFontSourceManager.widthPenalty(3, 1));
-		// 要求expanded(7): 広い側(8,9)が狭い側(6..)より先
+		// Requested expanded (7): wider classes (8,9) precede narrower classes (6..)
 		assertTrue(PDFFontSourceManager.widthPenalty(7, 9) < PDFFontSourceManager.widthPenalty(7, 6));
 		assertTrue(PDFFontSourceManager.widthPenalty(7, 8) < PDFFontSourceManager.widthPenalty(7, 9));
-		// 要求normal(5): 狭い側が先(仕様: 100%以下は下位から)
+		// Requested normal (5): narrower classes first (spec: lower classes first at 100% or below)
 		assertTrue(PDFFontSourceManager.widthPenalty(5, 4) < PDFFontSourceManager.widthPenalty(5, 6));
-		// 5ビットに収まる
+		// Fits in 5 bits
 		assertTrue(PDFFontSourceManager.widthPenalty(1, 9) <= 31);
 		assertTrue(PDFFontSourceManager.widthPenalty(9, 1) <= 31);
 	}
@@ -101,7 +101,7 @@ public class FontStretchSelectionTest {
 		boldNormal.setWeight(FontStyle.Weight.W_700);
 		manager.add(boldNormal);
 		manager.add(face(3));
-		// 要求: condensed かつ 700。weightの一致が幅級より優先される
+		// Requested: condensed and 700. Weight matching takes precedence over width class
 		final FontStyle bold = new FontStyleImpl(FontFamilyList.create(FAMILY), 12, FontStyle.Style.NORMAL,
 				FontStyle.Weight.W_700, FontStyle.Direction.LTR, EMBEDDED, FontFeatureSet.EMPTY, true, true,
 				FontStyle.TextOrientation.MIXED, 3, null);
@@ -110,7 +110,7 @@ public class FontStretchSelectionTest {
 
 	@Test
 	public void styleKeyDistinguishesWidthClass() {
-		// FontStyleImpl は record で、等価は幅級(と lang)を含む全成分で決まる(2026-10-04 まで別に FontUtils.equals を持っていた)
+		// FontStyleImpl: record equality uses all fields (width class, lang); separate FontUtils.equals until 2026-10-04
 		assertEquals(style(3), style(3));
 		assertTrue(!style(3).equals(style(5)));
 		assertTrue(style(3).hashCode() != style(5).hashCode());

@@ -242,8 +242,8 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 
 	@Test
 	public void verticalBoxDrawingHorizontalClosesBothGaps() throws Exception {
-		// IPAexはU+2500の縦字形(vert)を持ち、字面が1emいっぱいなので詰め量は0が正しい。
-		// 検証するのは「送り幅+詰め量=字面の高さ」(隙間が無い)であって符号ではない。
+		// IPAex has U+2500's vertical glyph (vert); its glyph bounds (ink) fill 1 em, so the correct adjustment is 0.
+		// Check "advance + adjustment = glyph bounds (ink) height" (no gap), rather than the sign.
 		final var pair = pair();
 		final int cid = pair.vertical.toGID(0x2500);
 		final int[] cids = { cid, pair.vertical.toGID(0x2500), pair.vertical.toGID(0x2500) };
@@ -251,7 +251,7 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 		final var bounds = pair.vertical.getShape(cid).getBounds2D();
 		assertTrue(bounds.getHeight() > bounds.getWidth(), "U+2500 must use a vertical outline");
 		for (int i = 1; i < cids.length; ++i) {
-			// PDFのTJ配列では詰め量が負値(または0)になり、送り幅から字面間の空きだけを除く。
+			// In PDF TJ arrays, the adjustment is negative (or 0), removing only the gap between glyphs from the advance.
 			final int adjustment = -pair.vertical.getKerning(cids[i - 1], cids[i]);
 			assertTrue(adjustment <= 0, "consecutive U+2500 glyphs must not be spread apart");
 			assertEquals(bounds.getHeight(), pair.vertical.getAdvance(cids[i - 1]) + adjustment, 1.0);
@@ -261,9 +261,9 @@ public class OpenTypeEmbeddedCIDFontSubsetTest {
 
 	@Test
 	public void verticalBoxDrawingHorizontalFallsBackToVerticalRule() throws Exception {
-		// IPAexのサブセットからU+2500のvertだけを外した試験用フォント(fontToolsで生成、
-		// src/test/resources)。縦字形が無いのでU+2502の横組み字形(縦線)へ代用する。
-		// ToUnicodeと意味変種は元のU+2500を保つ。
+		// Test font with only the U+2500 vert removed from an IPAex subset (generated with fontTools,
+		// src/test/resources). With no vertical glyph, substitute the U+2502 horizontal-writing glyph (vertical line).
+		// ToUnicode and semantic variants retain the original U+2500.
 		final var pair = pair(new File("src/test/resources/ipaexm-novert2500.ttf"));
 		final int cid = pair.vertical.toGID(0x2500);
 		final var bounds = pair.vertical.getShape(cid).getBounds2D();

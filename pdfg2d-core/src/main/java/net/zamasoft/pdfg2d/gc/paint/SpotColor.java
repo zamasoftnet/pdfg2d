@@ -1,7 +1,7 @@
 package net.zamasoft.pdfg2d.gc.paint;
 
 /**
- * A spot color (特色): a named printing colorant with an alternate color for
+ * A spot color: a named printing colorant with an alternate color for
  * outputs that cannot produce the actual ink.
  * <p>
  * PDF output realizes this as a {@code /Separation} color space with the

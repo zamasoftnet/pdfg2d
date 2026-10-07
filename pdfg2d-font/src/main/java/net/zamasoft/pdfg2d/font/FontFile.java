@@ -39,9 +39,9 @@ public class FontFile implements AutoCloseable {
 	private final File file;
 
 	/**
-	 * 解凍済みの sfnt ファイルを返します(WOFF/WOFF2 は一時ファイル、
-	 * 生の TTF/TTC はそのまま。2026-08-20、可変フォントの静的
-	 * インスタンス化が sfnt バイト列を必要とするため公開)。
+	 * Returns the decompressed sfnt file (a temporary file for WOFF/WOFF2;
+	 * raw TTF/TTC files are returned unchanged). Exposed on 2026-08-20 because
+	 * static instantiation of variable fonts requires sfnt bytes.
 	 */
 	public File getSfntFile() {
 		return this.file;
@@ -60,8 +60,8 @@ public class FontFile implements AutoCloseable {
 			String tag = new String(tagBytes, StandardCharsets.ISO_8859_1);
 
 			if ("wOF2".equals(tag)) {
-				// WOFF2(2026-08-05対応)。Brotli伸長と字形表の組み替え戻しは
-				// Woff2Decoderが行う。ここから先は普通のsfntとして扱える
+				// WOFF2 (supported since 2026-08-05). Woff2Decoder handles Brotli decompression
+				// and reversing glyph table transforms. From here onward, treat it as a regular sfnt.
 				this.file = Woff2Decoder.extract(raf, file);
 				this.woff = true;
 				this.offsets = new long[] { 0 };
@@ -167,11 +167,11 @@ public class FontFile implements AutoCloseable {
 				out.writeInt(origLen);
 
 				outOffsets[i] = outOffset;
-				// **表は4バイト境界へ揃える**(2026-08-05)。sfnt は各表を
-				// 4バイト境界から始める決まりで、WOFF から組み直すときも
-				// 揃え直しと詰め物が要る(WOFF仕様 §「Decoding」)。
-				// 揃えずに詰めて書くと CFF 版(OTTO)の WOFF が
-				// `OffSize must be 1-4: 0` で読めなくなる。
+				// **Align tables on 4-byte boundaries** (2026-08-05). sfnt requires each table
+				// to start on a 4-byte boundary, so reconstruction from WOFF also requires
+				// realignment and padding (WOFF specification §"Decoding").
+				// Writing tables back-to-back without alignment makes CFF (OTTO) WOFF files
+				// unreadable with `OffSize must be 1-4: 0`.
 				outOffset += (origLen + 3) & ~3;
 			}
 
@@ -237,7 +237,7 @@ public class FontFile implements AutoCloseable {
 					remainder--;
 				}
 
-				// 4バイト境界までの詰め物
+				// Padding to the next 4-byte boundary.
 				for (int pad = (4 - (origLen & 3)) & 3; pad > 0; --pad) {
 					out.writeByte(0);
 				}
@@ -302,12 +302,13 @@ public class FontFile implements AutoCloseable {
 	}
 
 	/**
-	 * 開いた書体を閉じ、WOFF/WOFF2 を解凍した一時ファイルを消します(2026-10-05)。生の TTF/TTC は消さない。
+	 * Closes opened fonts and deletes temporary files decompressed from WOFF/WOFF2 (2026-10-05).
+	 * Does not delete raw TTF/TTC files.
 	 *
 	 * <p>
-	 * {@link #getSfntFile()} だけを使う呼び出し(可変フォントの判定・写しの生成)は、これで閉じないと解凍結果の
-	 * 持ち主がいない——書体を開いていなければ {@link OpenTypeFont} の後始末も走らず、常駐するサーバーでは
-	 * プロセスが終わるまで残った。閉じた後は使わないこと。
+	 * Calls that use only {@link #getSfntFile()} (variable font detection and copy creation) leave the decompressed
+	 * result without an owner unless they close it here. Without opening a font, {@link OpenTypeFont} cleanup
+	 * does not run either, so the files stayed until process exit in long-running servers. Do not use after closing.
 	 * </p>
 	 */
 	@Override

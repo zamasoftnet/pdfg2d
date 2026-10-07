@@ -415,9 +415,9 @@ final class StructureTreeBuilder {
 			}
 		}
 		if (this.pdf2Namespace && GROUPING_ROLES.contains(target.role)) {
-			// PDF/UA-2: グループ化要素は内容を直接持てない(ISO 32005 §6.2)。
-			// 連続する内容は同じ暗黙Pへ継ぎ足し、間に子要素が入ったら
-			// 新しいPを開く(順序保持)
+			// PDF/UA-2: grouping elements cannot contain content directly (ISO 32005 §6.2).
+			// Append consecutive content to the same implicit P; when a child element intervenes,
+			// open a new P (preserve order).
 			if (target.contentWrapper == null || target.kids.isEmpty()
 					|| target.kids.get(target.kids.size() - 1).value != target.contentWrapper) {
 				final var wrapper = new Elem(target, "P", null);

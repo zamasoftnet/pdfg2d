@@ -5,7 +5,7 @@ package net.zamasoft.pdfg2d.gc.imposition;
  * the paper edge and the trimmed (finished) page area, which hosts crop
  * marks and the printer's note line.
  * <p>
- * The {@code cuttingMargin} (ドブ, bleed allowance) is the innermost part of
+ * The {@code cuttingMargin} (bleed allowance) is the innermost part of
  * each trim margin: printed content extends into it so that cutting
  * inaccuracies do not leave white slivers. Crop marks are drawn outside the
  * cutting margin so they never touch bleeding content.

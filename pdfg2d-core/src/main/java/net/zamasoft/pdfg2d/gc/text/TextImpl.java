@@ -58,14 +58,14 @@ public class TextImpl extends AbstractText implements Serializable {
 	public double letterSpacing = 0;
 
 	/**
-	 * The extra spacing added for each glyph. 生配列の公開をやめ、読み取りは
-	 * {@link #xAdvances()}(読み取り専用ビュー)、書き込みは
-	 * {@link #addXAdvance(int, double)}/{@link #resetXAdvances()}に限定
-	 * (2026-08-01、90点計画増分12)。
+	 * The extra spacing added for each glyph. No longer exposes the raw array:
+	 * reads use {@link #xAdvances()} (a read-only view), and writes are restricted to
+	 * {@link #addXAdvance(int, double)}/{@link #resetXAdvances()}
+	 * (2026-08-01, 90-point plan increment 12).
 	 */
 	private double[] xadvances = null;
 
-	/** {@link #xAdvances()}が返す読み取り専用ビュー(遅延生成・再利用)。 */
+	/** Read-only view returned by {@link #xAdvances()} (created lazily and reused). */
 	private transient GlyphAdvances xadvancesView = null;
 
 	/**
@@ -118,8 +118,8 @@ public class TextImpl extends AbstractText implements Serializable {
 
 				@Override
 				public double get(final int glyphIndex) {
-					// 調整配列はグリフ追加に遅れて伸びることがある
-					// (grow前の末尾グリフは調整ゼロ)
+					// Growth of the adjustment array may lag behind glyph additions
+					// (trailing glyphs have zero adjustment until the array grows).
 					final double[] values = TextImpl.this.xadvances;
 					return (values != null && glyphIndex < values.length) ? values[glyphIndex] : 0;
 				}
@@ -129,8 +129,8 @@ public class TextImpl extends AbstractText implements Serializable {
 	}
 
 	/**
-	 * 全グリフの送り量調整をゼロへ戻します(旧{@code getXAdvances(true)}の
-	 * 置換。ルビの均等配置のように調整を作り直す書き込み側が使う)。
+	 * Resets advance adjustments for all glyphs to zero (replaces the old {@code getXAdvances(true)}).
+	 * Used by writers that rebuild adjustments, such as evenly distributing ruby.
 	 */
 	public void resetXAdvances() {
 		this.xadvances = new double[this.glyphCount];

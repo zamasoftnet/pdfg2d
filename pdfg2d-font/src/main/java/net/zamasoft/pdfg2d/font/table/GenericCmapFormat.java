@@ -28,22 +28,22 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * 文字コード→GID写像の圧縮範囲表現です(2026-08-01に全文字HashMap展開から
- * 置換)。
+ * Compressed range representation of the character-code-to-GID mapping (replaced expansion
+ * of all characters into a HashMap on 2026-08-01).
  *
  * <p>
- * 従来はどのformatも{@code HashMap<Integer, Integer>}へ1文字=1エントリで
- * 展開していたため、CJKフォント1つで数MB、290フォントの起動で約350MBを
- * 保持していた(実測)。cmap format 12/13と同型の範囲(先頭コード・末尾
- * コード・GID基点・GID固定フラグ)の並びに圧縮すると数KB/フォントになり、
- * 参照({@link #mapCharCode})もboxingなしの二分探索になる。
+ * Previously, every format expanded into a {@code HashMap<Integer, Integer>} with one entry
+ * per character, retaining several MB for one CJK font and about 350 MB at startup
+ * with 290 fonts (measured). Compressing into ranges like cmap format 12/13
+ * (start code, end code, base GID, constant-GID flag) reduces this to a few KB per font,
+ * and lookup ({@link #mapCharCode}) uses binary search without boxing.
  * </p>
  *
- * @param starts   各範囲の先頭文字コード(昇順)
- * @param ends     各範囲の末尾文字コード(両端含む)
- * @param gids     各範囲のGID基点
- * @param constant 真なら範囲内の全コードが同じGID(format 13の多対一)、
- *                 偽ならコードとともにGIDも+1ずつ進む
+ * @param starts   first character code of each range (ascending)
+ * @param ends     last character code of each range (inclusive)
+ * @param gids     base GID of each range
+ * @param constant if true, all codes in the range map to the same GID (format 13 many-to-one);
+ *                 if false, GIDs increase by 1 along with the codes
  * @since 1.0
  * @author <a href="mailto:david@steadystate.co.uk">David Schweinsberg</a>
  */
@@ -89,8 +89,8 @@ public record GenericCmapFormat(int[] starts, int[] ends, int[] gids, boolean[] 
 	}
 
 	/**
-	 * パース中に組み立てた写像を圧縮範囲へ変換します(パース用のMapと
-	 * 逆引き配列はここで捨てる——保持するのは範囲配列だけ)。
+	 * Converts the mapping built during parsing to compressed ranges (discards the parsing Map
+	 * and reverse-lookup array here; retains only range arrays).
 	 */
 	private static GenericCmapFormat compress(final Map<Integer, Integer> characterCodeToGlyphId) {
 		final long[] pairs = new long[characterCodeToGlyphId.size()];
@@ -109,7 +109,7 @@ public record GenericCmapFormat(int[] starts, int[] ends, int[] gids, boolean[] 
 				final int k = rangeCount - 1;
 				final int length = ends[k] - starts[k] + 1;
 				if (length == 1 && gid == gids[k]) {
-					// 2点目で固定GIDモードが確定
+					// The second point determines constant-GID mode.
 					constant[k] = true;
 					ends[k] = code;
 					continue;
@@ -523,7 +523,7 @@ public record GenericCmapFormat(int[] starts, int[] ends, int[] gids, boolean[] 
 	 */
 	@Override
 	public int mapCharCode(int characterCode) {
-		// startsがcharacterCode以下の最後の範囲を二分探索
+		// Binary-search for the last range whose start is at most characterCode.
 		int low = 0, high = this.starts.length - 1;
 		while (low <= high) {
 			final int mid = (low + high) >>> 1;
@@ -542,8 +542,8 @@ public record GenericCmapFormat(int[] starts, int[] ends, int[] gids, boolean[] 
 
 	/**
 	 * Returns the character code for the given GID, or null if there is none.
-	 * 複数のコードが同じGIDへ写る場合は最小のコードを返します(旧実装は
-	 * formatにより挙動が揺れていた——挿入順の最初または最後)。
+	 * If multiple codes map to the same GID, returns the smallest code (the old implementation
+	 * varied by format, returning the first or last in insertion order).
 	 *
 	 * @param gid glyph id
 	 * @return character code

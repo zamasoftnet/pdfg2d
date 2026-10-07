@@ -35,8 +35,8 @@ public class OpenTypeEmbeddedCIDFontSource extends OpenTypeFontSource implements
 	}
 
 	/**
-	 * 永続フォント索引からの再構築です(2026-08-01、FontIndex参照)。
-	 * ファイルI/Oを行わない。
+	 * Reconstructs from the persistent font index (2026-08-01, see FontIndex).
+	 * Performs no file I/O.
 	 */
 	public OpenTypeEmbeddedCIDFontSource(final File file, final int index, final Direction direction, final short upm,
 			final net.zamasoft.pdfg2d.font.BBox bbox, final String fontName, final String[] aliases,

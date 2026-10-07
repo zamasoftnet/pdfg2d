@@ -58,19 +58,19 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 	protected Map<URI, File> uriToFile = new HashMap<URI, File>();
 
 	/**
-	 * {@code @font-face} のために作った可変フォントの写しです(2026-10-05)。{@link #uriToFile} の取得結果と
-	 * 一緒に {@link #close()} が消す。
+	 * Variable font copies created for {@code @font-face} (2026-10-05).
+	 * {@link #close()} deletes them along with resources fetched into {@link #uriToFile}.
 	 */
 	private final List<File> instanceFiles = new ArrayList<File>();
 
 	protected Collection<FontSource> allFonts = new ArrayList<FontSource>();
 
 	/**
-	 * フォント選択はfamily/weight/style/direction/text-orientation/policy/width/langを読む(size・
-	 * OpenType featureは整形の話で選択に関与しない)ため、キャッシュキーは
-	 * その成分に限定する——FontStyle全体をキーにするとfeature集合や
-	 * サイズ違いだけの大量のstyleで無駄に分裂する(2026-07-31、
-	 * consult-codex-2026-07-31-font-features.txt §3.8)。
+	 * Font selection reads family/weight/style/direction/text-orientation/policy/width/lang
+	 * (size and OpenType features concern shaping, not selection), so cache keys include only those components.
+	 * Using all of FontStyle as the key needlessly fragments the cache among many styles
+	 * that differ only in feature sets or sizes (2026-07-31,
+	 * consult-codex-2026-07-31-font-features.txt §3.8).
 	 */
 	protected record SelectionKey(net.zamasoft.pdfg2d.gc.font.FontFamilyList family, FontStyle.Weight weight,
 			FontStyle.Style style, FontStyle.Direction direction, FontStyle.TextOrientation textOrientation,
@@ -95,7 +95,7 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 	}
 
 	/**
-	 * この管理が作った書体ファイル(取得結果・可変フォントの写し)を、開いた書体ごと消します。
+	 * Deletes font files created by this manager (fetched resources and variable font copies), closing opened fonts as well.
 	 */
 	public void close() {
 		final List<File> files = new ArrayList<File>(this.uriToFile.values());
@@ -133,8 +133,8 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				file = this.uriToFile.get(face.src.getURI());
 				if (file == null) {
 					file = File.createTempFile("copper-font-face", ".font");
-					// 登録するまでは自分で持ち、取得に失敗したら消す(2026-10-04 までは失敗すると close() の削除の
-					// 対象に入らず、deleteOnExit 頼みでプロセスが終わるまで残った)
+					// Own the file until registration and delete it if fetching fails (until 2026-10-04, failures excluded it from close()
+					// cleanup, leaving it until process exit through deleteOnExit).
 					try (InputStream in = face.src.getInputStream(); OutputStream out = new FileOutputStream(file)) {
 						in.transferTo(out);
 					} catch (final IOException | RuntimeException e) {
@@ -144,22 +144,22 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 					this.uriToFile.put(face.src.getURI(), file);
 				}
 			}
-			// **可変フォント(fvar+glyf)は代表ウェイトを静的インスタンス化して
-			// 並べる**(2026-08-20)。Google Fonts配信の既定が可変になり、
-			// 従来は既定インスタンス(Regularとは限らない)1本しか使えず
-			// font-weightの中間値が全て潰れていた。wght軸をCSSのウェイト
-			// 段階(100〜900)で固定した9本を生成し、それぞれのOS/2
-			// usWeightClassで通常のウェイト選択に乗せる。他の軸は既定値
-			// 各エントリ = (フォントファイル, そのファイルに与えるウェイト)
+			// **Create and register static instances at representative weights for variable fonts (fvar+glyf)**
+			// (2026-08-20). Google Fonts began distributing variable fonts by default;
+			// previously only one default instance (not necessarily Regular) was available,
+			// collapsing all intermediate font-weight values. Generate nine instances with wght pinned
+			// at CSS weight steps (100-900), then use each instance's OS/2
+			// usWeightClass for normal weight selection. Other axes use their defaults.
+			// Each entry = (font file, weight assigned to that file).
 			final java.util.List<Object[]> fontEntries = new ArrayList<>();
 			try (final net.zamasoft.pdfg2d.font.FontFile ff = new net.zamasoft.pdfg2d.font.FontFile(file)) {
-				// 解凍結果(WOFF/WOFF2)は写しを作り終えたら要らない。閉じて消す
+				// Decompressed WOFF/WOFF2 files are no longer needed after creating copies. Close and delete them.
 				final File sfnt = ff.getSfntFile();
 				if (net.zamasoft.pdfg2d.font.VariableFontInstancer.isVariable(sfnt)) {
 					final java.util.List<String> axisTags = net.zamasoft.pdfg2d.font.VariableFontInstancer
 							.axisTags(sfnt);
-					// font-variation-settingsディスクリプタの座標を基礎に置く
-					// (2026-08-20)。wghtが明示されていればウェイト掃引はしない
+					// Use the font-variation-settings descriptor's coordinates as the base
+					// (2026-08-20). If wght is explicit, do not sweep weights.
 					final java.util.Map<String, Double> baseAxes = face.variationSettings == null
 							? java.util.Map.of()
 							: face.variationSettings;
@@ -172,14 +172,14 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 											"W_" + Math.max(1, Math.min(9, Math.round(wght / 100.0))) * 100);
 							fontEntries.add(new Object[] { this.instantiate(sfnt, baseAxes), weight });
 						}
-						// baseAxes空かつwght軸なし: インスタンス化不要(既定へ)
+						// Empty baseAxes and no wght axis: no instantiation needed (use default).
 					} else if (face.fontWeight != net.zamasoft.pdfg2d.gc.font.FontStyle.Weight.W_400) {
-						// ディスクリプタでウェイト明示——その1本だけを固定
+						// Explicit weight in the descriptor: pin only that instance.
 						final java.util.Map<String, Double> axes = new java.util.LinkedHashMap<>(baseAxes);
 						axes.put("wght", (double) face.fontWeight.w);
 						fontEntries.add(new Object[] { this.instantiate(sfnt, axes), face.fontWeight });
 					} else {
-						// 未指定(既定400)——CSSのウェイト段階9本を展開
+						// Unspecified (default 400): expand to nine CSS weight steps.
 						for (int w = 100; w <= 900; w += 100) {
 							final java.util.Map<String, Double> axes = new java.util.LinkedHashMap<>(baseAxes);
 							axes.put("wght", (double) w);
@@ -342,8 +342,8 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 	}
 
 	/**
-	 * 言語別の汎用ファミリ連鎖を、完全一致、言語+スクリプト、言語のみの順で選ぶ。
-	 * 同じ優先度では文書順で先の設定を保持する。
+	 * Selects language-specific generic family chains in order: exact match, language + script, language only.
+	 * For equal priority, retains the earlier configuration in document order.
 	 */
 	protected FontFamilyList resolveGenericFamily(final String name, final Locale requestedLang) {
 		if (requestedLang == null || requestedLang.getLanguage().isEmpty()) {
@@ -461,8 +461,8 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 					order = 1;
 				}
 
-				// text-orientationに応じて縦/横font sourceを選ぶ。mixedは
-				// 両方を候補に残し、各sourceのcanDisplayで字種別に分かれる。
+				// Select vertical/horizontal font sources according to text-orientation. mixed keeps
+				// both as candidates, with each source's canDisplay distinguishing character types.
 				Direction direction = fontStyle.getDirection();
 				Direction fsDirection = font.getDirection();
 				if (direction != Direction.TB && fsDirection == Direction.TB) {
@@ -507,10 +507,10 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				int delta = Math.abs(font.getWeight().w - weight.w);
 				order |= (0xF & ((1000 - delta) / 100));
 
-				// 幅級(font-stretch、2026-08-29)。italic/weightが同点の書体の
-				// 中から幅級の近いものを選ぶ。順序はcss-fonts-4 §5.2 step 1:
-				// 要求が通常幅以下なら狭い側を(近い順に)全部先に、次に広い側。
-				// 要求が通常幅より広ければその逆。5ビット(罰点0..16)
+				// Width class (font-stretch, 2026-08-29). Among fonts tied on italic/weight,
+				// select the closest width class. Order follows css-fonts-4 §5.2 step 1:
+				// if the requested width is normal or narrower, try all narrower widths first (nearest first), then wider widths.
+				// Reverse that order if the requested width is wider than normal. Five bits (penalty 0..16).
 				order <<= 5;
 				order |= 31 - widthPenalty(fontStyle.getWidthClass(), font.getWidthClass());
 
@@ -536,10 +536,10 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 	}
 
 	/**
-	 * 要求幅級{@code want}に対する書体幅級{@code have}の罰点(0=一致)。
-	 * 好ましい側(want≤5なら狭い側、want>5なら広い側)は距離そのもの
-	 * (0..8)、反対側は8+距離(9..16)で、好ましい側のどの書体も反対側
-	 * より先に選ばれる(css-fonts-4 §5.2 step 1、2026-08-29)。
+	 * Penalty for font width class {@code have} relative to requested width class {@code want} (0=match).
+	 * The preferred side (narrower for want≤5, wider for want>5) uses the distance itself (0..8);
+	 * the other side uses 8+distance (9..16), so every font on the preferred side is selected
+	 * before any on the opposite side (css-fonts-4 §5.2 step 1, 2026-08-29).
 	 */
 	static int widthPenalty(final int want, final int have) {
 		final boolean preferred = want <= net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS ? have <= want

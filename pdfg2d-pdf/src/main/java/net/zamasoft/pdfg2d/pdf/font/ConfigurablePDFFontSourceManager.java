@@ -62,9 +62,9 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 	}
 
 	/**
-	 * font-dirスキャンの永続索引ファイル(通常はfonts.xml.db)。nullなら
-	 * 索引なし。2026-08-01に蘇生——引数は昔からあったが長らく無視されて
-	 * いた。
+	 * Persistent index file for font-dir scanning (usually fonts.xml.db).
+	 * Null means no index. Revived on 2026-08-01: the argument had existed for a long time
+	 * but had long been ignored.
 	 */
 	private final File dbFile;
 
@@ -80,37 +80,37 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 	}
 
 	/**
-	 * 設定の再検査をこの間隔より頻繁には行いません(ミリ秒)。
-	 * {@code -Dnet.zamasoft.pdfg2d.font.pollIntervalMillis} で変更でき、
-	 * {@code 0} を指定すると毎回検査する従来の挙動に戻ります。
+	 * Minimum interval between configuration checks (milliseconds).
+	 * Can be changed with {@code -Dnet.zamasoft.pdfg2d.font.pollIntervalMillis};
+	 * {@code 0} restores the previous behavior of checking every time.
 	 */
 	private static final long POLL_INTERVAL_MS = Long
 			.getLong("net.zamasoft.pdfg2d.font.pollIntervalMillis", 1000L);
 
 	/**
-	 * 最後に設定を検査した時刻({@link System#nanoTime()}のミリ秒換算)。
-	 * {@code nanoTime}の原点は任意(負値も許される)ため、0 で初期化すると
-	 * 負の環境では {@code now - 0 < interval} が長期間真のままになり、
-	 * ホットリロードが止まる。実時刻基準で初期化する(2026-07-30)。
+	 * Time of the last configuration check ({@link System#nanoTime()} converted to milliseconds).
+	 * The origin of {@code nanoTime} is arbitrary (negative values are allowed), so initializing to 0
+	 * can leave {@code now - 0 < interval} true for a long time in negative-time environments,
+	 * stopping hot reload. Initialize relative to the actual current time (2026-07-30).
 	 */
 	private long lastPollAt = System.nanoTime() / 1_000_000L - POLL_INTERVAL_MS;
 
 	protected synchronized void poll() {
-		// **検査の間隔をあける**(2026-07-29)。
+		// **Space out checks** (2026-07-29).
 		//
-		// {@link #lookup}は同期メソッドで、そこから毎回この poll が呼ばれ、
-		// {@code config.exists()} が**ファイルシステムのstat**を行っていた。
-		// lookup は文字の並びごとに呼ばれる
+		// {@link #lookup} is synchronized and calls this poll each time;
+		// {@code config.exists()} performed a **filesystem stat**.
+		// lookup is called for each character sequence
 		// ({@code StyledTextUnitizer.characters} → {@code FontManagerImpl
-		// .getFontListMetrics})ため、<b>全変換の全文字がグローバルロックの中で
-		// syscallを1回する</b>ことになり、並行変換が事実上直列化していた。
+		// .getFontListMetrics}), so <b>every character in every conversion made a syscall inside a global lock</b>,
+		// effectively serializing concurrent conversions.
 		//
-		// 実測(2026-07-29、掃過24スレッド): CPU時間/経過時間の比が
-		// <b>1.3</b>しかなく、スレッドダンプでは20本がこのモニタ待ちだった。
-		// 24スレッドでも12スレッドでも同じ速度、という症状の原因である。
+		// Measurements (2026-07-29, 24-thread sweep): the CPU-time/elapsed-time ratio was
+		// only <b>1.3</b>, and thread dumps showed 20 threads waiting on this monitor.
+		// This explained why 24 threads and 12 threads ran at the same speed.
 		//
-		// 設定ファイルの更新検出(ホットリロード)は維持するが、1秒に1回で
-		// 十分である——設定を書き換えた運用者が1秒待てないことはない。
+		// Retain configuration change detection (hot reload), but checking once per second
+		// is sufficient: operators can wait one second after editing the configuration.
 		if (this.configValidity != null) {
 			final long now = System.nanoTime() / 1_000_000L;
 			if (now - this.lastPollAt < POLL_INTERVAL_MS) {
@@ -158,9 +158,9 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 			this.configURI = this.config.getURI();
 			this.configValidity = this.config.getValidity();
 
-			// クラスパス上のモジュール(絵文字フォント等)からの追加フォント。
-			// 旧Class.forName+フィールド反射をServiceLoaderの型付きSPIへ
-			// 置換(2026-08-01)。プロバイダ不在は正常(非搭載構成)
+			// Additional fonts from modules on the classpath (emoji fonts, etc.).
+			// Replaced the old Class.forName + field reflection with a typed ServiceLoader SPI
+			// (2026-08-01). Having no provider is normal (configuration without the module).
 			for (final net.zamasoft.pdfg2d.font.FontSourceProvider provider : java.util.ServiceLoader
 					.load(net.zamasoft.pdfg2d.font.FontSourceProvider.class)) {
 				try {

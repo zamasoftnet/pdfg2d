@@ -191,8 +191,8 @@ public class Encryption {
 				mainFlow.writeName(filterName);
 				mainFlow.lineBreak();
 
-				// 鍵の長さを最上位にも書く。ISO 32000 では V 2・3 だけの項目だが、PDFBox などは最上位の /Length
-				// (無ければ 40)で鍵を作るので、書かないと空のパスワードでも開けなかった(2026-10-05)
+				// Write key length at the top level too. ISO 32000 defines it only for V 2/3, but PDFBox and others derive keys from
+				// top-level /Length (default 40); omitting it prevented opening even with an empty password (2026-10-05).
 				if (length != 40) {
 					mainFlow.writeName("Length");
 					mainFlow.writeInt(length);

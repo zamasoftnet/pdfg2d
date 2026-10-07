@@ -98,9 +98,9 @@ public non-sealed interface Text extends Element {
 	/**
 	 * Returns the per-glyph extra advance adjustments as a read-only view,
 	 * or {@code null} if no adjustments have been applied.
-	 * 生配列公開({@code getXAdvances(boolean)})の置換(2026-08-01)——
-	 * 書き込みは{@link TextImpl}の意味のある操作
-	 * ({@code addXAdvance}/{@code resetXAdvances})に限定する。
+	 * Replaces raw array exposure ({@code getXAdvances(boolean)}) (2026-08-01).
+	 * Restricts writes to meaningful operations on {@link TextImpl}
+	 * ({@code addXAdvance}/{@code resetXAdvances}).
 	 *
 	 * @return the per-glyph x-advance view, or {@code null}
 	 */

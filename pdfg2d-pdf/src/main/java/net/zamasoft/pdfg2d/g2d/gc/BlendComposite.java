@@ -12,16 +12,16 @@ import net.zamasoft.pdfg2d.gc.paint.BlendMode;
 import net.zamasoft.pdfg2d.util.ColorUtils;
 
 /**
- * Java2D 用のブレンド合成(PDF 1.7 §11.3.5 / CSS Compositing Level 1、2026-08-29)。
+ * Blend compositing for Java2D (PDF 1.7 §11.3.5 / CSS Compositing Level 1, 2026-08-29).
  *
  * <p>
- * {@link AlphaComposite} は SrcOver しか持たないので、
- * {@link BlendMode#NORMAL} 以外はこのクラスが画素単位で
- * {@code Cr = (1 - αs)·Cb + αs·((1 - αb)·Cs + αb·B(Cb, Cs))} を計算する。
- * ソース・デスティネーションの色モデルは問わず({@link ColorModel#getRGB(Object)}
- * 経由で非乗算 sRGB に揃える)、定数アルファ({@code alpha})はソースの
- * アルファに掛かる。NORMAL のときは {@link AlphaComposite} を返すので
- * 既存の描画経路は一切変わらない。
+ * Since {@link AlphaComposite} provides only SrcOver, this class computes
+ * {@code Cr = (1 - αs)·Cb + αs·((1 - αb)·Cs + αb·B(Cb, Cs))} per pixel
+ * for modes other than {@link BlendMode#NORMAL}.
+ * Accepts any source and destination color models (converts to non-premultiplied sRGB
+ * through {@link ColorModel#getRGB(Object)}); constant alpha ({@code alpha}) multiplies
+ * the source alpha. Returns {@link AlphaComposite} for NORMAL,
+ * so the existing drawing path stays unchanged.
  * </p>
  */
 public final class BlendComposite implements Composite {
@@ -35,11 +35,11 @@ public final class BlendComposite implements Composite {
 	}
 
 	/**
-	 * ブレンドモードと定数アルファに対応する {@link Composite} を返す。
+	 * Returns a {@link Composite} for the blend mode and constant alpha.
 	 *
-	 * @param mode  ブレンドモード。null は NORMAL
-	 * @param alpha 定数アルファ 0..1
-	 * @return NORMAL なら {@link AlphaComposite}(SrcOver)、それ以外はブレンド合成
+	 * @param mode  blend mode; null means NORMAL
+	 * @param alpha constant alpha, 0..1
+	 * @return {@link AlphaComposite} (SrcOver) for NORMAL, otherwise blend compositing
 	 */
 	public static Composite getInstance(final BlendMode mode, final float alpha) {
 		final float a = Math.max(0f, Math.min(1f, alpha));
@@ -110,11 +110,11 @@ public final class BlendComposite implements Composite {
 	}
 
 	/**
-	 * 非乗算 ARGB 1画素のブレンド。テスト用に公開。
+	 * Blends one non-premultiplied ARGB pixel. Exposed for testing.
 	 *
-	 * @param s ソース(非乗算 ARGB)
-	 * @param d デスティネーション(非乗算 ARGB)
-	 * @return 合成結果(非乗算 ARGB)
+	 * @param s source (non-premultiplied ARGB)
+	 * @param d destination (non-premultiplied ARGB)
+	 * @return composited result (non-premultiplied ARGB)
 	 */
 	public int blend(final int s, final int d) {
 		return this.blendPixel(s, d, new float[3], new float[3], new float[3]);
@@ -144,12 +144,12 @@ public final class BlendComposite implements Composite {
 	}
 
 	/**
-	 * ブレンド関数 B(Cb, Cs) を計算する(0..1 の sRGB、非乗算)。
+	 * Computes the blend function B(Cb, Cs) (0..1 sRGB, non-premultiplied).
 	 *
-	 * @param mode モード
-	 * @param cb   背景色 (r, g, b)
-	 * @param cs   前景色 (r, g, b)
-	 * @param out  結果 (r, g, b)
+	 * @param mode mode
+	 * @param cb   background color (r, g, b)
+	 * @param cs   foreground color (r, g, b)
+	 * @param out  result (r, g, b)
 	 */
 	public static void blendColor(final BlendMode mode, final float[] cb, final float[] cs, final float[] out) {
 		switch (mode) {

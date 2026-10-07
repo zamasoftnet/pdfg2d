@@ -60,8 +60,8 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 
 	/**
 	 * GSUB {@code liga} pairs: key {@code (firstGid << 32) | secondGid} to
-	 * ligature glyph. boxed Mapからプリミティブ索引へ(2026-08-01、95点計画
-	 * 増分3)——グリフ対毎に引かれる整形ホットパス。
+	 * ligature glyph. Replaced the boxed Map with a primitive index (2026-08-01, 95-point plan
+	 * increment 3): this shaping hot path looks up every glyph pair.
 	 */
 	private final net.zamasoft.pdfg2d.util.LongIntLookup ligaLigatures;
 
@@ -120,10 +120,10 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		final var gpos = (GposTable) ttfFont.getTable(Table.GPOS);
 		var kern = (gpos != null) ? gpos.collectKernPairPos() : List.<PairPos>of();
 		if (kern.isEmpty()) {
-			// GPOSのkern featureを持たない古いTrueTypeは、旧kernテーブル
-			// だけにペアを持つ(実例: Calibriは26,706ペアがkernのみ)。
-			// 読み捨てるとそれらのフォントだけカーニング無しになるため、
-			// 水平ペアをGPOSと同じ形で取り込む(2026-08-27)
+			// Older TrueType fonts without a GPOS kern feature store pairs only
+			// in the legacy kern table (for example, Calibri has 26,706 pairs only in kern).
+			// Discarding it leaves only those fonts without kerning, so import
+			// horizontal pairs in the same form as GPOS (2026-08-27).
 			final var kernTable = (net.zamasoft.pdfg2d.font.table.KernTable) ttfFont.getTable(Table.KERN);
 			if (kernTable != null) {
 				kern = kernTable.collectHorizontalPairPos();
@@ -181,19 +181,19 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	}
 
 	/**
-	 * 必須縦字形を適用し、横線の縦字形を持たないフォントでは対応する
-	 * 縦線の字形を代用します。
+	 * Applies required vertical glyphs and substitutes corresponding vertical line glyphs
+	 * in fonts that lack vertical glyphs for horizontal lines.
 	 *
-	 * <p>EM DASH(U+2014)はHORIZONTAL BAR(U+2015)の縦字形を、BOX DRAWINGS
-	 * LIGHT HORIZONTAL(U+2500)はLIGHT VERTICAL(U+2502)の横組み字形(縦線)を使います。
-	 * U+2502も無い場合は{@link #verticalShapeFlags(int, int)}で元の横線を
-	 * 回転します。ToUnicodeには代用前の文字を保持します。</p>
+	 * <p>EM DASH (U+2014) uses the vertical glyph of HORIZONTAL BAR (U+2015), and BOX DRAWINGS
+	 * LIGHT HORIZONTAL (U+2500) uses the horizontal writing glyph (a vertical line) of LIGHT VERTICAL (U+2502).
+	 * If U+2502 is also missing, {@link #verticalShapeFlags(int, int)} rotates the original
+	 * horizontal line. ToUnicode retains the character before substitution.</p>
 	 */
 	protected final int substituteVertical(final int codePoint, final int gid) {
 		if (OpenTypeFontSource.isSidewaysHalfWidth(codePoint)) {
-			// 縦組みの書体に半角の字が来るのは正立のときだけ(OpenTypeFontSource.canDisplayUpright)。
-			// vrt2 はこれらを90°回した字形に置き換えるので掛けない(2026-10-06、Shippori Mincho の正立の
-			// 数字が横倒しになった)
+			// Half-width characters reach vertical writing fonts only when upright (OpenTypeFontSource.canDisplayUpright).
+			// Do not apply vrt2: it replaces these with glyphs rotated 90 degrees (2026-10-06: upright digits
+			// in Shippori Mincho were turned sideways).
 			return gid;
 		}
 		final int vertical = this.substituteVertical(gid);
@@ -214,8 +214,8 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 			return vertical;
 		}
 		if (codePoint == 0x2500) {
-			// U+2502の横組み字形は縦線なので、縦組みではそのまま縦罫線になる。
-			// U+2502の縦字形(vert)はフォントが横棒へ回したものなので使わない。
+			// The horizontal writing glyph of U+2502 is a vertical line, so it works unchanged as a vertical rule.
+			// Do not use its vertical glyph (vert), which the font rotates into a horizontal bar.
 			return fallbackGid;
 		}
 		final int verticalFallbackGid = this.substituteVertical(fallbackGid);
@@ -247,13 +247,13 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	protected static final int VERTICAL_SHAPE_ROTATE = 2;
 
 	/**
-	 * 元の文字と選択済みグリフから、縦組み用の輪郭変換フラグを返します。
-	 * 埋め込みサブセットのCIDへこの値を保持することで、縦横共有の物理フォントを
-	 * Type0ラッパーの出力順に依存させません。
+	 * Returns outline transformation flags for vertical writing from the original character and selected glyph.
+	 * Storing this value on the embedded subset CID makes the physical font shared by vertical and horizontal
+	 * writing independent of the output order of Type0 wrappers.
 	 *
-	 * @param codePoint 元の文字
-	 * @param gid       縦字形代用後のグリフID
-	 * @return 輪郭変換フラグ
+	 * @param codePoint original character
+	 * @param gid       glyph ID after vertical glyph substitution
+	 * @return outline transformation flags
 	 */
 	protected final int verticalShapeFlags(final int codePoint, final int gid) {
 		if (!this.isVertical()) {
@@ -369,9 +369,9 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	public int toGID(final int c, final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
 		final var source = (OpenTypeFontSource) this.getFontSource();
 		int gid = source.getCmapFormat().mapCharCode(c);
-		// cmap → 有効featureのGSUB単一置換 → 必須の縦書き置換(vert)。
-		// エンジン必須のvertはCSSからは無効化させない(印刷エンジンとしての
-		// 意図的仕様差——consult-codex-2026-07-31-font-features.txt §3.7)
+		// cmap -> GSUB single substitutions for enabled features -> required vertical writing substitution (vert).
+		// CSS cannot disable vert, which the engine requires (an intentional specification
+		// deviation for a printing engine: consult-codex-2026-07-31-font-features.txt §3.7).
 		gid = this.substituteFeatures(gid, features);
 		return this.substituteVertical(c, gid);
 	}
@@ -413,9 +413,9 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		if (plan.isEmpty()) {
 			return 0;
 		}
-		// 書字軸の成分だけを合算する。横書きにvpal(x成分ほぼ0)、縦書きに
-		// palt(y成分ほぼ0)が指定されても自然に無効果になり、タグと方向の
-		// 対応表は不要(consult-codex-2026-07-31-font-features.txt §3.7)
+		// Sum only the components along the writing axis. vpal in horizontal writing (x component nearly 0)
+		// and palt in vertical writing (y component nearly 0) naturally have no effect, so no tag-to-direction
+		// mapping table is needed (consult-codex-2026-07-31-font-features.txt §3.7).
 		final boolean vertical = this.isVertical();
 		int adjustment = 0;
 		for (int i = 0; i < plan.size(); ++i) {
@@ -429,10 +429,10 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 
 	@Override
 	public short getPlacementAdjustment(final int gid, final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
-		// 字面の視覚シフト(ペンは進めない)。縦書きのyPlacementはGPOSのy-up
-		// 規約と描画座標の対応を実フォントで未検証のため未搬送(0)——
-		// 横書きxPlacementのみ(増分⑤、consult-codex-2026-07-31-font-features
-		// .txt §3.6。既知の限界として記録)
+		// Visual shift of glyph bounds (ink), without advancing the pen. Vertical writing yPlacement is not passed
+		// through (0): the mapping between GPOS y-up and drawing coordinates is unverified with real fonts.
+		// Only horizontal writing xPlacement is supported (increment ⑤, consult-codex-2026-07-31-font-features
+		// .txt §3.6; recorded as a known limitation).
 		if (gid == 0 || features.isEmpty() || this.isVertical()) {
 			return 0;
 		}
@@ -447,13 +447,13 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		return this.normalizeUnits(adjustment);
 	}
 
-	/** hmtx幅(getHAdvance)と同じ基準へ正規化する(2048 UPMのTTF等)。 */
+	/** Normalizes to the same scale as the hmtx width (getHAdvance), e.g. for 2048 UPM TTFs. */
 	private short normalizeUnits(final int value) {
 		return (short) (value * FontSource.DEFAULT_UNITS_PER_EM
 				/ ((OpenTypeFontSource) this.getFontSource()).getUnitsPerEm());
 	}
 
-	/** 有効featureのGPOS単一調整plan(キャッシュ、遅延構築)。 */
+	/** GPOS single-adjustment plan for enabled features (cached, built lazily). */
 	private java.util.List<SinglePos> positionPlan(final net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
 		var plans = this.positionPlans;
 		if (plans == null) {
@@ -496,8 +496,8 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		final var plan = new java.util.ArrayList<SingleSubst>();
 		for (int i = 0; i < features.size(); ++i) {
 			if (features.valueAt(i) > 0) {
-				// GPOS系タグ(palt等)やliga(type 4)はtype 1 lookupを持たないため
-				// ここでは自然に空になる(タグ種別の分岐は不要)
+				// GPOS tags (palt, etc.) and liga (type 4) have no type 1 lookup,
+				// so they naturally produce an empty result here (no branching by tag type is needed).
 				plan.addAll(gsub.collectSingleSubstitutions(features.tagAt(i)));
 			}
 		}
@@ -571,9 +571,9 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 	}
 
 	/**
-	 * 縦組みで連続するダッシュ・横罫線の字面間の空きを詰めます。
-	 * 固定値ではなく、実際の縦字形の輪郭端と縦advanceから求めるため、
-	 * フォントごとのサイドベアリング差に追従します。
+	 * Closes gaps between the glyph bounds (ink) of consecutive dashes and horizontal rules in vertical writing.
+	 * Uses the actual vertical glyph outline edges and vertical advance instead of a fixed value,
+	 * so it follows differences in side bearings between fonts.
 	 */
 	protected final short verticalDashKerning(final int firstGid, final int secondGid) {
 		if (!this.isVertical() || !isDash(this.toChar(firstGid)) || !isDash(this.toChar(secondGid))) {
@@ -781,8 +781,8 @@ public abstract class OpenTypeFont implements ShapedFont, ColorGlyphFont {
 		if (gsub == null) {
 			return null;
 		}
-		// 構築中のみboxed Mapを使う(重複キーのlast-wins意味論を保存)。
-		// 保持するのはプリミティブ索引だけ
+		// Use a boxed Map only during construction (preserving last-wins semantics for duplicate keys).
+		// Retain only the primitive index.
 		final var map = new HashMap<Long, Integer>();
 		for (final var subst : gsub.collectLigatures(tag)) {
 			final var firstGlyphs = subst.coverage().getGlyphIds();

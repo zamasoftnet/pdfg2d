@@ -61,7 +61,7 @@ public class TextReplacementTest {
 		return bytes.toByteArray();
 	}
 
-	/** ヘッダ 2 行目(% + 乱数 4 バイト)を 0 に潰した複製。 */
+	/** Returns a copy with the second header line (% + 4 random bytes) zeroed out. */
 	private static byte[] withoutBinaryComment(final byte[] pdf) {
 		final byte[] copy = pdf.clone();
 		int i = 0;
@@ -245,12 +245,12 @@ public class TextReplacementTest {
 				textOperators(page);
 			}
 		});
-		// PDFWriterImpl.writeHeader は二進判別コメントの 4 バイトを SecureRandom で埋めるので、そこだけ除いて比べる
+		// PDFWriterImpl.writeHeader sets 4 binary comment bytes with SecureRandom; omit only these from comparison
 		assertArrayEquals(withoutBinaryComment(plain), withoutBinaryComment(scoped));
 		final String content = streams(scoped);
 		final String plainContent = streams(plain);
 		assertEquals(0, count(content, "/ActualText"), content);
-		// streams() は XMP 等も連結するので、絶対数ではなく scope 無しと同数であることを見る
+		// streams() also concatenates XMP, etc., so compare the count with the no-scope case, not an absolute count
 		assertEquals(count(plainContent, "BDC"), count(content, "BDC"), content);
 		assertEquals(count(plainContent, "EMC"), count(content, "EMC"), content);
 	}

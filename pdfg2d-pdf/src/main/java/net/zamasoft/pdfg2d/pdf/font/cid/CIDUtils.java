@@ -581,7 +581,7 @@ public final class CIDUtils {
 		return "" + a + b + c + d + e + f + '+' + sanitizeEmbeddedPostScriptName(psName);
 	}
 
-	/** PDF NameとCFF Name INDEXの両方に使えるASCII名に制限する。 */
+	/** Restricts names to ASCII usable in both PDF Names and CFF Name INDEX. */
 	private static String sanitizeEmbeddedPostScriptName(final String psName) {
 		final var name = new StringBuilder(psName == null ? 0 : psName.length());
 		if (psName != null) {

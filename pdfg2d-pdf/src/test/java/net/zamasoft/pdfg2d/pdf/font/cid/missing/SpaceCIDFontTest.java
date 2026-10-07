@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-/** 空白フォントが幅付きの固定幅空白(U+2000..U+200A 等)を引き受けることの試験(2026-09-04)。 */
+/** Tests that the space font handles fixed-width spaces with defined widths (U+2000..U+200A, etc.) (2026-09-04). */
 class SpaceCIDFontTest {
 	@Test
 	void fixedWidthSpacesAreDisplayableWithTheirAdvance() {

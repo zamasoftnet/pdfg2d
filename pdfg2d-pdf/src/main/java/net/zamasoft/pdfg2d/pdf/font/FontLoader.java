@@ -78,23 +78,22 @@ public final class FontLoader {
 	}
 
 	/**
-	 * {@code styleFromFile}=trueのとき、italic/weightをfaceの既定値でなく
-	 * フォントファイル自身のOS/2(fsSelectionのitalicビット・usWeightClass)
-	 * から導出します(2026-08-27)。{@code <font-dir>}走査ではfaceに宣言が
-	 * 無いため従来は全フォントがnormal/400として登録され、同族に複数の
-	 * ウェイト・斜体があるとどれを選ぶかが登録順まかせになっていた
-	 * (Google Fonts一式を収録した内部Dockerで、Robotoの通常体が
-	 * Italicで描かれる等の実害)。@font-face経路はディスクリプタが
-	 * faceの値を定義する仕様のため従来どおりfalseで呼ぶ。
+	 * When {@code styleFromFile}=true, derives italic/weight from the font file's OS/2
+	 * (fsSelection italic bit and usWeightClass) instead of the face defaults (2026-08-27).
+	 * {@code <font-dir>} scans have no face declarations, so previously all fonts were registered
+	 * as normal/400, making selection among multiple weights and italics in the same family
+	 * depend on registration order (actual failures included normal Roboto rendered as Italic
+	 * in the internal Docker image containing all Google Fonts).
+	 * The @font-face path still calls with false because its descriptors define the face values.
 	 */
 	public static void readTTF(List<FontSource> list, FontFace face, Type type, File ttfFile, int index,
 			Map<String, CMap> nameToCMap, boolean styleFromFile) throws IOException {
 		String fileName = ttfFile.getName();
 		if (fileName.endsWith(".pfa") || fileName.endsWith(".PFA") || fileName.endsWith(".pfb")
 				|| fileName.endsWith(".PFB") || fileName.endsWith(".f3b") || fileName.endsWith(".F3B")) {
-			// Load Type1 font(旧実装はJDK 1.4互換の反射経由だった——
-			// Font.createFont(int, File)はJava 5からの標準API、直呼びへ。
-			// TYPE1_FONT定数の値は反射時代に渡していた1と同じ)
+			// Load Type1 font (the old implementation used reflection for JDK 1.4 compatibility).
+			// Font.createFont(int, File) has been a standard API since Java 5; call it directly.
+			// The TYPE1_FONT constant has the same value as the 1 passed by the reflection-based implementation.
 			try {
 				java.awt.Font awtFont = java.awt.Font.createFont(java.awt.Font.TYPE1_FONT, ttfFile);
 				list.add(FontLoader.readSystemFont(face, type, awtFont, nameToCMap));
@@ -378,12 +377,11 @@ public final class FontLoader {
 	}
 
 	/**
-	 * italic/weight/幅級を設定します。{@code styleFromFile}=trueならフォントの
-	 * OS/2から導出し(readTTFのjavadoc参照)、falseなら従来どおり
-	 * faceの宣言値を使います。幅級(usWidthClass、2026-08-29)は
-	 * OpenTypeFontSourceの構築時にOS/2から読まれているので、
-	 * styleFromFileではそのまま残し、@font-face経路ではディスクリプタ
-	 * (face.widthClass)で置き換える。
+	 * Sets italic/weight/width class. If {@code styleFromFile}=true, derives them from the font's
+	 * OS/2 (see readTTF's Javadoc); if false, uses the face declarations as before.
+	 * OpenTypeFontSource reads the width class (usWidthClass, 2026-08-29) from OS/2 during construction,
+	 * so styleFromFile leaves it unchanged, while the @font-face path replaces it
+	 * with the descriptor (face.widthClass).
 	 */
 	private static void applyStyle(final net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource source, final FontFace face,
 			final boolean styleFromFile) {
@@ -399,7 +397,7 @@ public final class FontLoader {
 				italic = (os2.fsSelection() & 0x01) != 0;
 				int wc = os2.usWeightClass();
 				if (wc >= 1 && wc <= 9) {
-					// 旧仕様の1〜9段階(usWeightClassのLEGACY値)
+					// The old specification's 1-9 scale (LEGACY usWeightClass values).
 					wc *= 100;
 				}
 				wc = (int) Math.max(100, Math.min(900, Math.round(wc / 100.0) * 100));
@@ -477,18 +475,19 @@ public final class FontLoader {
 	}
 
 	/**
-	 * 可変フォント(wght 軸を持つ TrueType アウトライン)のファイルから読んだソース列に、CSS の
-	 * 太さ段階(100〜900、軸の範囲内)で wght を固定した写しを足します(2026-10-04)。
+	 * Adds copies with wght pinned at CSS weight steps (100-900, within the axis range)
+	 * to sources read from a variable font file (TrueType outlines with a wght axis) (2026-10-04).
 	 *
 	 * <p>
-	 * {@code <font-dir>}の走査は既定の実体しか登録せず、Google Fonts 一式のように可変フォントしか
-	 * 配られていない書体では太字が選べなかった(@font-face 経路は 2026-08-20 から 9 段に展開済み)。
-	 * 写しは既定の実体の寸法・cmap を借り、静的フォントは使われたときに初めて作る
-	 * ({@link OpenTypeFontSource#setVariation})。既定の実体と同じ太さの段は足さない。
+	 * {@code <font-dir>} scans registered only the default instance, so bold was unavailable for fonts
+	 * distributed only as variable fonts, such as those in the Google Fonts collection
+	 * (the @font-face path has expanded to nine steps since 2026-08-20).
+	 * Copies borrow the default instance's metrics and cmap, and create static fonts only when used
+	 * ({@link OpenTypeFontSource#setVariation}). Does not add a step matching the default instance's weight.
 	 * </p>
 	 *
-	 * @param list     1 ファイル(TTC でない)から読んだソース列。写しを末尾に足す
-	 * @param fontFile そのファイル
+	 * @param list     sources read from one file (not a TTC); copies are appended
+	 * @param fontFile that file
 	 */
 	static void addWeightInstances(final List<FontSource> list, final File fontFile) {
 		final double[] range;

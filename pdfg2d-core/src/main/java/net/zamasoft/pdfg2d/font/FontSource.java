@@ -47,16 +47,16 @@ public interface FontSource extends Serializable {
 	 */
 	public Weight getWeight();
 
-	/** OS/2 {@code usWidthClass}の通常幅(medium)。 */
+	/** Normal width (medium) for OS/2 {@code usWidthClass}. */
 	public static final int NORMAL_WIDTH_CLASS = 5;
 
 	/**
-	 * 幅級(OpenType OS/2 {@code usWidthClass}、1=ultra-condensed〜
-	 * 9=ultra-expanded、5=normal)を返します(2026-08-29)。CSSの
-	 * {@code font-stretch}による書体選択に使う。OS/2表を持たない
-	 * ソース(Type1/CFF単体・AWT経由)は通常幅とみなす。
+	 * Returns the width class (OpenType OS/2 {@code usWidthClass}, 1=ultra-condensed through
+	 * 9=ultra-expanded, 5=normal) (2026-08-29). Used for font selection based on CSS
+	 * {@code font-stretch}. Sources without an OS/2 table
+	 * (standalone Type1/CFF or AWT-based sources) are treated as normal width.
 	 *
-	 * @return 幅級 1..9
+	 * @return width class 1..9
 	 */
 	public default int getWidthClass() {
 		return NORMAL_WIDTH_CLASS;
@@ -68,9 +68,10 @@ public interface FontSource extends Serializable {
 	public static final short DEFAULT_UNITS_PER_EM = 1000;
 
 	/**
-	 * 縦書きの原点(横書きの原点からの高さ、1000単位)。VORG 表が無い書体の
-	 * 既定で、CIDフォントの W2 と縦組みの字形の平行移動が同じ値を使う
-	 * (2026-09-02: 以前は OpenTypeFont・CIDUtils・WebFontSubset に別々にあった)。
+	 * Vertical writing origin (height above the horizontal writing origin, in 1000 units).
+	 * The default for fonts without a VORG table; CID-keyed font W2 and glyph translation
+	 * for vertical writing use the same value
+	 * (2026-09-02: previously defined separately in OpenTypeFont, CIDUtils, and WebFontSubset).
 	 */
 	public static final int DEFAULT_VERTICAL_ORIGIN = 880;
 

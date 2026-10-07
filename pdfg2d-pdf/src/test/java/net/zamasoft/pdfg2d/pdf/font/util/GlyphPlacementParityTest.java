@@ -18,15 +18,15 @@ import net.zamasoft.pdfg2d.gc.text.TextImpl;
 import net.zamasoft.pdfg2d.pdf.PDFGraphicsOutput;
 
 /**
- * グリフ位置進行のbackend別方針を固定する特性テストです(2026-08-01、
- * 2026-08-23更新)。
+ * Characterization tests for each backend's glyph positioning policy (2026-08-01,
+ * updated 2026-08-23).
  *
  * <p>
- * {@code xadvance[i]}はグリフiの直前に適用する。計測、PDF CID、AWT fallback、
- * アウトライン、SVGの各経路でこの意味を揃える。ルビの均等配置や
- * style-run境界の和文約物詰めは先頭補正を使うため、{@code [0]}を無視したり
- * 次のグリフへ送ったりしてはならない。アウトライン経路は
- * {@code FontUtilsLeadingXAdvanceTest}、統合経路はfoliojetのvisual goldenで固定する。
+ * Apply {@code xadvance[i]} immediately before glyph i. Measurement, PDF CID, AWT fallback,
+ * outline, and SVG paths share this meaning. Evenly spaced ruby and Japanese punctuation kerning
+ * at style-run boundaries use a leading adjustment, so do not ignore {@code [0]} or apply it
+ * to the next glyph. {@code FontUtilsLeadingXAdvanceTest} covers the outline path;
+ * foliojet's visual golden tests cover the integrated path.
  * </p>
  */
 public class GlyphPlacementParityTest {
@@ -89,8 +89,8 @@ public class GlyphPlacementParityTest {
 	}
 
 	private static String drawCid(final TextImpl text) throws Exception {
-		// PDFGraphicsOutputのコンストラクタはPDFWriter.getParams()しか使わない
-		// ため、動的Proxyで既定Paramsだけ返す最小スタブを作る
+		// The PDFGraphicsOutput constructor only uses PDFWriter.getParams(), so use a dynamic proxy
+		// to create a minimal stub that returns only the default Params
 		final net.zamasoft.pdfg2d.pdf.PDFWriter writer = (net.zamasoft.pdfg2d.pdf.PDFWriter) java.lang.reflect.Proxy
 				.newProxyInstance(GlyphPlacementParityTest.class.getClassLoader(),
 						new Class<?>[] { net.zamasoft.pdfg2d.pdf.PDFWriter.class }, (proxy, method, args) -> {
@@ -103,7 +103,7 @@ public class GlyphPlacementParityTest {
 		try (PDFGraphicsOutput out = new PDFGraphicsOutput(writer, buffer, 100, 100) {
 			@Override
 			public void useResource(final String type, final String name) {
-				// テストでは資源参照を記録しない
+				// Do not record resource references in this test
 			}
 		}) {
 			PDFFontUtils.drawCIDTo(out, text, false);
@@ -113,8 +113,8 @@ public class GlyphPlacementParityTest {
 
 	@Test
 	public void testMeasurementIncludesLeadingXAdvance() {
-		// 計測(getAdvance)は先頭グリフのxadvanceも合算する——ルビの
-		// 先頭半アキが行幅に入るのはこの仕様による
+		// Measurement (getAdvance) includes the first glyph's xadvance in the sum; this is why
+		// the leading half-space for ruby contributes to the line width
 		final TextImpl text = text(3, 0);
 		final double base = text.getAdvance();
 		text.addXAdvance(0, 5);
@@ -123,13 +123,13 @@ public class GlyphPlacementParityTest {
 
 	@Test
 	public void testPdfCidPathAppliesLeadingXAdvance() throws Exception {
-		// PDF CID経路(TJ配列)は先頭グリフのxadvance[0]も出力する。
-		// TJ値は -xadvance × 1000 / fontSize = -5×1000/10 = -500
+		// The PDF CID path (TJ array) also emits xadvance[0] for the first glyph.
+		// TJ value = -xadvance × 1000 / fontSize = -5×1000/10 = -500
 		final TextImpl text = text(3, 0);
 		text.addXAdvance(0, 5);
 		final String tj = drawCid(text);
 		assertTrue(tj.contains("-500"), "先頭調整-500がTJに現れる: " + tj);
-		// 先頭グリフのバイト列(gid=1)より前に調整が出る
+		// The adjustment precedes the first glyph's bytes (gid=1)
 		final int adjustmentAt = tj.indexOf("-500");
 		final int glyphsAt = tj.indexOf("0001");
 		assertTrue(glyphsAt >= 0, "gid=1の16bitバイト列: " + tj);
@@ -138,8 +138,8 @@ public class GlyphPlacementParityTest {
 
 	@Test
 	public void testPdfCidPathFoldsKerningIntoTJ() throws Exception {
-		// カーニングはTJ調整へ畳まれる: xadvance -= kerning(2) → TJ値は
-		// -(-2)×1000/10 = +200(正=横書きでペンを戻す)
+		// Kerning is folded into the TJ adjustment: xadvance -= kerning(2) → TJ value
+		// -(-2)×1000/10 = +200 (positive moves the pen backward in horizontal writing)
 		final TextImpl text = text(2, 2);
 		final String tj = drawCid(text);
 		assertTrue(tj.contains("200"), "カーニング+200がTJに現れる: " + tj);

@@ -13,28 +13,27 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * WOFF2をsfnt(TTF/OTF)へ戻します。
+ * Restores WOFF2 to sfnt (TTF/OTF).
  *
  * <p>
- * WOFF2はWOFFと違い、(1)全体を<b>Brotli</b>で圧縮し、(2)字形表
- * ({@code glyf}/{@code loca})を<b>専用の形へ組み替えて</b>縮めています。
- * 実在サイトのWOFF2 1265件を調べたところ<b>1224件がこの組み替えを使って
- * いた</b>ので、伸長だけでは実用になりません。ここでは組み替えを元に戻す
- * ところまでを行います。
+ * Unlike WOFF, WOFF2 (1) compresses the whole payload with <b>Brotli</b> and
+ * (2) shrinks glyph tables ({@code glyf}/{@code loca}) by <b>transforming them into a dedicated format</b>.
+ * Of 1265 WOFF2 files examined from real websites, <b>1224 used this transform</b>,
+ * so decompression alone is not practical. This class also reverses the transform.
  * </p>
  *
  * <p>
- * <b>間違えても例外は出ません。</b> 字形の点の座標を復元する処理なので、
- * 誤ると「読めるが形が違う」出力になります。検証は
- * {@code Woff2DecoderTest} が、<b>同じフォントのWOFF2版とTTF/WOFF版</b>を
- * 突き合わせて行っています(実在サイトの資源に192組ありました)。
+ * <b>Mistakes do not throw exceptions.</b> This code restores glyph point coordinates,
+ * so errors produce output that is readable but has incorrect shapes.
+ * {@code Woff2DecoderTest} verifies it by comparing <b>WOFF2 and TTF/WOFF versions of the same font</b>
+ * (192 pairs were found among resources from real websites).
  * </p>
  *
  * @see <a href="https://www.w3.org/TR/WOFF2/">WOFF File Format 2.0</a>
  */
 final class Woff2Decoder {
 
-	/** WOFF2が番号で参照する表の名前です(仕様 §5.2 表4)。順序に意味があります。 */
+	/** Table names referenced by number in WOFF2 (specification §5.2, Table 4). Order matters. */
 	private static final String[] KNOWN_TAGS = { "cmap", "head", "hhea", "hmtx", "maxp", "name", "OS/2", "post",
 			"cvt ", "fpgm", "glyf", "loca", "prep", "CFF ", "VORG", "EBDT", "EBLC", "gasp", "hdmx", "kern", "LTSH",
 			"PCLT", "VDMX", "vhea", "vmtx", "BASE", "GDEF", "GPOS", "GSUB", "EBSC", "JSTF", "MATH", "CBDT", "CBLC",
@@ -46,7 +45,7 @@ final class Woff2Decoder {
 		// utility
 	}
 
-	/** 表1つぶんの目録です。 */
+	/** Directory entry for one table. */
 	private static final class Entry {
 		String tag;
 		int transform;
@@ -56,11 +55,11 @@ final class Woff2Decoder {
 	}
 
 	/**
-	 * WOFF2を読んで、組み直したsfntを一時ファイルへ書き出します。
+	 * Reads WOFF2 and writes the reconstructed sfnt to a temporary file.
 	 *
-	 * @param raf  先頭に位置づけられている必要はありません(内部でseekします)
-	 * @param file 元のファイル(エラーメッセージ用)
-	 * @return 組み直したsfntの一時ファイル
+	 * @param raf  need not be positioned at the beginning (seeks internally)
+	 * @param file original file (for error messages)
+	 * @return temporary file containing the reconstructed sfnt
 	 */
 	static File extract(final RandomAccessFile raf, final File file) throws IOException {
 		raf.seek(0);
@@ -102,18 +101,18 @@ final class Woff2Decoder {
 				e.tag = KNOWN_TAGS[index];
 			}
 			e.origLength = (int) r.base128();
-			// glyf/locaは3が「組み替えなし」、それ以外の表は0が「組み替えなし」
+			// For glyf/loca, 3 means "no transform"; for other tables, 0 means "no transform".
 			final boolean transformed = ("glyf".equals(e.tag) || "loca".equals(e.tag)) ? e.transform != 3
 					: e.transform != 0;
 			e.transformLength = transformed ? (int) r.base128() : e.origLength;
 			entries.add(e);
 		}
 
-		// 圧縮された本体を伸長して、目録の順に切り分ける。
-		// **申告された圧縮長どおりに切ること。** 余分な1バイト(末尾の
-		// 4バイト境界の詰め物)まで渡すと、Brotliがそれを続きの符号として
-		// 読んで「距離が負」で失敗する(2026-08-05、barlowcondensedで判明)。
-		// ファイルが短いときだけ実長で頭打ちにする。
+		// Decompress the payload and split it in directory order.
+		// **Slice at exactly the declared compressed length.** Passing even one extra byte
+		// (trailing padding to a 4-byte boundary) makes Brotli read it as a continuation code
+		// and fail with a "negative distance" (2026-08-05, found with barlowcondensed).
+		// Cap at the actual length only when the file is shorter.
 		final int bodyStart = r.pos();
 		final int available = all.length - bodyStart;
 		final byte[] plain = brotli(all, bodyStart, Math.min((int) totalCompressedSize, available), file);
@@ -140,7 +139,7 @@ final class Woff2Decoder {
 		return writeSfnt(flavor, entries);
 	}
 
-	/** Brotliで伸長します。 */
+	/** Decompresses with Brotli. */
 	private static byte[] brotli(final byte[] src, final int off, final int len, final File file) throws IOException {
 		final ByteArrayOutputStream out = new ByteArrayOutputStream(Math.max(len * 4, 1024));
 		try (InputStream in = new org.brotli.dec.BrotliInputStream(
@@ -157,8 +156,8 @@ final class Woff2Decoder {
 	}
 
 	/**
-	 * 組み替えられた{@code glyf}/{@code loca}を元に戻します(仕様 §5.1)。
-	 * 組み替えが使われていなければ何もしません。
+	 * Reverses transforms on {@code glyf}/{@code loca} (specification §5.1).
+	 * Does nothing if no transform is used.
 	 */
 	private static void reconstructGlyf(final List<Entry> entries, final File file) throws IOException {
 		Entry glyf = null, loca = null, head = null;
@@ -172,7 +171,7 @@ final class Woff2Decoder {
 			}
 		}
 		if (glyf == null || glyf.transform == 3) {
-			return; // 組み替えなし
+			return; // No transform.
 		}
 		if (loca == null) {
 			throw new IOException("WOFF2 has transformed glyf without loca: " + file);
@@ -182,7 +181,7 @@ final class Woff2Decoder {
 		r.u16(); // reserved
 		final int optionFlags = r.u16();
 		final int numGlyphs = r.u16();
-		r.u16(); // indexFormat(元の形式。こちらは常に長い形式で書き直す)
+		r.u16(); // indexFormat (original format; always rewritten here in long format).
 		final int nContourSize = (int) r.u32();
 		final int nPointsSize = (int) r.u32();
 		final int flagSize = (int) r.u32();
@@ -191,7 +190,7 @@ final class Woff2Decoder {
 		final int bboxSize = (int) r.u32();
 		final int instructionSize = (int) r.u32();
 		if ((optionFlags & 1) != 0) {
-			r.u32(); // overlapSimpleBitmapSize(読み飛ばす。字形の形には影響しない)
+			r.u32(); // overlapSimpleBitmapSize (skip; does not affect glyph shapes).
 		}
 		int p = r.pos();
 		final Reader nContour = new Reader(glyf.data, p);
@@ -205,11 +204,11 @@ final class Woff2Decoder {
 		final Reader compositeR = new Reader(glyf.data, p);
 		p += compositeSize;
 		final int bboxStart = p;
-		// **ビット表の長さは4バイト単位に切り上げる**(仕様 §5.1
-		// `4 * ((numGlyphs + 31) / 32)`)。単純に ceil(numGlyphs/8) にすると
-		// 字形数によっては1〜3バイトずれ、**外枠の値が1バイトずつずれた
-		// まま読まれる**。例外は出ず、合成字形の部品番号が桁違いの値になって
-		// 初めて気づく(CashSans-MediumItalic、字形数567でちょうど1バイト)。
+		// **Round the bitmap length up to a multiple of 4 bytes** (specification §5.1:
+		// `4 * ((numGlyphs + 31) / 32)`). Simply using ceil(numGlyphs/8) causes
+		// a 1-3 byte offset for some glyph counts, so **bounding box values are read
+		// at shifted byte positions**. No exception occurs; the error becomes apparent only when composite glyph
+		// component numbers are wildly wrong (CashSans-MediumItalic, exactly 1 byte with 567 glyphs).
 		final int bitmapLen = 4 * ((numGlyphs + 31) / 32);
 		final Reader bboxR = new Reader(glyf.data, bboxStart + bitmapLen);
 		p += bboxSize;
@@ -222,7 +221,7 @@ final class Woff2Decoder {
 			final int nContours = (short) nContour.u16();
 			final boolean haveBbox = (glyf.data[bboxStart + (gid >> 3)] & (0x80 >> (gid & 7))) != 0;
 			if (nContours == 0) {
-				// 空の字形。データを持たない
+				// Empty glyph. Has no data.
 				continue;
 			}
 			if (nContours < 0) {
@@ -234,9 +233,9 @@ final class Woff2Decoder {
 		}
 		offsets[numGlyphs] = glyfOut.size();
 
-		// **どの列も使い切っているはず。** 復元を誤っても例外は出ないので、
-		// 「読み終えた位置が宣言された大きさと一致するか」を必ず確かめる。
-		// ここが合わないまま進むと、字形が静かに崩れた出力になる
+		// **Every stream should be fully consumed.** Incorrect reconstruction does not throw an exception,
+		// so always verify that the final read position matches the declared size.
+		// Continuing with a mismatch here silently produces malformed glyphs.
 		checkConsumed("nContour", nContour, nContourSize, file);
 		checkConsumed("nPoints", nPoints, nPointsSize, file);
 		checkConsumed("flag", flagsR, flagSize, file);
@@ -248,11 +247,11 @@ final class Woff2Decoder {
 		glyf.origLength = glyf.data.length;
 		glyf.transform = 3;
 
-		// **locaは常に長い形式で書く。** 点を短縮せずに書いているぶん字形表は
-		// 元より大きくなるので、短い形式(2バイト×1/2)の上限128KiBを
-		// 超えることがある。超えると後ろの字形の位置がずれて**空の字形として
-		// 読まれる**(実際にfa-brands-400で字形301が消えた)。元のWOFF2が
-		// どちらでも、こちらは長い形式に統一し、headもそれに合わせる。
+		// **Always write loca in long format.** Writing uncompressed points makes the glyph table
+		// larger than the original, which can exceed the short format's 128 KiB limit
+		// (2-byte offsets in half units). If exceeded, later glyph offsets shift and the glyphs
+		// are **read as empty** (glyph 301 actually disappeared in fa-brands-400). Regardless of the
+		// original WOFF2 format, use long format consistently and update head to match.
 		final ByteArrayOutputStream locaOut = new ByteArrayOutputStream((numGlyphs + 1) * 4);
 		final DataOutputStream locaDos = new DataOutputStream(locaOut);
 		for (int i = 0; i <= numGlyphs; ++i) {
@@ -269,7 +268,7 @@ final class Woff2Decoder {
 		}
 	}
 
-	/** その列を宣言どおり使い切ったかを確かめます。 */
+	/** Checks that the stream has been fully consumed as declared. */
 	private static void checkConsumed(final String name, final Reader r, final int declared, final File file)
 			throws IOException {
 		if (r.consumed() != declared) {
@@ -278,7 +277,7 @@ final class Woff2Decoder {
 		}
 	}
 
-	/** 単純字形を書き出します。 */
+	/** Writes a simple glyph. */
 	private static void writeSimple(final ByteArrayOutputStream out, final int nContours, final Reader nPoints,
 			final Reader flagsR, final Reader glyphR, final Reader instructionR, final Reader bboxR,
 			final boolean haveBbox) throws IOException {
@@ -335,9 +334,9 @@ final class Woff2Decoder {
 		}
 		d.writeShort(instructionLength);
 		d.write(instructions);
-		// **点は素直な形で書く。** 短縮形(X_SHORT_VECTOR・SAME)を使わず、
-		// 曲線上かどうかのビットだけ立てて座標は16ビットの差分で書く。
-		// 仕様上そのまま正しく、復元の誤りを持ち込む余地が小さい
+		// **Write points in a straightforward form.** Do not use short forms (X_SHORT_VECTOR or SAME);
+		// set only the on-curve bit and write coordinates as 16-bit deltas.
+		// This is valid under the specification and leaves less room for reconstruction errors.
 		for (int i = 0; i < total; ++i) {
 			d.writeByte(onCurve[i] ? 0x01 : 0x00);
 		}
@@ -354,7 +353,7 @@ final class Woff2Decoder {
 		d.flush();
 	}
 
-	/** 合成字形を書き出します。部品の並びは組み替えられていないのでそのまま写します。 */
+	/** Writes a composite glyph. Copies the component sequence unchanged because it was not transformed. */
 	private static void writeComposite(final ByteArrayOutputStream out, final Reader compositeR, final Reader glyphR,
 			final Reader instructionR, final Reader bboxR, final boolean haveBbox, final File file)
 			throws IOException {
@@ -401,12 +400,12 @@ final class Woff2Decoder {
 	}
 
 	/**
-	 * 点の座標の三つ組符号(仕様 §5.2)を1点ぶん解きます。
+	 * Decodes the triplet coordinate encoding (specification §5.2) for one point.
 	 *
 	 * <p>
-	 * 旗の下位7ビットが、xとyそれぞれの<b>桁数と符号</b>、および続く
-	 * バイト数を決めます。ここは仕様の表をそのまま写した部分で、
-	 * <b>誤ると例外が出ないまま字形が崩れる</b>ので手を入れないこと。
+	 * The low 7 flag bits determine the <b>magnitude and sign</b> of x and y
+	 * and the number of following bytes. This code directly transcribes the specification table.
+	 * Do not modify it: <b>mistakes distort glyphs without throwing exceptions</b>.
 	 * </p>
 	 */
 	private static int[] triplet(final int flag, final Reader in) throws IOException {
@@ -457,7 +456,7 @@ final class Woff2Decoder {
 		}
 	}
 
-	/** 組み直した表からsfntを書き出します。目録は表の名前順(仕様の要求)。 */
+	/** Writes sfnt from the reconstructed tables. Sorts the directory by table name (required by the specification). */
 	private static File writeSfnt(final long flavor, final List<Entry> entries) throws IOException {
 		final List<Entry> sorted = new ArrayList<>(entries);
 		sorted.sort((a, b) -> a.tag.compareTo(b.tag));
@@ -504,7 +503,7 @@ final class Woff2Decoder {
 		return sum;
 	}
 
-	/** バイト列を前から読む道具です。 */
+	/** Utility for reading a byte sequence from the beginning. */
 	private static final class Reader {
 		private final byte[] b;
 		private int p;
@@ -517,7 +516,7 @@ final class Woff2Decoder {
 			this.start = p;
 		}
 
-		/** 生成時の位置から何バイト読んだか。 */
+		/** Number of bytes read since the position at construction. */
 		int consumed() {
 			return this.p - this.start;
 		}
@@ -561,7 +560,7 @@ final class Woff2Decoder {
 			return r;
 		}
 
-		/** UIntBase128(仕様 §4.1)。7ビットずつ、最上位ビットが継続の印。 */
+		/** UIntBase128 (specification §4.1). Seven bits at a time; the most significant bit marks continuation. */
 		long base128() throws IOException {
 			long v = 0;
 			for (int i = 0; i < 5; ++i) {
@@ -574,7 +573,7 @@ final class Woff2Decoder {
 			throw new IOException("Malformed UIntBase128 in WOFF2");
 		}
 
-		/** 255UInt16(仕様 §4.2)。253/254/255が桁上げの印。 */
+		/** 255UInt16 (specification §4.2). 253/254/255 mark extended values. */
 		int u255() throws IOException {
 			final int c = this.u8();
 			if (c == 253) {

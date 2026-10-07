@@ -27,11 +27,11 @@ import net.zamasoft.pdfg2d.gc.font.FontStyle.Direction;
 import net.zamasoft.pdfg2d.gc.font.FontStyle.Weight;
 
 /**
- * 書体ディレクトリの可変フォントに、wght を固定した太さの写しが登録されることを固定します(2026-10-04)。
+ * Ensures that variable fonts in the font directory have copies registered with fixed wght values (2026-10-04).
  *
  * <p>
- * Mulish の可変フォントは既定の実体が ExtraLight(wght 200、軸は 200〜1000)。従来は 200 の 1 本しか
- * 登録されず、太字を指定しても細い字で組まれていた。
+ * The default instance of the Mulish variable font is ExtraLight (wght 200, axis range 200–1000).
+ * Previously, only the 200 instance was registered, so text used thin glyphs even when bold was requested.
  * </p>
  */
 public class VariableWeightInstancesTest {
@@ -72,14 +72,14 @@ public class VariableWeightInstancesTest {
 		for (final FontSource source : list) {
 			weights.add((int) source.getWeight().w);
 		}
-		// 既定の実体(200)+軸の範囲の 300〜900。100 は軸の外
+		// Default instance (200) plus 300–900 within the axis range. 100 is outside the axis range
 		assertEquals(new TreeSet<>(List.of(200, 300, 400, 500, 600, 700, 800, 900)), weights);
 
 		final OpenTypeFontSource light = find(list, Weight.W_200);
 		final OpenTypeFontSource bold = find(list, Weight.W_700);
 		assertNull(light.getVariation());
 		assertEquals(Map.of("wght", 700.0), bold.getVariation());
-		// 写しは使われたときに静的フォントを作る。太いほど字幅が広い
+		// Copies generate static fonts when used. Heavier weights have wider glyphs
 		assertNotEquals(FONT, bold.getFile());
 		assertTrue(advance(bold, 'm') > advance(light, 'm'), advance(bold, 'm') + " > " + advance(light, 'm'));
 		assertEquals(bold.getFile(), bold.getFile(), "実体化は 1 度だけ");

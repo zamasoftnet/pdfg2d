@@ -74,8 +74,8 @@ public record KernTable(KernSubtable[] tables) implements Table {
 			if (n == 0) {
 				continue;
 			}
-			// (left<<32 | right<<16 | value) に詰めて整列し、上位48bitの
-			// 二分探索で引く(値のbitは同一ペア内の順序にしか影響しない)
+			// Pack into (left<<32 | right<<16 | value), sort, and look up by binary search on the upper 48 bits
+			// (value bits affect only the order within the same pair).
 			final long[] entries = new long[n];
 			for (int i = 0; i < n; i++) {
 				final KerningPair p = st.getKerningPair(i);
@@ -88,7 +88,7 @@ public record KernTable(KernSubtable[] tables) implements Table {
 		return result;
 	}
 
-	/** 整列済みエントリ配列に対する二分探索の{@link PairPos}アダプタ。 */
+	/** {@link PairPos} adapter that performs binary search on a sorted entry array. */
 	private record LegacyPairPos(long[] entries) implements PairPos {
 		@Override
 		public int getKerning(final int firstGid, final int secondGid) {

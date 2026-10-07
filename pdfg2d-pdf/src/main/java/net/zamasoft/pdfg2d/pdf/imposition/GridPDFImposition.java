@@ -16,7 +16,7 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 
 /**
  * Places logical pages onto a rows × columns grid of cells per sheet
- * (多面付け). Each logical page is written as a Form XObject the moment it
+ * (N-up imposition). Each logical page is written as a Form XObject the moment it
  * is closed — its content streams straight to the output — and sheets are
  * assembled from tiny placement dictionaries afterwards. Out-of-order
  * layouts such as saddle-stitch booklets therefore run with constant memory
@@ -30,9 +30,9 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * whenever it is full (handouts, N-up printing).</li>
  * <li>{@link Order#REPEAT} — every logical page fills a whole sheet with
  * copies of itself (business cards, postcards, labels).</li>
- * <li>{@link Order#SADDLE_STITCH} — 中綴じ: fixed 1 × 2 grid; pages are
+ * <li>{@link Order#SADDLE_STITCH} — saddle-stitch: fixed 1 × 2 grid; pages are
  * reordered into printer spreads at {@link #finish()}, with optional creep
- * compensation. Signature (折り丁) imposition with folding schemes is out of
+ * compensation. Signature imposition with folding schemes is out of
  * scope by design.</li>
  * </ul>
  *
@@ -50,7 +50,7 @@ public class GridPDFImposition extends PDFImposition {
 		/** Saddle-stitch booklet spreads (implies a 1 × 2 grid). */
 		SADDLE_STITCH,
 		/**
-		 * Cut &amp; stack (断裁後に重ねると通し順になる配置): cell {@code j}
+		 * Cut &amp; stack (pages are sequential when cut and stacked): cell {@code j}
 		 * of sheet {@code s} carries page {@code j*S + s} for {@code S}
 		 * sheets total — used for numbered tickets, forms and VDP output.
 		 */
@@ -59,9 +59,9 @@ public class GridPDFImposition extends PDFImposition {
 
 	/** Binding side for saddle-stitch ordering. */
 	public enum BoundSide {
-		/** 左綴じ (Western/horizontal text). */
+		/** Left binding (Western/horizontal writing). */
 		LEFT,
-		/** 右綴じ (Japanese vertical text). */
+		/** Right binding (Japanese vertical writing). */
 		RIGHT
 	}
 

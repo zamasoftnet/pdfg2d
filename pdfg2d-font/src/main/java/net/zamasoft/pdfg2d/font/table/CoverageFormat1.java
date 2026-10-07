@@ -27,7 +27,7 @@ public record CoverageFormat1(int[] glyphIds, boolean sorted) implements Coverag
 		for (int i = 0; i < glyphCount; i++) {
 			glyphIds[i] = raf.readUnsignedShort();
 			if (i > 0 && glyphIds[i - 1] >= glyphIds[i]) {
-				// 仕様(数値順)に反するフォント——線形走査へ縮退
+				// Font violates the specification (numeric order): fall back to a linear scan.
 				sorted = false;
 			}
 		}
@@ -41,8 +41,8 @@ public record CoverageFormat1(int[] glyphIds, boolean sorted) implements Coverag
 
 	@Override
 	public int findGlyph(final int glyphId) {
-		// 整形中グリフ毎に呼ばれる。仕様どおり整列済みなら二分探索
-		// (2026-08-01、95点計画増分2——CJKフォントのCoverageは数千グリフ)
+		// Called for each glyph during shaping. Use binary search if sorted as specified
+		// (2026-08-01, 95-point plan increment 2: CJK font Coverage tables contain thousands of glyphs).
 		if (this.sorted) {
 			final int i = java.util.Arrays.binarySearch(this.glyphIds, glyphId);
 			return i < 0 ? -1 : i;

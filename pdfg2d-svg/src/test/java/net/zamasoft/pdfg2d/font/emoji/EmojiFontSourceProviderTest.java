@@ -10,8 +10,8 @@ import org.junit.jupiter.api.Test;
 import net.zamasoft.pdfg2d.font.FontSourceProvider;
 
 /**
- * 絵文字フォントSPIの登録テストです(2026-08-01、旧Class.forName継ぎ目の
- * ServiceLoader化)。META-INF/servicesの登録漏れ・タイポをここで検出する。
+ * Tests emoji font SPI registration (2026-08-01: replaced the former Class.forName integration point
+ * with ServiceLoader). Detects missing registrations and typos in META-INF/services.
  */
 public class EmojiFontSourceProviderTest {
 

@@ -97,7 +97,7 @@ public interface PairPos extends LookupSubtable {
 				for (int j = 0; j < pairCount; j++) {
 					seconds[i][j] = raf.readUnsignedShort();
 					if (j > 0 && seconds[i][j - 1] >= seconds[i][j]) {
-						// 仕様(第二GID昇順)に反するフォント——線形走査へ縮退
+						// Font violates the specification (ascending second GIDs): fall back to a linear scan.
 						sorted = false;
 					}
 					kerns[i][j] = readXAdvance(raf, valueFormat1);
@@ -117,8 +117,8 @@ public interface PairPos extends LookupSubtable {
 				return 0;
 			}
 			final int[] seconds = this.secondGlyphs[ci];
-			// グリフ対毎に呼ばれる。仕様どおり整列済みなら二分探索
-			// (2026-08-01、95点計画増分4)
+			// Called for every glyph pair. Use binary search if sorted as specified
+			// (2026-08-01, 95-point plan increment 4).
 			if (this.sorted) {
 				final int j = java.util.Arrays.binarySearch(seconds, secondGid);
 				return j < 0 ? 0 : this.kernings[ci][j];

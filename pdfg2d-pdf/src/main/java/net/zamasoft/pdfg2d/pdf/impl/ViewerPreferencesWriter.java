@@ -28,10 +28,10 @@ final class ViewerPreferencesWriter {
 	 *
 	 * @param catalogFlow          the catalog dictionary flow
 	 * @param params               the PDF generation parameters
-	 * @param forceDisplayDocTitle PDF/UAの要件でDisplayDocTitleを強制するか
-	 *                             (2026-08-01——従来は呼び出し側の
-	 *                             ViewerPreferencesを直接変更していた副作用を
-	 *                             出力判定へ移した)
+	 * @param forceDisplayDocTitle whether to force DisplayDocTitle as required by PDF/UA
+	 *                             (2026-08-01: moved the side effect that previously modified
+	 *                             the caller's ViewerPreferences directly
+	 *                             into an output-time decision)
 	 * @throws IOException if an I/O error occurs
 	 */
 	static void write(final PDFFragmentOutputImpl catalogFlow, final PDFParams params,

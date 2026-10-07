@@ -83,8 +83,10 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 
 	private double lineFactor = 0;
 
-	/** 行の組み立て(蓄積・分割・justify・計測)はLineAssemblerへ分離
-	 * (2026-08-01、増分13)。このクラスは段配置と描画だけを持つ。 */
+	/**
+	 * Line assembly (accumulation, splitting, justification, and measurement) is separated into LineAssembler
+	 * (2026-08-01, increment 13). This class handles only column placement and drawing.
+	 */
 	private final LineAssembler assembler = new LineAssembler();
 
 	// A "text unit" is the run of elements/glyphs accumulated since the last
@@ -360,8 +362,8 @@ public class PageLayoutGlyphHandler implements GlyphHandler {
 	 *             over as the beginning of the next line.
 	 */
 	private void endLine(final boolean last) {
-		// 行の組み立て(run分割・justify・計測)はLineAssemblerが担い、
-		// ここは段配置とページ送りだけを行う(2026-08-01、増分13)
+		// LineAssembler handles line assembly (run splitting, justification, and measurement);
+		// this method handles only column placement and page advancement (2026-08-01, increment 13).
 		final LineAssembler.LineBox line = this.assembler.breakLine(last,
 				!last && this.align == Alignment.JUSTIFY, this.getMaxAdvance(), this.fontSize);
 		final double maxAscent = line.ascent();

@@ -14,8 +14,8 @@ import net.zamasoft.pdfg2d.gc.text.breaking.TextBreakingRulesBundle;
 import net.zamasoft.pdfg2d.gc.text.layout.PageLayoutGlyphHandler;
 
 /**
- * Draws printer's marks (トンボ) for imposed sheets: Japanese-style double
- * corner marks (コーナートンボ), center marks (センタートンボ), spine marks
+ * Draws printer's marks (crop marks) for imposed sheets: Japanese-style double
+ * corner marks, center marks, spine marks
  * and the marginal note line.
  * <p>
  * All coordinates are relative to the top-left corner of the <em>trim
@@ -45,7 +45,7 @@ public final class PrinterMarks {
 	}
 
 	/**
-	 * Draws the four Japanese double corner marks (コーナートンボ) around the
+	 * Draws the four Japanese double corner marks around the
 	 * page area. The inner line of each pair marks the finished size and the
 	 * outer line the bleed (cutting margin).
 	 *
@@ -95,7 +95,7 @@ public final class PrinterMarks {
 	}
 
 	/**
-	 * Draws the four center marks (センタートンボ) at the middles of the page
+	 * Draws the four center marks at the middles of the page
 	 * edges.
 	 *
 	 * @param gc         the graphics context
@@ -149,7 +149,7 @@ public final class PrinterMarks {
 	}
 
 	/**
-	 * Draws the spine marks (背トンボ) for a cover spread: vertical lines
+	 * Draws the spine marks for a cover spread: vertical lines
 	 * marking both edges of the spine at the top and bottom trim margins.
 	 *
 	 * @param gc         the graphics context

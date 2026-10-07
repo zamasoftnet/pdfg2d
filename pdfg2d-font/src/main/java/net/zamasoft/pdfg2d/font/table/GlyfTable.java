@@ -28,26 +28,26 @@ import net.zamasoft.pdfg2d.font.truetype.GlyfSimpleDescript;
 public record GlyfTable(DirectoryEntry de, LocaTable loca, RandomAccessFile raf) implements Table {
 
 	/**
-	 * いま読んでいる途中のグリフ番号です(スレッドごと)。
+	 * Glyph IDs currently being read (per thread).
 	 *
 	 * <p>
-	 * 合成グリフの成分は{@link #getDescription(int)}で読み直すので、成分が
-	 * 自分自身を(直接または循環して)指す不正なフォントでは無限再帰して
-	 * {@code StackOverflowError}になる。2026-09-01に本番のフォント一覧が
-	 * これで落ちた——書体ごとに代表符号位置の字形を引いてscriptを名乗るように
-	 * したところ、フォントパックの1書体でこの循環を踏んだ。
+	 * Composite glyph components are read again through {@link #getDescription(int)}, so malformed fonts
+	 * whose components point back to themselves (directly or through a cycle) recurse indefinitely
+	 * and cause {@code StackOverflowError}. This crashed the production font list on 2026-09-01:
+	 * after adding script identification by looking up representative code point glyphs for each font,
+	 * a font in the font pack triggered this cycle.
 	 * </p>
 	 *
 	 * <p>
-	 * <b>深さの上限では切れない。</b>{@code GlyfCompositeDescript.getPointCount()}は
-	 * 呼び直して<b>別に組み立てた</b>記述子の上で自分を呼ぶので、深さは
-	 * 上限と上限−1の間を往復するだけで、フレームだけが積み上がる。読んでいる
-	 * 最中のグリフ番号を覚えて、そこへ戻る成分を落とす必要がある。
+	 * <b>A depth limit cannot stop it.</b> {@code GlyfCompositeDescript.getPointCount()} calls itself on
+	 * a <b>separately constructed</b> descriptor obtained by rereading, so the depth merely oscillates
+	 * between the limit and limit minus 1 while stack frames accumulate. Track the glyph IDs
+	 * currently being read and drop components that lead back to them.
 	 * </p>
 	 *
 	 * <p>
-	 * {@code record}はインスタンスフィールドを持てないのでスレッドごとに持つ。
-	 * 同じ表を複数のスレッドが読んでも、経路はスレッドごとに独立している。
+	 * A {@code record} cannot have instance fields, so store the state per thread.
+	 * Even when multiple threads read the same table, their paths remain independent.
 	 * </p>
 	 */
 	private static final ThreadLocal<java.util.Set<Integer>> READING = ThreadLocal
@@ -66,8 +66,8 @@ public record GlyfTable(DirectoryEntry de, LocaTable loca, RandomAccessFile raf)
 		GlyfDescript desc = null;
 		final java.util.Set<Integer> reading = READING.get();
 		if (!reading.add(i)) {
-			// このグリフは読んでいる最中——成分が自分へ戻っている不正なフォント。
-			// 字形の無いグリフと同じ扱いにして、読み手に成分を落とさせる
+			// This glyph is already being read: a malformed font has a component that points back to itself.
+			// Treat it like a glyph with no shape so the reader drops the component.
 			return null;
 		}
 		try {

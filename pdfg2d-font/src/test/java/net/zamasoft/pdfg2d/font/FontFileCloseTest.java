@@ -10,8 +10,8 @@ import java.io.File;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link FontFile#close()} が WOFF の解凍結果を消し、生の書体ファイルには触らないことを固定します(2026-10-05)。
- * 可変フォントの判定のように sfnt だけを使う呼び出しでは、解凍結果の持ち主がいなかった。
+ * Ensures that {@link FontFile#close()} deletes decompressed WOFF files and leaves raw font files untouched (2026-10-05).
+ * Calls that used only sfnt, such as variable font detection, left decompressed files without an owner.
  */
 public class FontFileCloseTest {
 	@Test

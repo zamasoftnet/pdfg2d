@@ -69,7 +69,7 @@ public interface ClassDef extends Serializable {
 				ends[i] = raf.readUnsignedShort();
 				classes[i] = raf.readUnsignedShort();
 				if (i > 0 && starts[i - 1] >= starts[i]) {
-					// 仕様(開始GID昇順)に反するフォント——線形走査へ縮退
+					// Font violates the specification (ascending start GIDs): fall back to a linear scan.
 					sorted = false;
 				}
 			}
@@ -78,8 +78,8 @@ public interface ClassDef extends Serializable {
 
 		@Override
 		public int getClassValue(final int glyphId) {
-			// グリフ対毎に呼ばれる。仕様どおり整列済みなら二分探索
-			// (2026-08-01、95点計画増分4)
+			// Called for every glyph pair. Use binary search if sorted as specified
+			// (2026-08-01, 95-point plan increment 4).
 			if (this.sorted) {
 				int low = 0, high = this.starts.length - 1;
 				while (low <= high) {

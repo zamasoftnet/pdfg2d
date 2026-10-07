@@ -38,7 +38,7 @@ public record KernSubtableFormat2() implements KernSubtable {
 
 	@Override
 	public boolean isHorizontal() {
-		// 実質未対応のスタブ(ペアを提供しない)
+		// Effectively unsupported stub (provides no pairs).
 		return false;
 	}
 }

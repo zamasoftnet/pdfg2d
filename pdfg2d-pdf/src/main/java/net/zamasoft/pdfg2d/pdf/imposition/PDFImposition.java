@@ -11,8 +11,7 @@ import net.zamasoft.pdfg2d.pdf.PDFWriter;
 import net.zamasoft.pdfg2d.pdf.util.PDFUtils;
 
 /**
- * Base class for placing logical pages onto physical PDF pages (imposition,
- * 面付け), drawing printer's marks and maintaining the PDF page boxes
+ * Base class for placing logical pages onto physical PDF pages (imposition), drawing printer's marks and maintaining the PDF page boxes
  * (MediaBox / BleedBox / TrimBox) consistently with the trim configuration.
  * <p>
  * Usage: configure the instance, then repeat {@link #nextPage()} — draw —
@@ -34,10 +33,10 @@ public abstract class PDFImposition {
 
 	protected PagePlacement.AutoRotate autoRotate = PagePlacement.AutoRotate.NONE;
 
-	/** Corner marks (コーナートンボ). */
+	/** Corner crop marks. */
 	protected boolean crop = false;
 
-	/** Center marks (センタートンボ). */
+	/** Center crop marks. */
 	protected boolean cross = false;
 
 	/** Whether to clip content to the page area plus bleed. */
@@ -144,7 +143,7 @@ public abstract class PDFImposition {
 		return this.crop;
 	}
 
-	/** Enables the corner marks (コーナートンボ). */
+	/** Enables the corner crop marks. */
 	public final void setCrop(final boolean crop) {
 		this.crop = crop;
 	}
@@ -153,7 +152,7 @@ public abstract class PDFImposition {
 		return this.cross;
 	}
 
-	/** Enables the center marks (センタートンボ). */
+	/** Enables the center crop marks. */
 	public final void setCross(final boolean cross) {
 		this.cross = cross;
 	}

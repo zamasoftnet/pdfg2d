@@ -28,9 +28,9 @@ public abstract class WrappedImage implements Image {
 	}
 
 	/**
-	 * 固有寸法の種別は元画像へ委譲します(2026-08-27)。委譲しないと
-	 * 既定のSIZEになり、px→ptの{@code TransformedImage}で包まれた
-	 * viewBoxのみのSVGが背景描画で原寸扱いされる。
+	 * Delegates the intrinsic dimension type to the original image (2026-08-27).
+	 * Without delegation, it defaults to SIZE, so background drawing treats a viewBox-only SVG
+	 * wrapped in a px-to-pt {@code TransformedImage} as having an intrinsic size.
 	 */
 	@Override
 	public Intrinsic getIntrinsic() {

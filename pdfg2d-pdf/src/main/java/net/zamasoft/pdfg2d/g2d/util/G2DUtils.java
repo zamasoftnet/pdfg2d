@@ -152,8 +152,8 @@ public final class G2DUtils {
 	}
 
 	/**
-	 * {@link SpreadMethod} を Java2D の周期指定へ写す(2026-08-29)。
-	 * PAD→NO_CYCLE、REPEAT→REPEAT、REFLECT→REFLECT。
+	 * Maps {@link SpreadMethod} to Java2D cycle modes (2026-08-29).
+	 * PAD -> NO_CYCLE, REPEAT -> REPEAT, REFLECT -> REFLECT.
 	 */
 	public static java.awt.MultipleGradientPaint.CycleMethod toCycleMethod(final SpreadMethod spread) {
 		if (spread == null) {
@@ -167,9 +167,9 @@ public final class G2DUtils {
 	}
 
 	/**
-	 * 円錐グラデーションを厳密に描く AWT Paint へ変換する(2026-08-29)。
+	 * Converts to an AWT Paint that accurately renders a conic gradient (2026-08-29).
 	 *
-	 * @param gradient 円錐グラデーション
+	 * @param gradient conic gradient
 	 * @return AWT Paint
 	 */
 	public static java.awt.Paint toAwtPaint(final ConicGradient gradient) {
@@ -244,8 +244,8 @@ public final class G2DUtils {
 		if (image instanceof RasterImageImpl) {
 			bimage = (BufferedImage) ((RasterImageImpl) image).getImage();
 		} else {
-			// 1pt未満の画像(1px画像のpx→pt変換等)を(int)で切り捨てると0になり
-			// BufferedImageが生成できない。切り上げ+最低1pxを保証する
+			// Truncating images smaller than 1 pt (e.g. px-to-pt conversion of a 1 px image) with (int) gives 0,
+			// preventing BufferedImage creation. Round up and ensure a minimum of 1 px.
 			bimage = new BufferedImage(Math.max(1, (int) Math.ceil(width)), Math.max(1, (int) Math.ceil(height)),
 					BufferedImage.TYPE_INT_ARGB);
 			Graphics2D bg = (Graphics2D) bimage.getGraphics();
@@ -423,7 +423,7 @@ public final class G2DUtils {
 			try {
 				start = input.getStreamPosition();
 			} catch (final IOException e) {
-				// 戻せないだけ
+				// Unable to rewind; nothing more.
 			}
 		}
 		long width, height;
@@ -443,7 +443,7 @@ public final class G2DUtils {
 					input.seek(start);
 					reader.setInput(input, reader.isSeekForwardOnly(), reader.isIgnoringMetadata());
 				} catch (final IOException | IndexOutOfBoundsException e) {
-					// 戻せないだけ
+					// Unable to rewind; nothing more.
 				}
 			}
 		}
@@ -456,7 +456,7 @@ public final class G2DUtils {
 	}
 
 	/**
-	 * GIFの論理画面の寸法を返します(GIFでなければnull)。
+	 * Returns the GIF logical screen dimensions (null for non-GIF images).
 	 */
 	private static long[] gifLogicalScreen(final ImageReader reader) throws IOException {
 		if (!"gif".equalsIgnoreCase(reader.getFormatName())) {
@@ -509,9 +509,9 @@ public final class G2DUtils {
 	public static BufferedImage loadImage(ImageReader reader, ImageInputStream imageIn, final long pixelLimit)
 			throws IOException {
 		try {
-			// 呼び出し側は直前にメタデータ(EXIF)を読んで位置を進めていることがあるので、必ず先頭から読む
-			// (2026-10-05)。以前は上限があるときしか戻さず、GIF は ImageIO が途中から読んで失敗し、AWT
-			// Toolkit へ落ちていた。Toolkit はアニメーションを裏で進めるので、描くコマが実行の速さで変わった
+			// Always read from the beginning: the caller may have just read metadata (EXIF) and advanced the position
+			// (2026-10-05). Previously, rewinding occurred only with a limit; ImageIO failed to read GIFs from the middle
+			// and fell back to AWT Toolkit. Toolkit advances animation in the background, so the frame depended on execution speed.
 			imageIn.seek(0);
 			if (pixelLimit >= 0) {
 				reader.setInput(imageIn);
@@ -520,11 +520,11 @@ public final class G2DUtils {
 			}
 			BufferedImage buffer = null;
 			if ("png".equalsIgnoreCase(reader.getFormatName())) {
-				// PNGのgAMAガンマ補正(2026-08-01、旧JAI系自前デコーダ約2,500行の
-				// 置換)。ImageIOはgAMAチャンクを復号に反映しないが、ブラウザは
-				// 反映する——旧デコーダと同じ「表示指数2.2のガンマLUT」を
-				// ImageIOの復号結果へ適用して挙動を保存する(visual golden
-				// 0115-z-index/000-ABSOLUTE=gAMA 0.22727のorder.pngで固定)
+				// PNG gAMA gamma correction (2026-08-01, replacing about 2,500 lines of the old custom JAI-based decoder).
+				// ImageIO does not apply gAMA chunks during decoding, but browsers do.
+				// Preserve behavior by applying the same "gamma LUT with display exponent 2.2" as the old decoder
+				// to the ImageIO decoding result (fixed by the visual golden
+				// 0115-z-index/000-ABSOLUTE, using order.png with gAMA 0.22727).
 				try {
 					buffer = decodePngWithGamma(reader, imageIn);
 				} catch (VirtualMachineError e) {
@@ -600,10 +600,10 @@ public final class G2DUtils {
 	}
 
 	/**
-	 * ImageIOでPNGを復号し、gAMAチャンクがあれば旧JAI系デコーダと同じ
-	 * ガンマLUT(復号指数 = 1 / (fileGamma × 表示指数2.2))を適用します。
-	 * sRGBチャンクがある場合はgAMAを無視する(PNG仕様・旧デコーダと同じ)。
-	 * 実質恒等(標準のgAMA=1/2.2)の場合はLUTを掛けない。
+	 * Decodes PNG with ImageIO and, if a gAMA chunk is present, applies the same gamma LUT
+	 * as the old JAI-based decoder (decoding exponent = 1 / (fileGamma × display exponent 2.2)).
+	 * Ignores gAMA if an sRGB chunk is present (as required by PNG and as the old decoder did).
+	 * Skips the LUT when effectively identity (standard gAMA=1/2.2).
 	 */
 	private static BufferedImage decodePngWithGamma(final ImageReader reader, final ImageInputStream imageIn)
 			throws IOException {
@@ -615,7 +615,7 @@ public final class G2DUtils {
 		}
 		final int[] lut = new int[256];
 		for (int i = 0; i < 256; ++i) {
-			// 旧PNGImage.initGammaLutと同じ丸め
+			// Same rounding as the old PNGImage.initGammaLut.
 			final int v = (int) (Math.pow(i / 255.0, exponent) * 255.0 + 0.5);
 			lut[i] = Math.min(v, 255);
 		}
@@ -635,7 +635,7 @@ public final class G2DUtils {
 	}
 
 	/**
-	 * PNGのガンマ復号指数を返します(補正不要なら1.0)。
+	 * Returns the PNG gamma decoding exponent (1.0 if no correction is needed).
 	 */
 	private static double pngGammaExponent(final ImageReader reader) {
 		try {
@@ -643,7 +643,7 @@ public final class G2DUtils {
 			Double fileGamma = null;
 			for (org.w3c.dom.Node node = tree.getFirstChild(); node != null; node = node.getNextSibling()) {
 				if ("sRGB".equals(node.getNodeName())) {
-					// sRGBチャンクがあればgAMAは無視
+					// Ignore gAMA if an sRGB chunk is present.
 					return 1.0;
 				}
 				if ("gAMA".equals(node.getNodeName())) {
@@ -655,8 +655,8 @@ public final class G2DUtils {
 				return 1.0;
 			}
 			final double exponent = 1.0 / (fileGamma * 2.2);
-			// 標準のsRGB相当(gAMA=45455)は恒等——LUT適用を省く。よく書かれる 45000 も含める(指数 1.0101。
-			// 2026-10-05、±0.01 だとわずかに外れ、色はほぼ変わらないのに色票の PNG が ARGB に変わって大きくなった)
+			// Standard sRGB-equivalent gamma (gAMA=45455) is identity: skip the LUT. Include the common 45000 (exponent 1.0101).
+			// (2026-10-05: ±0.01 barely excluded it, enlarging a color-chart PNG by converting it to ARGB with almost no color change.)
 			return Math.abs(exponent - 1.0) < 0.02 ? 1.0 : exponent;
 		} catch (final Exception e) {
 			return 1.0;

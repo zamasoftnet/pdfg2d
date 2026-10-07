@@ -491,10 +491,10 @@ public class Type2CharString {
 							break;
 						case HFLEX: {
 							// dx1 dx2 dy2 dx3 dx4 dx5 dx6
-							// 5点目・6点目は**開始時のy**へ戻る(仕様: 最後の曲線の
-							// 終点は最初の曲線の始点と同じy)。2026-08-16修正:
-							// 旧実装はdy2を足したままのyを使っており、浅い曲線が
-							// ずれていた
+							// The fifth and sixth points return to **the starting y** (the specification requires the final curve's
+							// endpoint to have the same y as the first curve's start). Fixed on 2026-08-16:
+							// the old implementation used y with dy2 still added,
+							// which shifted shallow curves.
 							final int hflexStartY = cy;
 							float x1 = cx += this.operandStack.get(0);
 							float y1 = cy;
@@ -517,8 +517,8 @@ public class Type2CharString {
 							break;
 						case HFLEX1: {
 							// dx1 dy1 dx2 dy2 dx3 dx4 dx5 dy5 dx6
-							// 最終点のyは**開始時のy**へ戻る(2026-08-16修正:
-							// 旧実装はdy1+dy2+dy5を足したままのyを使っていた)
+							// The final point's y returns to **the starting y** (fixed on 2026-08-16:
+							// the old implementation used y with dy1+dy2+dy5 still added).
 							final int hflex1StartY = cy;
 							float x1 = cx += this.operandStack.get(0);
 							float y1 = cy += -this.operandStack.get(1);
@@ -541,9 +541,9 @@ public class Type2CharString {
 							break;
 						case FLEX1: {
 							// dx1 dy1 dx2 dy2 dx3 dy3 dx4 dy4 dx5 dy5 d6
-							// 最終点は、移動量の大きい軸にだけd6を足し、もう一方は
-							// **開始位置へ戻る**(2026-08-16修正: 旧実装はd6をxとy
-							// 両方へ足した上、この分岐自体が無かった)
+							// The final point adds d6 only on the axis with the larger displacement; the other axis
+							// **returns to the starting position** (fixed on 2026-08-16: the old implementation added d6 to both x and y
+							// and lacked this branch entirely).
 							final int flex1StartX = cx, flex1StartY = cy;
 							final int flex1Dx = this.operandStack.get(0) + this.operandStack.get(2)
 									+ this.operandStack.get(4) + this.operandStack.get(6)
@@ -710,9 +710,9 @@ public class Type2CharString {
 		if (b0 == 28) {
 			int b1 = this.raf.read();
 			int b2 = this.raf.read();
-			// **符号付き**16bit。符号を落とすと-1109以下が+64000台に化ける
-			// (2026-09-01。1000 upmのフォントではこの符号化まで届く差分が
-			// ほとんど無く、2048 upmのPretendardで字形が壊れて発覚)
+			// **Signed** 16-bit. Dropping the sign turns -1109 and below into values in the +64000 range
+			// (2026-09-01. Deltas rarely reached this encoding in 1000 upm fonts;
+			// malformed glyphs in 2048 upm Pretendard revealed it).
 			return (short) (b1 << 8 | b2);
 		}
 		if (b0 == 255) {
@@ -720,7 +720,7 @@ public class Type2CharString {
 			int b2 = this.raf.read();
 			int b3 = this.raf.read();
 			int b4 = this.raf.read();
-			// Type 2では16.16固定小数(DICT dataの32bit整数とは違う)
+			// Type 2 uses 16.16 fixed point (unlike the 32-bit integer in DICT data).
 			return Math.round((b1 << 24 | b2 << 16 | b3 << 8 | b4) / 65536f);
 		}
 		throw new IOException("Invalid integer: " + b0);

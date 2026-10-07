@@ -6,12 +6,12 @@ import java.awt.image.DataBufferInt;
 import net.zamasoft.pdfg2d.util.ColorUtils;
 
 /**
- * 層(ARGB ラスタ)に掛ける画素効果(2026-08-29)。ガウスぼかし・色行列・落とし影。
+ * Pixel effects for layers (ARGB rasters) (2026-08-29): Gaussian blur, color matrices, and drop shadows.
  *
  * <p>
- * 作業表現は {@code float[4][w*h]}(0=A, 1=R, 2=G, 3=B、0..1)。ぼかしと合成は
- * 乗算済み(premultiplied)で行い縁が暗くならないようにし、色行列だけは
- * CSS/SVG(feColorMatrix)と同じ非乗算 RGBA に対して掛ける。
+ * The working representation is {@code float[4][w*h]} (0=A, 1=R, 2=G, 3=B, 0..1).
+ * Blur and compositing use premultiplied values to avoid dark edges; only color matrices
+ * operate on non-premultiplied RGBA, as in CSS/SVG (feColorMatrix).
  * </p>
  */
 public final class RasterEffects {
@@ -19,14 +19,14 @@ public final class RasterEffects {
 		// utility
 	}
 
-	/** ぼかし半径(3σ)を超える成分は無視できるとみなす。 */
+	/** Treats contributions beyond the blur radius (3σ) as negligible. */
 	public static int kernelRadius(final double sigma) {
 		return sigma > 0 ? (int) Math.ceil(3 * sigma) : 0;
 	}
 
 	/**
-	 * ユーザー空間のσをデバイス空間へ写す(変換の面積倍率の平方根)。
-	 * 異方性のある変換(縦横で倍率が違う)は平均化される。
+	 * Maps user-space σ to device space (square root of the transform's area scale).
+	 * Averages anisotropic transforms (different horizontal and vertical scales).
 	 */
 	public static double deviceSigma(final AffineTransform at, final double sigma) {
 		if (!(sigma > 0)) {
@@ -36,7 +36,7 @@ public final class RasterEffects {
 		return sigma * Math.sqrt(det);
 	}
 
-	/** 正規化したガウス核(長さ 2r+1)。 */
+	/** Normalized Gaussian kernel (length 2r+1). */
 	public static float[] gaussianKernel(final double sigma) {
 		final int r = kernelRadius(sigma);
 		final float[] k = new float[2 * r + 1];
@@ -53,9 +53,9 @@ public final class RasterEffects {
 	}
 
 	/**
-	 * 1面をガウスぼかしする(分離可能な畳み込み、面の外は 0)。
+	 * Applies Gaussian blur to one plane (separable convolution; values outside the plane are 0).
 	 *
-	 * @param plane w*h の値。書き換えられる
+	 * @param plane w*h values; modified in place
 	 */
 	public static void gaussianBlur(final float[] plane, final int w, final int h, final double sigma) {
 		if (!(sigma > 0) || w <= 0 || h <= 0) {
@@ -64,7 +64,7 @@ public final class RasterEffects {
 		final float[] k = gaussianKernel(sigma);
 		final int r = k.length / 2;
 		final float[] tmp = new float[w * h];
-		// 横
+		// Horizontal.
 		for (int y = 0; y < h; ++y) {
 			final int row = y * w;
 			for (int x = 0; x < w; ++x) {
@@ -76,7 +76,7 @@ public final class RasterEffects {
 				tmp[row + x] = sum;
 			}
 		}
-		// 縦
+		// Vertical.
 		for (int x = 0; x < w; ++x) {
 			for (int y = 0; y < h; ++y) {
 				float sum = 0;
@@ -89,7 +89,7 @@ public final class RasterEffects {
 		}
 	}
 
-	/** 4面すべてをぼかす。 */
+	/** Blurs all four planes. */
 	public static void gaussianBlur(final float[][] planes, final int w, final int h, final double sigma) {
 		for (final float[] plane : planes) {
 			gaussianBlur(plane, w, h, sigma);
@@ -97,8 +97,8 @@ public final class RasterEffects {
 	}
 
 	/**
-	 * TYPE_INT_ARGB / TYPE_INT_ARGB_PRE の画像を面へ展開する。
-	 * 画像が乗算済みなら面も乗算済み、そうでなければ非乗算のまま。
+	 * Expands a TYPE_INT_ARGB / TYPE_INT_ARGB_PRE image into planes.
+	 * Planes remain premultiplied if the image is premultiplied, otherwise non-premultiplied.
 	 */
 	public static float[][] toPlanes(final BufferedImage image) {
 		final int w = image.getWidth(), h = image.getHeight();
@@ -114,7 +114,7 @@ public final class RasterEffects {
 		return p;
 	}
 
-	/** 乗算済みの面を TYPE_INT_ARGB_PRE の画像にする。 */
+	/** Converts premultiplied planes to a TYPE_INT_ARGB_PRE image. */
 	public static BufferedImage toPremultipliedImage(final float[][] p, final int w, final int h) {
 		final BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB_PRE);
 		final int[] data = intData(image);
@@ -140,7 +140,7 @@ public final class RasterEffects {
 		return i < 0 ? 0 : (i > 255 ? 255 : i);
 	}
 
-	/** 非乗算 → 乗算済み。 */
+	/** Non-premultiplied -> premultiplied. */
 	public static void premultiply(final float[][] p) {
 		final float[] a = p[0];
 		for (int c = 1; c < 4; ++c) {
@@ -152,7 +152,7 @@ public final class RasterEffects {
 	}
 
 	/**
-	 * 乗算済み TYPE_INT_ARGB_PRE 画像をぼかした新しい画像を返す。
+	 * Returns a new image with blur applied to a premultiplied TYPE_INT_ARGB_PRE image.
 	 */
 	public static BufferedImage blurPremultiplied(final BufferedImage image, final double sigma) {
 		final int w = image.getWidth(), h = image.getHeight();
@@ -162,8 +162,8 @@ public final class RasterEffects {
 	}
 
 	/**
-	 * 4×5 の色行列(行優先、CSS/SVG feColorMatrix と同じ並び、値域 0..1)を
-	 * 非乗算の面に掛けて 0..1 に丸める。
+	 * Applies a 4x5 color matrix (row-major, same order as CSS/SVG feColorMatrix, range 0..1)
+	 * to non-premultiplied planes and clamps to 0..1.
 	 *
 	 * <pre>
 	 * R' = m0·R + m1·G + m2·B + m3·A + m4
@@ -183,7 +183,7 @@ public final class RasterEffects {
 		}
 	}
 
-	/** 全面を係数倍する(不透明度)。乗算済みの面に使う。 */
+	/** Multiplies all planes by a factor (opacity). Used for premultiplied planes. */
 	public static void scale(final float[][] p, final float k) {
 		for (final float[] plane : p) {
 			for (int i = 0; i < plane.length; ++i) {
@@ -193,7 +193,7 @@ public final class RasterEffects {
 	}
 
 	/**
-	 * 面を (dx, dy) 画素ずらした新しい面を返す(双一次補間、外は 0)。
+	 * Returns a new plane shifted by (dx, dy) pixels (bilinear interpolation; values outside are 0).
 	 */
 	public static float[] shift(final float[] plane, final int w, final int h, final double dx, final double dy) {
 		final float[] out = new float[w * h];
@@ -219,13 +219,14 @@ public final class RasterEffects {
 	}
 
 	/**
-	 * 乗算済みの層に落とし影を付ける(層のシルエットをずらしてぼかし、色を付けて
-	 * 層の下に置く)。層自体は書き換えず、合成結果の新しい面を返す。
+	 * Adds a drop shadow to a premultiplied layer (shifts and blurs the layer silhouette,
+	 * colors it, and places it below the layer). Returns new planes containing the composited result
+	 * without modifying the layer itself.
 	 *
-	 * @param p     乗算済みの層
-	 * @param dx    デバイス空間のずれ
-	 * @param sigma デバイス空間のσ
-	 * @param rgba  影の色(非乗算、0..1)
+	 * @param p     premultiplied layer
+	 * @param dx    device-space offset
+	 * @param sigma device-space σ
+	 * @param rgba  shadow color (non-premultiplied, 0..1)
 	 */
 	public static float[][] dropShadow(final float[][] p, final int w, final int h, final double dx,
 			final double dy, final double sigma, final float[] rgba) {
@@ -237,7 +238,7 @@ public final class RasterEffects {
 		for (int i = 0; i < w * h; ++i) {
 			final float shadowA = sa[i] * ca;
 			final float ia = p[0][i];
-			// 層 over 影(どちらも乗算済み)
+			// Layer over shadow (both premultiplied).
 			out[0][i] = ia + shadowA * (1 - ia);
 			out[1][i] = p[1][i] + sa[i] * cc[0] * (1 - ia);
 			out[2][i] = p[2][i] + sa[i] * cc[1] * (1 - ia);

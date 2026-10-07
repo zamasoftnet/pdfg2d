@@ -16,29 +16,28 @@ import net.zamasoft.pdfg2d.font.truetype.GlyfDescript;
 import net.zamasoft.pdfg2d.font.table.Table;
 
 /**
- * WOFF2の復元を、<b>同じフォントの別形式と突き合わせて</b>確かめます。
+ * Verifies WOFF2 reconstruction by <b>comparing with another format of the same font</b>.
  *
  * <p>
- * WOFF2の復元は字形の点の座標を組み直す処理なので、<b>間違えても例外は
- * 出ず、形だけが違う出力</b>になります。したがって「読めた」ことを確かめる
- * 検査では足りません。ここでは同じフォントのWOFF2版と非圧縮版
- * (TTF/WOFF)を両方読み、<b>全ての字形の輪郭の点が一致すること</b>を
- * 確かめます。
+ * WOFF2 reconstruction rebuilds glyph point coordinates, so <b>mistakes do not throw exceptions;
+ * only the output shapes differ</b>. Merely checking that the font can be read is therefore insufficient.
+ * Reads both the WOFF2 and uncompressed (TTF/WOFF) versions of the same font and verifies
+ * that <b>all outline points of every glyph match</b>.
  * </p>
  *
  * <p>
- * 突き合わせ用のフォントは {@code src/test/resources/data/woff2/} に置きます
- * (同じ名前で拡張子違いの2つを1組とする)。置かれていなければこの検査は
- * 飛ばします——第三者フォントの同梱可否は利用者側の判断であり、
- * <b>置けないからといって他の検査を落とさない</b>ため。
+ * Place comparison fonts in {@code src/test/resources/data/woff2/}
+ * (a pair consists of two files with the same name and different extensions).
+ * Skip this check if they are absent: users decide whether third-party fonts may be bundled,
+ * and <b>other checks must not fail just because these fonts cannot be included</b>.
  * </p>
  */
 public class Woff2DecoderTest {
 
 	/**
-	 * 突き合わせ用のフォント置き場です。{@code -Dpdfg2d.woff2PairsDir=...} で
-	 * 外から指せます——<b>第三者のフォントを公開リポジトリへ置かずに</b>
-	 * 手元の資源で回すため。指定が無ければ同梱の場所を見ます。
+	 * Directory for comparison fonts. Can be set externally with {@code -Dpdfg2d.woff2PairsDir=...}
+	 * to run against local resources <b>without putting third-party fonts in the public repository</b>.
+	 * Checks the bundled location if unspecified.
 	 */
 	private static final File DIR = new File(
 			System.getProperty("pdfg2d.woff2PairsDir", "src/test/resources/data/woff2"));
@@ -47,7 +46,7 @@ public class Woff2DecoderTest {
 		return pairs().length > 0;
 	}
 
-	/** 同じ名前でWOFF2と非圧縮版がそろっている組を返します。 */
+	/** Returns pairs with WOFF2 and uncompressed versions under the same name. */
 	static File[][] pairs() {
 		final File[] files = DIR.listFiles();
 		if (files == null) {
@@ -71,20 +70,20 @@ public class Woff2DecoderTest {
 	}
 
 	/**
-	 * 合成字形を<b>形として</b>比べます。
+	 * Compares composite glyphs <b>as shapes</b>.
 	 *
 	 * <p>
-	 * <b>同じ元フォントから作ったWOFFとWOFF2は、バイト単位では一致しません。</b>
-	 * 生成器が違えば符号化の選び方も描画の助言も変わるためで、2026-08-05に
-	 * 実物で次の食い違いを確認しました——引数を語で持つか(LindenHill)、
-	 * 格子への丸め(VictorMono)、輪郭の重なり(cyrillic)、命令の有無
-	 * (VictorMono)、予約ビット(LindenHill)。どれも<b>点の位置を変えません</b>。
+	 * <b>WOFF and WOFF2 produced from the same original font do not match byte for byte.</b>
+	 * Different generators choose different encodings and rendering hints. On 2026-08-05,
+	 * real files showed these differences: word-sized arguments (LindenHill), grid rounding (VictorMono),
+	 * overlapping contours (cyrillic), presence of instructions (VictorMono), and reserved bits (LindenHill).
+	 * None of these <b>changes point positions</b>.
 	 * </p>
 	 *
 	 * <p>
-	 * そこで比べるのは<b>外枠・部品の数・各部品の字形番号・各部品の位置</b>に
-	 * 絞ります。復元がずれていれば部品の数か字形番号が必ず壊れるので、
-	 * これで目的(組み替えを正しく戻せているか)は押さえられます。
+	 * Therefore, compares only <b>bounding boxes, component counts, each component's glyph ID, and component positions</b>.
+	 * Incorrect reconstruction necessarily corrupts the component count or glyph IDs,
+	 * so this verifies the intended property: correctly reversing the transform.
 	 * </p>
 	 */
 	private static void assertSameComposite(final byte[] expected, final byte[] actual, final String message) {
@@ -101,7 +100,7 @@ public class Woff2DecoderTest {
 		}
 	}
 
-	/** 合成字形の部品を {字形番号, 引数1, 引数2} の並びで返します。 */
+	/** Returns composite glyph components as a sequence of {glyph ID, argument1, argument2}. */
 	private static java.util.List<int[]> components(final byte[] b) {
 		final java.util.List<int[]> out = new java.util.ArrayList<>();
 		final int[] p = { 10 };
@@ -126,7 +125,7 @@ public class Woff2DecoderTest {
 		return out;
 	}
 
-	/** 部品の引数を1つ読んで進めます(語かバイトか・符号の有無を印で決める)。 */
+	/** Reads one component argument and advances (flags determine word/byte size and signedness). */
 	private static int arg(final byte[] b, final int[] p, final int flags, final boolean signed) {
 		final int v;
 		if ((flags & 0x0001) != 0) {
@@ -144,10 +143,9 @@ public class Woff2DecoderTest {
 	}
 
 	/**
-	 * 中身が同じかを比べます。<b>末尾の詰め物は無視します</b>——字形の
-	 * 境界合わせの詰め物はファイルによって長さが違い(こちらは4バイト、
-	 * 元のフォントは2バイトのことが多い)、中身の違いではないため。
-	 * ただし<b>はみ出した部分がゼロでなければ違いとして扱います</b>。
+	 * Compares contents. <b>Ignores trailing padding</b>: glyph alignment padding varies by file
+	 * (4 bytes here, often 2 in the original font) and does not represent a content difference.
+	 * However, <b>nonzero excess bytes count as a difference</b>.
 	 */
 	private static void assertSameContent(final byte[] expected, final byte[] actual, final String message) {
 		final int common = Math.min(expected.length, actual.length);
@@ -160,7 +158,7 @@ public class Woff2DecoderTest {
 		}
 	}
 
-	/** 字形の生のバイト列を取り出します(復号を通さずに比べるため)。 */
+	/** Extracts raw glyph bytes (for comparison without decoding). */
 	private static byte[] raw(final GlyfTable g, final int gid) throws java.io.IOException {
 		final int from = g.loca().getOffset(gid);
 		final int len = g.loca().getOffset(gid + 1) - from;
@@ -194,7 +192,7 @@ public class Woff2DecoderTest {
 
 				final GlyfTable ga = (GlyfTable) fa.getTable(Table.GLYF);
 				if (ga == null) {
-					continue; // 字形表を持たない(CFF系)。cmapが読めていれば十分
+					continue; // No glyph table (CFF family). Reading cmap successfully is sufficient.
 				}
 				final GlyfTable gb = (GlyfTable) fb.getTable(Table.GLYF);
 				assertNotNull(gb, name + ": 比較対象にglyfが無い");
@@ -213,17 +211,17 @@ public class Woff2DecoderTest {
 					final boolean compositeB = ((rawB[0] & 0xff) << 8 | (rawB[1] & 0xff)) > 0x7fff;
 					assertEquals(compositeB, compositeA, name + ": 字形" + gid + "の合成の別が違う");
 					if (compositeA) {
-						// **合成字形は生のバイト列で比べる。** 部品の並びは
-						// 組み替えられていないのでそのまま写しており、
-						// 一致すべきである。復号側(GlyfCompositeDescript)を
-						// 通すと**同じバイト列でもファイルによって違う答えが
-						// 出る**ので、突き合わせの物差しに使えない
-						// (2026-08-05にCashSans-MediumItalicで判明)
+						// **Compare composite glyphs as raw bytes.** Their component sequences are
+						// not transformed and are copied unchanged,
+						// so they should match. Passing through the decoder (GlyfCompositeDescript)
+						// can produce **different results for the same bytes depending on the file**,
+						// so it cannot serve as the comparison reference
+						// (found with CashSans-MediumItalic on 2026-08-05).
 						assertSameComposite(rawB, rawA, name + ": 字形" + gid + "の合成");
 						++compared;
 						continue;
 					}
-					// 単純字形は組み直しているので、輪郭の点で比べる
+					// Simple glyphs are reconstructed, so compare their outline points.
 					final GlyfDescript da = ga.getDescription(gid);
 					final GlyfDescript db = gb.getDescription(gid);
 					assertNotNull(da, name + ": 字形" + gid);
@@ -243,8 +241,8 @@ public class Woff2DecoderTest {
 				assertTrue(compared > 0, name + ": 1つも突き合わせていない");
 			}
 			} catch (final RuntimeException e) {
-				// **どのフォントで壊れたかを必ず出す。** 例外だけでは
-				// 170組のどれが原因か分からず、切り分けに時間を溶かす
+				// **Always report which font failed.** An exception alone does not identify
+				// which of the 170 pairs caused it, wasting time on isolation.
 				throw new AssertionError(name + " の突き合わせで失敗: " + e, e);
 			}
 		}

@@ -16,16 +16,16 @@ import net.zamasoft.pdfg2d.gc.paint.ConicGradient;
 import net.zamasoft.pdfg2d.gc.paint.SpreadMethod;
 
 /**
- * {@link ConicGradient} を厳密に描く Java2D の {@link java.awt.Paint}(2026-08-29)。
+ * Java2D {@link java.awt.Paint} that accurately renders {@link ConicGradient} (2026-08-29).
  *
  * <p>
- * デバイス画素の中心を(GCの変換 ∘ グラデーションの変換)の逆で
- * グラデーション空間へ戻し、中心 (cx, cy) から見た角度を「真上=0、時計回り」
- * で測って {@code startAngle} を引き、1周=1 に正規化した位置で色を引く。
- * 色は CSS と同じく非乗算 sRGB で線形補間し、同じ位置の色停止は硬い境界になる。
- * {@link SpreadMethod#PAD} は色停止の範囲外を端の色で埋め(CSS の
- * conic-gradient で停止が 0..1 を覆わない場合と同じ)、REPEAT / REFLECT は
- * 停止範囲を周期として繰り返す。
+ * Maps device pixel centers back to gradient space using the inverse of
+ * (GC transform ∘ gradient transform), measures the angle from (cx, cy) clockwise with 0 straight up,
+ * subtracts {@code startAngle}, and looks up the color at the position normalized to one turn = 1.
+ * Linearly interpolates colors in non-premultiplied sRGB, as CSS does; stops at the same position form hard edges.
+ * {@link SpreadMethod#PAD} fills outside the stop range with the endpoint colors
+ * (as CSS conic-gradient does when stops do not cover 0..1).
+ * REPEAT / REFLECT repeat using the stop range as the period.
  * </p>
  */
 public final class ConicGradientPaint implements java.awt.Paint {
@@ -33,7 +33,7 @@ public final class ConicGradientPaint implements java.awt.Paint {
 
 	private final double[] fractions;
 
-	/** 非乗算 RGBA 0..1。 */
+	/** Non-premultiplied RGBA, 0..1. */
 	private final float[][] rgba;
 
 	private final AffineTransform transform;
@@ -87,8 +87,8 @@ public final class ConicGradientPaint implements java.awt.Paint {
 	}
 
 	/**
-	 * 1周を 0..1 とした位置 {@code t}(任意の実数)の色を非乗算 ARGB で返す。
-	 * テスト用に公開。
+	 * Returns the non-premultiplied ARGB color at position {@code t} (any real number), with one turn spanning 0..1.
+	 * Exposed for testing.
 	 */
 	public int colorAt(final double t) {
 		final int n = this.fractions.length;
@@ -115,7 +115,7 @@ public final class ConicGradientPaint implements java.awt.Paint {
 				}
 			}
 			default -> {
-				// PAD: 停止範囲外は端の色
+				// PAD: endpoint colors outside the stop range.
 			}
 		}
 		if (u <= f0) {
@@ -124,7 +124,7 @@ public final class ConicGradientPaint implements java.awt.Paint {
 		if (u >= fl) {
 			return pack(this.rgba[n - 1]);
 		}
-		// u 以下の最後の停止(同値の停止は後ろを採る=硬い境界)
+		// Last stop at or below u (choose the later stop for equal positions, producing a hard edge).
 		int i = 0;
 		for (int k = 1; k < n - 1; ++k) {
 			if (this.fractions[k] <= u) {
@@ -192,7 +192,7 @@ public final class ConicGradientPaint implements java.awt.Paint {
 						final double dx = x + i + 0.5;
 						final double gx = m00 * dx + m01 * dy + m02 - ConicGradientPaint.this.cx;
 						final double gy = m10 * dx + m11 * dy + m12 - ConicGradientPaint.this.cy;
-						// 真上 (0, -1) を 0 とし時計回り(画面座標)に増える角度
+						// Angle starting at 0 straight up (0, -1) and increasing clockwise (screen coordinates).
 						final double angle = Math.atan2(gx, -gy) - ConicGradientPaint.this.startAngle;
 						double t = angle / twoPi;
 						t -= Math.floor(t);

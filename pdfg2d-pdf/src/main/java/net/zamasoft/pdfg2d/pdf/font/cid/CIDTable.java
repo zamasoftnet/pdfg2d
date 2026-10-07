@@ -33,9 +33,9 @@ public class CIDTable implements Serializable {
 	protected final String javaEncoding;
 
 	/**
-	 * CID表のキャッシュです。WeakReferenceだとGCのたびに消えて重い
-	 * CID表パースが繰り返されるため、SoftReference(ヒープ圧まで温存、
-	 * OutOfMemoryErrorより先に回収)へ変更(2026-08-01)。
+	 * CID table cache. Changed WeakReference to SoftReference because every GC cleared the cache
+	 * and repeated expensive CID table parsing (2026-08-01).
+	 * Retains entries until heap pressure and collects them before OutOfMemoryError.
 	 */
 	transient protected SoftReference<IntMap> toCID = null;
 

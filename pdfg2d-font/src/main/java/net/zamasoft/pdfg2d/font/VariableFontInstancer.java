@@ -12,23 +12,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 可変フォント(OpenType Font Variations)の静的インスタンス化です
- * (2026-08-20新設)。
+ * Static instantiation of variable fonts (OpenType Font Variations)
+ * (introduced on 2026-08-20).
  *
  * <p>
- * 指定の軸座標(例: {@code wght=700})で fvar/avar/gvar を評価し、
- * glyf のアウトライン座標と hmtx の送り幅を書き換えた<b>静的な
- * TrueType フォント</b>を生成します(WeasyPrint が fonttools の
- * instancer で行っているのと同じ「pinned instance」方式)。可変系の
- * テーブル(fvar/gvar/avar/HVAR/MVAR/STAT/cvar)は出力から除きます。
+ * Evaluates fvar/avar/gvar at the specified axis coordinates (e.g. {@code wght=700})
+ * and generates a <b>static TrueType font</b> with rewritten glyf outline coordinates
+ * and hmtx advance widths (the same "pinned instance" approach that WeasyPrint uses
+ * with the fonttools instancer). Removes variation-related tables
+ * (fvar/gvar/avar/HVAR/MVAR/STAT/cvar) from the output.
  * </p>
  *
  * <p>
- * <b>対応範囲</b>: TrueType アウトライン(glyf)のみ。CFF2 は対象外
- * (isVariable が false を返す)。送り幅は gvar のファントムポイント
- * (各グリフ末尾の4点)から更新し、HVAR は評価せず削除する——Google
- * Fonts 配信の TrueType 可変フォントは gvar にファントムのデルタを
- * 持つのが通例で、実測(Mulish/Segoe UI VF)でも幅が一致する。
+ * <b>Scope</b>: TrueType outlines (glyf) only. CFF2 is unsupported
+ * (isVariable returns false). Updates advance widths from gvar phantom points
+ * (the four points at the end of each glyph), and removes HVAR without evaluating it.
+ * TrueType variable fonts distributed by Google Fonts generally have phantom deltas in gvar;
+ * measured widths also match (Mulish/Segoe UI VF).
  * </p>
  */
 public final class VariableFontInstancer {
@@ -37,7 +37,7 @@ public final class VariableFontInstancer {
 		// utility
 	}
 
-	/** sfnt(TTF/OTF)ファイルが fvar と glyf を持つ可変フォントか。 */
+	/** Whether the sfnt (TTF/OTF) file is a variable font with fvar and glyf. */
 	public static boolean isVariable(final File sfnt) {
 		try {
 			final ByteBuffer bb = ByteBuffer.wrap(Files.readAllBytes(sfnt.toPath())).order(ByteOrder.BIG_ENDIAN);
@@ -48,7 +48,7 @@ public final class VariableFontInstancer {
 		}
 	}
 
-	/** fvar の軸タグ列を返します(可変でなければ空)。 */
+	/** Returns the fvar axis tag sequence (empty for non-variable fonts). */
 	public static List<String> axisTags(final File sfnt) throws IOException {
 		final ByteBuffer bb = ByteBuffer.wrap(Files.readAllBytes(sfnt.toPath())).order(ByteOrder.BIG_ENDIAN);
 		final Map<String, int[]> tables = readDirectory(bb, 0);
@@ -65,11 +65,11 @@ public final class VariableFontInstancer {
 	}
 
 	/**
-	 * 軸の範囲をユーザー座標で返します(2026-10-04)。
+	 * Returns the axis range in user coordinates (2026-10-04).
 	 *
-	 * @param sfnt 解凍済みの sfnt ファイル
-	 * @param tag 軸タグ(例: {@code "wght"})
-	 * @return {@code {min, default, max}}。インスタンス化できる可変フォントでないか、軸が無ければ null
+	 * @param sfnt decompressed sfnt file
+	 * @param tag axis tag (e.g. {@code "wght"})
+	 * @return {@code {min, default, max}}, or null if not an instantiable variable font or the axis is absent
 	 */
 	public static double[] axisRange(final File sfnt, final String tag) throws IOException {
 		final ByteBuffer bb = ByteBuffer.wrap(Files.readAllBytes(sfnt.toPath())).order(ByteOrder.BIG_ENDIAN);
@@ -87,13 +87,13 @@ public final class VariableFontInstancer {
 	}
 
 	/**
-	 * 指定軸座標の静的インスタンスを生成して一時ファイルへ書き出します。
+	 * Creates a static instance at the specified axis coordinates and writes it to a temporary file.
 	 *
-	 * @param sfnt 解凍済みの sfnt ファイル(TTC 不可、単一フォント)
-	 * @param userAxes 軸タグ→ユーザー座標(例: {@code {"wght": 700}})。
-	 *        指定の無い軸は既定値で固定される
-	 * @return 生成された静的フォントの一時ファイル。消すのは呼び出し側(2026-10-05 までは deleteOnExit で
-	 *         プロセスの終わりまで残した——変換ごとに作る呼び出しでは常駐するサーバーに溜まる)
+	 * @param sfnt decompressed sfnt file (single font, not TTC)
+	 * @param userAxes axis tag -> user coordinate (e.g. {@code {"wght": 700}}).
+	 *        Unspecified axes are pinned to their defaults
+	 * @return temporary file for the generated static font. The caller deletes it (until 2026-10-05, deleteOnExit
+	 *         kept it until process exit; calls that created one per conversion accumulated files in long-running servers)
 	 */
 	public static File instantiate(final File sfnt, final Map<String, Double> userAxes) throws IOException {
 		final byte[] src = Files.readAllBytes(sfnt.toPath());
@@ -112,7 +112,7 @@ public final class VariableFontInstancer {
 			throw new IOException("not an instantiable variable font (missing tables)");
 		}
 
-		// 軸の正規化座標
+		// Normalized axis coordinates.
 		final Axis[] axes = readFvar(bb, fvarLoc[0]);
 		final double[] coords = new double[axes.length];
 		for (int i = 0; i < axes.length; ++i) {
@@ -134,7 +134,7 @@ public final class VariableFontInstancer {
 			applyAvar(bb, avarLoc[0], coords);
 		}
 
-		// glyf/loca/hmtx の読み出し
+		// Read glyf/loca/hmtx.
 		final int numGlyphs = bb.getShort(maxpLoc[0] + 4) & 0xFFFF;
 		final boolean longLoca = bb.getShort(headLoc[0] + 50) != 0;
 		final int[] loca = new int[numGlyphs + 1];
@@ -154,7 +154,7 @@ public final class VariableFontInstancer {
 			}
 		}
 
-		// gvar を各グリフへ適用
+		// Apply gvar to each glyph.
 		final byte[][] newGlyphs = new byte[numGlyphs][];
 		if (gvarLoc != null) {
 			final Gvar gvar = readGvarHeader(bb, gvarLoc[0]);
@@ -167,7 +167,7 @@ public final class VariableFontInstancer {
 					newGlyphs[gid] = glyphLen == 0 ? new byte[0] : slice(src, glyphOff, glyphLen);
 				} else {
 					applyDeltas(glyph, deltas);
-					// ファントム: [n]=LSB原点X, [n+1]=送りX(横書き)
+					// Phantoms: [n]=LSB origin X, [n+1]=advance X (horizontal writing).
 					final int n = glyph.pointCount();
 					final double advDelta = deltas[0][n + 1] - deltas[0][n];
 					advances[gid] = Math.max(0, (int) Math.round(advances[gid] + advDelta));
@@ -187,7 +187,7 @@ public final class VariableFontInstancer {
 			}
 		}
 
-		// 新しい glyf/loca/hmtx を構築
+		// Build new glyf/loca/hmtx.
 		int glyfSize = 0;
 		for (final byte[] g : newGlyphs) {
 			glyfSize += (g.length + 3) & ~3;
@@ -219,7 +219,7 @@ public final class VariableFontInstancer {
 			}
 		}
 
-		// テーブルの差し替え・削除をして新しい sfnt を組む
+		// Replace and remove tables to assemble a new sfnt.
 		final Map<String, byte[]> out = new LinkedHashMap<>();
 		for (final Map.Entry<String, int[]> e : tables.entrySet()) {
 			final String tag = e.getKey();
@@ -232,7 +232,7 @@ public final class VariableFontInstancer {
 			case "VVAR":
 			case "MVAR":
 			case "STAT":
-				continue; // 可変系は落とす
+				continue; // Drop variation-related tables.
 			case "glyf":
 				out.put(tag, newGlyf);
 				continue;
@@ -246,20 +246,20 @@ public final class VariableFontInstancer {
 				final byte[] head = slice(src, e.getValue()[0], e.getValue()[1]);
 				final ByteBuffer hb = ByteBuffer.wrap(head).order(ByteOrder.BIG_ENDIAN);
 				hb.putShort(50, (short) 1); // indexToLocFormat = long
-				hb.putInt(8, 0); // checkSumAdjustment はリーダが無視するので0
+				hb.putInt(8, 0); // Set checkSumAdjustment to 0 because the reader ignores it.
 				out.put(tag, head);
 				continue;
 			}
 			case "hhea": {
 				final byte[] hhea = slice(src, e.getValue()[0], e.getValue()[1]);
 				final ByteBuffer hb = ByteBuffer.wrap(hhea).order(ByteOrder.BIG_ENDIAN);
-				hb.putShort(34, (short) numGlyphs); // numberOfHMetrics = 全グリフ
+				hb.putShort(34, (short) numGlyphs); // numberOfHMetrics = all glyphs.
 				out.put(tag, hhea);
 				continue;
 			}
 			case "OS/2": {
-				// usWeightClass/usWidthClassをインスタンス座標に合わせる
-				// (フォント選択のウェイトマッチはここを見る)
+				// Match usWeightClass/usWidthClass to the instance coordinates
+				// (font selection checks these for weight matching).
 				final byte[] os2 = slice(src, e.getValue()[0], e.getValue()[1]);
 				final ByteBuffer ob = ByteBuffer.wrap(os2).order(ByteOrder.BIG_ENDIAN);
 				final Double wght = userAxes.get("wght");
@@ -285,7 +285,7 @@ public final class VariableFontInstancer {
 	}
 
 	// ------------------------------------------------------------------
-	// sfnt 基盤
+	// sfnt infrastructure.
 
 	private static Map<String, int[]> readDirectory(final ByteBuffer bb, final int base) throws IOException {
 		final int tag = bb.getInt(base);
@@ -417,7 +417,7 @@ public final class VariableFontInstancer {
 	}
 
 	// ------------------------------------------------------------------
-	// glyf の座標モデル
+	// glyf coordinate model.
 
 	private static final class Glyph {
 		boolean empty;
@@ -426,11 +426,11 @@ public final class VariableFontInstancer {
 		int xMin, yMin, xMax, yMax;
 		int[] endPts; // simple
 		byte[] instructions; // simple
-		byte[] flags; // simple: 展開済み(点ごと)
-		int[] xs, ys; // simple: 絶対座標(点ごと)
+		byte[] flags; // simple: expanded (per point).
+		int[] xs, ys; // simple: absolute coordinates (per point).
 		// composite
-		byte[] compositeData; // ヘッダ以降の生データ
-		int[] componentOffsets; // compositeData内の各成分のargs位置
+		byte[] compositeData; // Raw data after the header.
+		int[] componentOffsets; // Position of each component's args in compositeData.
 		boolean[] componentArgsAreWords;
 		boolean[] componentArgsAreXY;
 		int componentCount;
@@ -561,7 +561,7 @@ public final class VariableFontInstancer {
 			return out;
 		}
 		final int numPts = g.xs.length;
-		// bboxを再計算
+		// Recompute bbox.
 		int xMin = Integer.MAX_VALUE, yMin = Integer.MAX_VALUE, xMax = Integer.MIN_VALUE, yMax = Integer.MIN_VALUE;
 		for (int i = 0; i < numPts; ++i) {
 			xMin = Math.min(xMin, g.xs[i]);
@@ -576,7 +576,7 @@ public final class VariableFontInstancer {
 		g.yMin = yMin;
 		g.xMax = xMax;
 		g.yMax = yMax;
-		// フラグはrepeat圧縮なしで素直に出す(合法)
+		// Write flags directly without repeat compression (valid).
 		final java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
 		final java.io.DataOutputStream d = new java.io.DataOutputStream(out);
 		try {
@@ -592,7 +592,7 @@ public final class VariableFontInstancer {
 			d.write(g.instructions);
 			final byte[] newFlags = new byte[numPts];
 			for (int i = 0; i < numPts; ++i) {
-				int f = g.flags[i] & 0x01; // ON_CURVE のみ引き継ぐ
+				int f = g.flags[i] & 0x01; // Retain only ON_CURVE.
 				final int dx = g.xs[i] - (i == 0 ? 0 : g.xs[i - 1]);
 				final int dy = g.ys[i] - (i == 0 ? 0 : g.ys[i - 1]);
 				if (dx == 0) {
@@ -655,9 +655,9 @@ public final class VariableFontInstancer {
 	}
 
 	/**
-	 * 指定グリフのデルタ(x,y)を全タプルの合算で返します。適用可能な
-	 * タプルが無ければ null。返り値は {@code [2][pointCount+4]}
-	 * (末尾4点はファントム)。
+	 * Returns deltas (x,y) for the specified glyph, summed across all tuples.
+	 * Returns null if no tuples apply. The result is {@code [2][pointCount+4]}
+	 * (the last four points are phantoms).
 	 */
 	private static double[][] computeDeltas(final ByteBuffer bb, final Gvar gvar, final int gvarBase, final int gid,
 			final double[] coords, final Glyph glyph) throws IOException {
@@ -715,7 +715,7 @@ public final class VariableFontInstancer {
 				}
 			}
 
-			// スカラー計算
+			// Compute the scalar.
 			double scalar = 1;
 			for (int a = 0; a < axisCount; ++a) {
 				final double p = peak[a];
@@ -810,7 +810,7 @@ public final class VariableFontInstancer {
 			count = ((count & 0x7F) << 8) | (bb.get(p++) & 0xFF);
 		}
 		if (count == 0) {
-			// 全点
+			// All points.
 			return new int[][] { null, { p } };
 		}
 		final int[] points = new int[count];
@@ -857,7 +857,7 @@ public final class VariableFontInstancer {
 		return deltas;
 	}
 
-	/** IUP: 触れられていない点を輪郭ごとに線形補間します(css-fonts/OT仕様)。 */
+	/** IUP: linearly interpolates untouched points within each contour (css-fonts/OT specification). */
 	private static void interpolateUntouched(final Glyph g, final double[] fx, final double[] fy,
 			final boolean[] touched) {
 		int start = 0;
@@ -870,7 +870,7 @@ public final class VariableFontInstancer {
 
 	private static void interpolateContour(final int[] orig, final double[] deltas, final boolean[] touched,
 			final int start, final int end) {
-		// 輪郭内にtouchedが無ければ0のまま、全touchedなら何もしない
+		// Leave values at 0 if the contour has no touched points; do nothing if all points are touched.
 		int first = -1;
 		for (int i = start; i <= end; ++i) {
 			if (touched[i]) {
@@ -886,12 +886,12 @@ public final class VariableFontInstancer {
 		do {
 			int next = i == end ? start : i + 1;
 			if (!touched[next]) {
-				// 次のtouchedまで走る
+				// Advance to the next touched point.
 				int j = next;
 				while (!touched[j]) {
 					j = j == end ? start : j + 1;
 				}
-				// prev=i(touched), j(touched) の間の各点を補間
+				// Interpolate each point between prev=i (touched) and j (touched).
 				int k = next;
 				while (k != j) {
 					deltas[k] = interpolate(orig[k], orig[i], orig[j], deltas[i], deltas[j]);
@@ -924,7 +924,7 @@ public final class VariableFontInstancer {
 			return;
 		}
 		if (g.composite) {
-			// 成分オフセット(ARGS_ARE_XY_VALUESのみ)へ適用
+			// Apply to component offsets (ARGS_ARE_XY_VALUES only).
 			final ByteBuffer bb = ByteBuffer.wrap(g.compositeData).order(ByteOrder.BIG_ENDIAN);
 			for (int i = 0; i < g.componentCount; ++i) {
 				if (!g.componentArgsAreXY[i]) {

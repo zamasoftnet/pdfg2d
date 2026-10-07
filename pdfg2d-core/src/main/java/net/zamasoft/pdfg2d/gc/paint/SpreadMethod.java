@@ -1,13 +1,13 @@
 package net.zamasoft.pdfg2d.gc.paint;
 
 /**
- * グラデーションの定義域外の塗り方(SVGのspreadMethod相当、2026-08-29)。
+ * How to paint outside a gradient's domain (equivalent to SVG spreadMethod, 2026-08-29).
  */
 public enum SpreadMethod {
-	/** 端の色で埋める(既定)。 */
+	/** Fills with the endpoint colors (default). */
 	PAD,
-	/** 周期を繰り返す(CSSのrepeating-*-gradient)。 */
+	/** Repeats the period (CSS repeating-*-gradient). */
 	REPEAT,
-	/** 折り返して繰り返す。 */
+	/** Repeats with alternating direction. */
 	REFLECT
 }

@@ -69,12 +69,12 @@ public class TrueTypeGlyphList implements GlyphList {
 		final int pointCount = gd.getPointCount();
 		final int contourCount = gd.getContourCount();
 
-		// 輪郭ごとに、点列を巡回しながら2次ベジェへ変換する
-		// (2026-08-15修正: 旧実装は「先頭2点を末尾へ継ぎ足す」方式で輪郭を
-		// 閉じようとしていたが、残り1点になった反復で未初期化の隣接点を読み、
-		// **始点へ戻る最後の曲線を落として直線で閉じていた**。〇や( の
-		// 滑らかな側面が弦に化ける実書籍の欠陥として発覚。TrueTypeの
-		// 標準的な巡回アルゴリズムへ置き換える)
+		// For each contour, traverse the point sequence cyclically and convert to quadratic Bezier curves.
+		// (Fixed on 2026-08-15: the old implementation tried to close contours by appending the first two points
+		// to the end, but read an uninitialized adjacent point in the iteration with one point remaining,
+		// **dropping the last curve back to the start and closing with a straight line**. Found in a real book
+		// where the smooth sides of 〇 and ( became chords. Replaced with the standard
+		// TrueType cyclic traversal algorithm.)
 		int start = 0;
 		for (int c = 0; c < contourCount; ++c) {
 			final int end = gd.getEndPtOfContours(c);
@@ -87,8 +87,8 @@ public class TrueTypeGlyphList implements GlyphList {
 				continue;
 			}
 
-			// 開始点を決める。先頭が曲線上ならそれ、そうでなければ末尾、
-			// 双方とも制御点なら両者の中点(TrueTypeの規約)
+			// Choose the start point: the first point if on-curve, otherwise the last,
+			// or their midpoint if both are control points (TrueType convention).
 			final float firstX = gd.getXCoordinate(start) * scale;
 			final float firstY = -(gd.getYCoordinate(start) * scale);
 			final boolean firstOn = (gd.getFlags(start) & GlyfDescript.onCurve) != 0;
@@ -113,7 +113,7 @@ public class TrueTypeGlyphList implements GlyphList {
 			}
 			path.moveTo(startX, startY);
 
-			// 制御点を溜めながら、開始点の次から輪郭を1周する
+			// Make one circuit of the contour from the point after the start, accumulating control points.
 			boolean hasControl = false;
 			float controlX = 0, controlY = 0;
 			final int steps = firstOn ? n - 1 : n;
@@ -131,7 +131,7 @@ public class TrueTypeGlyphList implements GlyphList {
 					}
 				} else {
 					if (hasControl) {
-						// 連続する制御点の間には曲線上の点が省略されている
+						// An on-curve point is implicit between consecutive control points.
 						path.quadTo(controlX, controlY, midValue(controlX, px), midValue(controlY, py));
 					}
 					controlX = px;
@@ -139,7 +139,7 @@ public class TrueTypeGlyphList implements GlyphList {
 					hasControl = true;
 				}
 			}
-			// 開始点へ戻って閉じる。制御点が残っていれば最後の曲線を必ず描く
+			// Close by returning to the start. Always draw the final curve if a control point remains.
 			if (hasControl) {
 				path.quadTo(controlX, controlY, startX, startY);
 			}

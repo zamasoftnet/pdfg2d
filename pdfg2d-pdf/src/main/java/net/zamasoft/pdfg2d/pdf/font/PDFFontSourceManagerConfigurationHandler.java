@@ -23,15 +23,15 @@ import net.zamasoft.pdfg2d.gc.font.UnicodeRange;
 import net.zamasoft.pdfg2d.pdf.ObjectRef;
 
 /**
- * fonts.xmlのSAXハンドラです。XML構文の解釈と属性の型変換だけを行い、
- * ファイル解決・フォントパース・索引・登録は{@link FontCatalogBuilder}へ
- * 委譲します(2026-08-01、90点計画増分8——従来は593行の単一クラスが
- * 全責務を抱えていた)。
+ * SAX handler for fonts.xml. Only interprets XML syntax and converts attribute types;
+ * delegates file resolution, font parsing, indexing, and registration to {@link FontCatalogBuilder}
+ * (2026-08-01, 90-point plan increment 8: previously a single 593-line class
+ * held all these responsibilities).
  *
  * <p>
- * {@code alias}/{@code include}/{@code exclude}子要素は直前のフォント宣言を
- * 修飾するため、宣言の完成は親要素のendElementまで遅延する——この
- * バッファリング({@link #fontSources})だけがハンドラに残る状態である。
+ * The {@code alias}/{@code include}/{@code exclude} child elements modify the preceding font declaration,
+ * so declaration completion is deferred until the parent's endElement.
+ * This buffering ({@link #fontSources}) is the only state remaining in the handler.
  * </p>
  *
  * @author MIYABE Tatsuhiko
@@ -55,7 +55,7 @@ class PDFFontSourceManagerConfigurationHandler extends DefaultHandler {
 
 	private PdfFontSourceWrapper[] fontSources;
 
-	/** 実行側(I/O・パース・登録)。構築結果のコレクションもここが持つ。 */
+	/** Execution side (I/O, parsing, registration). Also owns the collections of constructed results. */
 	final FontCatalogBuilder catalog;
 
 	PDFFontSourceManagerConfigurationHandler(URI base) throws IOException {
@@ -67,8 +67,8 @@ class PDFFontSourceManagerConfigurationHandler extends DefaultHandler {
 	}
 
 	/**
-	 * 索引の鮮度判定に使うスキャン条件です。typesとface属性(readTTFが
-	 * 構築後に適用する上書き)が変われば別条件として索引ミスにする。
+	 * Scan conditions used to check index freshness. Changes to types or face attributes
+	 * (overrides applied by readTTF after construction) count as different conditions and cause an index miss.
 	 */
 	private static String toScanKey(final Attributes atts) {
 		return String.join(" ", String.valueOf(atts.getValue("types")), String.valueOf(atts.getValue("name")),
@@ -155,9 +155,9 @@ class PDFFontSourceManagerConfigurationHandler extends DefaultHandler {
 							final List<FontSource> list = this.catalog.systemFont(atts.getValue("src"),
 									atts.getValue("file"), atts.getValue("dir"), atts.getValue("types"),
 									FontLoader.toFontFace(atts));
-							// 旧実装は生ソースをPdfFontSourceWrapper[]へtoArrayしており
-							// ArrayStoreExceptionが潜在していた(system-font要素は
-							// テスト構成に無く未発火)。他経路と同じくラップする
+							// The old implementation called toArray on raw sources with PdfFontSourceWrapper[],
+							// leaving a latent ArrayStoreException (not triggered because system-font elements
+							// were absent from test configurations). Wrap sources as in the other paths.
 							this.fontSources = wrap(list);
 						} catch (Exception e) {
 							LOG.log(Level.WARNING, "Failed to get font info for '" + atts.getValue("src") + "'.", e);

@@ -33,14 +33,14 @@ public interface FontStyle {
 	}
 
 	/**
-	 * 縦組中の字形方向。横組では参照されない。
+	 * Glyph orientation in vertical writing. Not consulted in horizontal writing.
 	 */
 	public enum TextOrientation {
 		MIXED, UPRIGHT, SIDEWAYS
 	}
 
 	/**
-	 * 縦組中の字形方向を返す。既存実装は従来挙動(mixed)を保つ。
+	 * Returns the glyph orientation in vertical writing. Existing implementations retain the previous behavior (mixed).
 	 */
 	public default TextOrientation getTextOrientation() {
 		return TextOrientation.MIXED;
@@ -68,10 +68,10 @@ public interface FontStyle {
 	}
 
 	/**
-	 * 幅級(CSS {@code font-stretch}をOS/2 {@code usWidthClass}の1..9へ
-	 * 丸めた値、5=normal)を返します(2026-08-29)。既存実装は通常幅。
+	 * Returns the width class (CSS {@code font-stretch} rounded to OS/2 {@code usWidthClass}
+	 * 1..9, 5=normal) (2026-08-29). Existing implementations use normal width.
 	 *
-	 * @return 幅級 1..9
+	 * @return width class 1..9
 	 */
 	public default int getWidthClass() {
 		return net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS;

@@ -143,8 +143,8 @@ class Type1Font implements PDFFont {
 			StringBuilder buff = new StringBuilder();
 			for (int j = 0; j < glyphCount; ++j) {
 				int gid = glyphIds[j];
-				// 組版と同じ値(前の字と今の字の組、正なら詰める)で描く。2026-10-04 までは今の字と前の字の
-				// 組(逆の組: 「To」が詰まらず「oT」が詰まる)を引き、font-feature-settings の kern 0 も効かなかった
+				// Draw with the same value as layout (previous/current character pair, positive reduces spacing). Until 2026-10-04,
+				// used the reversed pair ("To" stayed loose while "oT" tightened), and font-feature-settings kern 0 had no effect.
 				short kerning = j == 0 ? 0
 						: (short) -Math.round(fm.getKerning(pgid, gid) * FontSource.DEFAULT_UNITS_PER_EM / size);
 				if (xadvances != null) {

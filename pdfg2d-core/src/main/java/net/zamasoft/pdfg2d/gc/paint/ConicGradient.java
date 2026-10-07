@@ -3,14 +3,14 @@ package net.zamasoft.pdfg2d.gc.paint;
 import java.awt.geom.AffineTransform;
 
 /**
- * 円錐グラデーション(CSSのconic-gradient、2026-08-29)。
+ * Conic gradient (CSS conic-gradient, 2026-08-29).
  *
  * <p>
- * 中心 (cx, cy) から角度で色が変わる。角度は {@code startAngle}(ラジアン、
- * 真上=0)から時計回りに増え、{@code fractions} は 0..1 で1周に対応する。
- * {@code transform} はユーザー空間へ写す変換(楕円化・回転用)。
- * PDFでは Type 4 Gouraud メッシュで表現される。利用側は
- * {@link net.zamasoft.pdfg2d.gc.GC.Capability#CONIC_GRADIENT} を確認してから使う。
+ * Colors vary with the angle around the center (cx, cy). Angles increase clockwise
+ * from {@code startAngle} (radians, 0 points straight up), and {@code fractions} from 0..1 span one turn.
+ * {@code transform} maps to user space (for elliptical distortion and rotation).
+ * PDF represents this as a Type 4 Gouraud mesh. Callers check
+ * {@link net.zamasoft.pdfg2d.gc.GC.Capability#CONIC_GRADIENT} before use.
  * </p>
  */
 public record ConicGradient(double cx, double cy, double startAngle, double[] fractions, Color[] colors,

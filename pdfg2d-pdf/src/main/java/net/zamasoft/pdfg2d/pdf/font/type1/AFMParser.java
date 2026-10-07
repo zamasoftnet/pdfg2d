@@ -26,8 +26,8 @@ public class AFMParser {
 
 	public AFMFontInfo parse(InputStream in) throws ParseException, IOException {
 		this.fontInfo = new AFMFontInfo();
-		// BufferedReaderで1文字readのStreamDecoder往復を回避(2026-08-01、
-		// JFR実測でトークナイザの文字読みが起動時間の上位だった)
+		// Use BufferedReader to avoid a StreamDecoder round trip for every character read (2026-08-01;
+		// JFR measurements showed tokenizer character reads among the largest startup-time costs).
 		this.in = new java.io.BufferedReader(new InputStreamReader(in, "ISO-8859-1"));
 		try {
 			this.ch = this.in.read();

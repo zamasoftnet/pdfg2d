@@ -24,7 +24,7 @@ import net.zamasoft.pdfg2d.gc.image.Image;
  */
 public record SVGImage(GraphicsNode node, double width, double height, Intrinsic intrinsic) implements Image {
 
-	/** 固有寸法ありとして構築します(従来互換)。 */
+	/** Constructs an image with intrinsic dimensions (for compatibility with previous behavior). */
 	public SVGImage(GraphicsNode node, double width, double height) {
 		this(node, width, height, Intrinsic.SIZE);
 	}

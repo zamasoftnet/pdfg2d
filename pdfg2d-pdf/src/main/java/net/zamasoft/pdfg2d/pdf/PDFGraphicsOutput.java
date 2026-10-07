@@ -233,11 +233,11 @@ public abstract class PDFGraphicsOutput extends PDFOutput {
 		iat.preConcatenate(tpdf);
 		iat.concatenate(tpdf);
 
-		// 行列係数はクランプしない(座標用の±32767制限を行列に当てると
-		// 大きな拡大率の中間cmの平行移動が壊れ、幾何全体が崩れる——
-		// writeRealExactのjavadoc参照)。scale/shear成分は座標precisionと
-		// 独立の高精度で書く——丸め誤差が座標値(ページ寸法)に乗算される
-		// (writeRealCoefficientのjavadoc参照、2026-08-27)
+		// Do not clamp matrix coefficients (applying the coordinate limit of ±32767 to matrices
+		// corrupts translation in intermediate cm operations with large scales, breaking the entire geometry;
+		// see writeRealExact's Javadoc). Write scale/shear components at high precision independent of coordinate precision:
+		// rounding errors multiply coordinate values (page dimensions)
+		// (see writeRealCoefficient's Javadoc, 2026-08-27).
 		this.writeRealCoefficient(iat.getScaleX());
 		this.writeRealCoefficient(iat.getShearY());
 		this.writeRealCoefficient(iat.getShearX());

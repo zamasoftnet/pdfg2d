@@ -15,7 +15,7 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 
 /**
  * One logical page per sheet with printer's marks — the layout used for
- * prepress submission (トンボ付き入稿データ). In addition to drawing the
+ * prepress submission (submission data with crop marks). In addition to drawing the
  * marks it maintains the PDF page boxes: MediaBox is the paper, TrimBox the
  * finished page and BleedBox the finished page expanded by the cutting
  * margin, so PDF/X box validation and the marks always agree.

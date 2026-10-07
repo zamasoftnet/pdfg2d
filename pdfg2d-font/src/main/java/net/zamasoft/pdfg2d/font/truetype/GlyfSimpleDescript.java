@@ -187,7 +187,7 @@ public class GlyfSimpleDescript extends GlyfDescript {
 				}
 			}
 		} catch (final ArrayIndexOutOfBoundsException e) {
-			// 壊れた字形(繰り返しが点の数を超える): 読めたところまで使う
+			// Malformed glyph (repeats exceed the point count): use what has been read.
 		}
 	}
 }

@@ -264,29 +264,29 @@ public interface GC {
 	}
 
 	/**
-	 * 出力先が厳密に描ける描画機能(2026-08-29)。
+	 * Drawing capabilities that the output target can render accurately (2026-08-29).
 	 *
 	 * <p>
-	 * 出力形式ごとに厳密化できる機能が異なる。PDF は生成画像によるぼかし・
-	 * 要素単位のフィルタ合成と Type 4 メッシュによる円錐グラデーションに対応する。
-	 * 利用側はまずこれで問い合わせ、できるなら
-	 * 厳密経路({@link #supports(Capability)}がtrueの機能用のAPI)へ、
-	 * できなければ近似へ進み、近似したことを利用者へ知らせる。
-	 * 既定は全てfalse(=近似)。
+	 * The capabilities that can be rendered accurately vary by output format. PDF supports blur
+	 * using generated images, per-element filter compositing, and conic gradients using Type 4 meshes.
+	 * Callers first query this interface and, if supported, use the accurate path
+	 * (the API for capabilities for which {@link #supports(Capability)} is true).
+	 * Otherwise, they use an approximation and notify the user.
+	 * All default to false (= approximation).
 	 * </p>
 	 */
 	public enum Capability {
-		/** ガウスぼかし(box-shadow/text-shadowのblur、filter:blur())。 */
+		/** Gaussian blur (box-shadow/text-shadow blur and filter:blur()). */
 		GAUSSIAN_BLUR,
-		/** 円錐グラデーション(conic-gradient)のPaint。 */
+		/** Paint for conic gradients (conic-gradient). */
 		CONIC_GRADIENT,
-		/** 周期を無限に繰り返すグラデーション(repeating-*)。 */
+		/** Gradients with an infinitely repeating period (repeating-*). */
 		REPEATING_GRADIENT,
-		/** 要素全体を1つの層にしてから色行列・ぼかし等を掛けるフィルタ合成。 */
+		/** Filter compositing that groups the entire element into one layer before applying color matrices, blur, etc. */
 		GROUP_FILTER,
-		/** 描いた内容のシルエットからの落とし影(filter:drop-shadow())。 */
+		/** Drop shadow from the silhouette of rendered content (filter:drop-shadow()). */
 		DROP_SHADOW,
-		/** 要素全体を1つの層としてブレンドする(mix-blend-mode/isolation)。 */
+		/** Blends the entire element as one layer (mix-blend-mode/isolation). */
 		BLEND_GROUP
 	}
 
@@ -305,7 +305,7 @@ public interface GC {
 		UNSUPPORTED
 	}
 
-	/** 出力先が{@code capability}を厳密に描けるなら true。既定は false。 */
+	/** True if the output target can render {@code capability} accurately. Defaults to false. */
 	public default boolean supports(final Capability capability) {
 		return false;
 	}
@@ -461,11 +461,11 @@ public interface GC {
 	public void drawImage(final Image image) throws GraphicsException;
 
 	/**
-	 * 現在の塗りで形をガウスぼかし付きで塗る(box-shadow/text-shadowのblur用)。
-	 * {@link Capability#GAUSSIAN_BLUR} に対応しない出力先では単に {@link #fill(Shape)} する。
+	 * Fills a shape with the current fill and Gaussian blur (for box-shadow/text-shadow blur).
+	 * Output targets without {@link Capability#GAUSSIAN_BLUR} support simply call {@link #fill(Shape)}.
 	 *
-	 * @param shape 塗る形
-	 * @param sigma ぼかしの標準偏差(ユーザー空間単位)
+	 * @param shape shape to fill
+	 * @param sigma standard deviation of the blur (in user space units)
 	 */
 	public default void fillBlurred(final Shape shape, final double sigma) throws GraphicsException {
 		this.fill(shape);
@@ -496,8 +496,8 @@ public interface GC {
 	}
 
 	/**
-	 * 画像(通常は {@link #createGroupImage} で描いた層)に効果を掛けて描く。
-	 * 対応しない出力先では効果を無視して {@link #drawImage(Image)} する。
+	 * Draws an image (usually a layer drawn with {@link #createGroupImage}) with effects.
+	 * Unsupported output targets ignore the effects and call {@link #drawImage(Image)}.
 	 */
 	public default void drawImage(final Image image, final GroupEffects effects) throws GraphicsException {
 		this.drawImage(image);

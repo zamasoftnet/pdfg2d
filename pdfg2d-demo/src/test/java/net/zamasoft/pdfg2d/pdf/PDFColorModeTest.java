@@ -118,8 +118,8 @@ public class PDFColorModeTest {
             inspector.run();
             final var commands = inspector.getCommands();
 
-			// ICC/FOGRA39の正確な値はJDK/LCMSのpatchで揺れるため、
-			// 赤に必要なインキ量の性質だけを検査する。
+			// Exact ICC/FOGRA39 values vary with JDK/LCMS patches,
+			// so check only the properties of the ink amounts required for red.
             boolean found = commands.stream().anyMatch(cmd -> {
                 if (cmd.currentColor != null && cmd.currentColor.length == 4) {
 					return cmd.currentColor[0] < .05f &&

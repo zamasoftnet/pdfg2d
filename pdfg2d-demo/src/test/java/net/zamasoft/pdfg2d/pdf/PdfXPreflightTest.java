@@ -45,7 +45,7 @@ import net.zamasoft.pdfg2d.pdf.preflight.PdfXPreflight;
 import net.zamasoft.pdfg2d.pdf.preflight.PdfXPreflight.Flavour;
 import net.zamasoft.zstream.io.impl.StreamFragmentedOutput;
 
-/** {@link PdfXPreflight} の規則別positive/negative試験です。 */
+/** Positive/negative tests for each rule in {@link PdfXPreflight}. */
 public class PdfXPreflightTest {
 	private static final byte[] FILE_ID = {
 			0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77,
@@ -64,7 +64,7 @@ public class PdfXPreflightTest {
 	}
 
 	/**
-	 * @param withTransparency X-3でも透明・グループを描かせる(生成器が抑止することを見る)
+	 * @param withTransparency requests transparency and groups even for X-3 (checks that the generator suppresses them)
 	 */
 	private byte[] generate(final Flavour flavour, final boolean withTransparency) throws Exception {
 		final var meta = new PDFMetaInfo();
@@ -106,7 +106,7 @@ public class PdfXPreflightTest {
 			gc.drawImage(pdf.addImage(image));
 
 			if (flavour == Flavour.X4 || withTransparency) {
-				// setFillPaint(RGBColor)はalphaを1へ戻すので、alphaは後に設定する
+				// setFillPaint(RGBColor) resets alpha to 1, so set alpha afterward.
 				gc.setFillPaint(RGBColor.create(0, 0, 1));
 				gc.setFillAlpha(.5f);
 				gc.fill(new Rectangle2D.Double(300, 50, 100, 100));
@@ -130,8 +130,8 @@ public class PdfXPreflightTest {
 	private byte[] mutate(final byte[] pdf, final DocumentMutation mutation) throws Exception {
 		try (final var document = Loader.loadPDF(pdf); final var out = new ByteArrayOutputStream()) {
 			mutation.apply(document);
-			// PDFBoxが保存時にCatalog由来の上位版へヘッダを昇格しないよう、
-			// negative対象以外のR1条件を元PDFと同じに保つ。
+			// Prevent PDFBox from upgrading the header to a higher version from the Catalog on save;
+			// keep R1 conditions other than the negative-test target the same as in the original PDF.
 			document.setVersion(Float.parseFloat(new String(pdf, 5, 3, StandardCharsets.US_ASCII)));
 			document.save(out);
 			final var result = out.toByteArray();
@@ -164,14 +164,14 @@ public class PdfXPreflightTest {
 
 	@Test
 	public void testX3GeneratorSuppressesTransparency() throws Exception {
-		// 不透明度と透明グループを要求しても、X-3の生成器は透明を書かない
+		// The X-3 generator writes no transparency even when opacity and transparency groups are requested.
 		PdfXPreflight.assertConforms(generate(Flavour.X3, true), Flavour.X3);
 	}
 
 	@Test
 	public void testX3KeepsIccBasedRgbThatX1aRejects() throws Exception {
 		final var pdf = generate(Flavour.X3);
-		// 識別文字列の違い(R3)だけでなく、色の規則(R7)でICCBasedが見つかること
+		// Verify that color rule R7 finds ICCBased, in addition to the identification string difference (R3).
 		assertTrue(PdfXPreflight.check(pdf, Flavour.X1A).stream()
 				.anyMatch(v -> "R7".equals(v.rule()) && v.message().contains("ICCBased")),
 				"X-3 output must carry ICCBased RGB, which X-1a rejects");
@@ -317,7 +317,7 @@ public class PdfXPreflightTest {
 			descriptor.setItem(COSName.FONT_FILE2, fontFile);
 			font.setItem(COSName.FONT_DESC, descriptor);
 			fonts.setItem(COSName.getPDFName("Fnegative"), font);
-			// 埋め込み済み辞書からFontFile2だけを除去してnegativeを作る。
+			// Create a negative case by removing only FontFile2 from an embedded font dictionary.
 			descriptor.removeItem(COSName.FONT_FILE2);
 		});
 		assertOnlyRule(pdf, Flavour.X1A, "R6");
@@ -544,7 +544,7 @@ public class PdfXPreflightTest {
 		assertOnlyRule(pdf, Flavour.X1A, "R9");
 	}
 
-	/** 型の誤りと名前で選ぶ網点(2026-10-07)。値が合っていても型が違えば違反。 */
+	/** Incorrect types and halftones selected by name (2026-10-07). A correct value with the wrong type is a violation. */
 	private static void addExtGState(final org.apache.pdfbox.pdmodel.PDDocument document, final COSDictionary state) {
 		final var resources = document.getPage(0).getResources().getCOSObject();
 		var states = resources.getCOSDictionary(COSName.EXT_G_STATE);

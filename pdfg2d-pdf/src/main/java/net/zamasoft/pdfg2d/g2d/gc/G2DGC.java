@@ -161,14 +161,14 @@ public class G2DGC implements GC {
 	protected final Graphics2D g;
 
 	/**
-	 * 既定は黒。{@link net.zamasoft.pdfg2d.pdf.gc.PDFGC}と同じ契約で、
-	 * 明示的に設定される前でも{@code null}を返さない。状態を保存して元へ戻す
-	 * 呼び出し側(擬似ボールドの{@code FontUtils.drawText}など)は、読み出した値を
-	 * そのまま{@code setStrokePaint}へ渡すため、{@code null}だと復元で落ちる。
+	 * Defaults to black. Follows the same contract as {@link net.zamasoft.pdfg2d.pdf.gc.PDFGC},
+	 * never returning {@code null} even before an explicit value is set. Callers that save and restore state
+	 * (such as {@code FontUtils.drawText} for synthetic bold) pass the retrieved value directly
+	 * to {@code setStrokePaint}, so {@code null} would fail during restoration.
 	 */
 	protected Paint strokePaint = GrayColor.BLACK;
 
-	/** 既定は黒。理由は{@link #strokePaint}と同じ。 */
+	/** Defaults to black, for the same reason as {@link #strokePaint}. */
 	protected Paint fillPaint = GrayColor.BLACK;
 
 	protected java.awt.Paint awtFillPaint;
@@ -177,7 +177,7 @@ public class G2DGC implements GC {
 
 	protected float fillAlpha = 1, strokeAlpha = 1;
 
-	/** ブレンドモード(2026-08-29)。NORMAL 以外は {@link BlendComposite} で画素合成する。 */
+	/** Blend mode (2026-08-29). Modes other than NORMAL use {@link BlendComposite} for pixel compositing. */
 	protected BlendMode blendMode = BlendMode.NORMAL;
 
 	protected TextMode textMode = TextMode.FILL;
@@ -219,8 +219,8 @@ public class G2DGC implements GC {
 	}
 
 	/**
-	 * Java2D はラスタなので、ぼかし・円錐グラデーション・繰り返し・層フィルタ・
-	 * 落とし影・ブレンドのすべてを厳密に描ける(2026-08-29)。
+	 * Java2D is raster-based, so it accurately renders blur, conic gradients, repetition,
+	 * layer filters, drop shadows, and blending (2026-08-29).
 	 */
 	@Override
 	public boolean supports(final Capability capability) {
@@ -388,7 +388,7 @@ public class G2DGC implements GC {
 	@Override
 	public void setBlendMode(final BlendMode mode) {
 		this.blendMode = mode == null ? BlendMode.NORMAL : mode;
-		// 線・文字は g の合成モードで描かれる。塗り・画像は都度 fillAlpha で組み立てる
+		// Strokes and text use g's composite mode. Fills and images build a composite with fillAlpha each time.
 		this.g.setComposite(BlendComposite.getInstance(this.blendMode, this.strokeAlpha));
 	}
 
@@ -439,10 +439,10 @@ public class G2DGC implements GC {
 	}
 
 	/**
-	 * 層に効果(色行列 → ぼかし → 落とし影 → 不透明度)を掛けて描く(2026-08-29)。
-	 * 画像をデバイス空間の ARGB 層へ描いてから画素処理し、恒等変換でクリップと
-	 * ブレンドモード・fillAlpha を効かせて戻す。σ と影のずれはユーザー空間で
-	 * 受け取り、現在の変換でデバイス空間へ写す。
+	 * Draws a layer with effects (color matrix -> blur -> drop shadow -> opacity) (2026-08-29).
+	 * Draws the image into a device-space ARGB layer, processes its pixels, and composites it back with
+	 * the identity transform, applying the clip, blend mode, and fillAlpha. Accepts σ and shadow offsets
+	 * in user space and maps them to device space with the current transform.
 	 */
 	@Override
 	public void drawImage(final Image image, final GroupEffects effects) throws GraphicsException {
@@ -470,7 +470,7 @@ public class G2DGC implements GC {
 			return;
 		}
 		if (region.width * (long) region.height > MAX_LAYER_PIXELS) {
-			// 層が大きすぎる。効果を諦めてそのまま描く
+			// The layer is too large. Give up the effects and draw it unchanged.
 			this.drawImage(image);
 			return;
 		}
@@ -480,7 +480,7 @@ public class G2DGC implements GC {
 		try {
 			final G2DGC sub = new G2DGC(lg, this.fm);
 			new GraphicsState(this).shifted(AffineTransform.getTranslateInstance(-region.x, -region.y)).restore(sub);
-			// 層は孤立させて描き、クリップ・不透明度・ブレンドは戻すときに掛ける
+			// Draw the layer in isolation; apply clip, opacity, and blending when compositing it back.
 			lg.setRenderingHints(this.g.getRenderingHints());
 			lg.setClip(null);
 			lg.setComposite(AlphaComposite.SrcOver);
@@ -513,12 +513,12 @@ public class G2DGC implements GC {
 		this.drawLayer(RasterEffects.toPremultipliedImage(planes, w, h), region.x, region.y);
 	}
 
-	/** 効果の層として確保する画素数の上限。超えたら効果なしへ退避する。 */
+	/** Maximum pixel count allocated for an effects layer. Falls back to no effects if exceeded. */
 	private static final long MAX_LAYER_PIXELS = 64L * 1024 * 1024;
 
 	/**
-	 * デバイス空間で {@code bounds} を {@code pad} 広げ、クリップとデバイスの範囲
-	 * (それぞれ pad 広げたもの)で切った整数矩形を返す。空なら null。
+	 * Expands {@code bounds} by {@code pad} in device space and returns an integer rectangle
+	 * intersected with the clip and device bounds (each also expanded by pad). Returns null if empty.
 	 */
 	private Rectangle deviceRegion(final Rectangle2D bounds, final int pad) {
 		Rectangle2D r = new Rectangle2D.Double(bounds.getX() - pad, bounds.getY() - pad,
@@ -547,7 +547,7 @@ public class G2DGC implements GC {
 		return new Rectangle(x0, y0, x1 - x0, y1 - y0);
 	}
 
-	/** デバイス座標 (x, y) に層を恒等変換で置く。クリップ・fillAlpha・ブレンドモードを効かせる。 */
+	/** Places the layer at device coordinates (x, y) with the identity transform, applying clip, fillAlpha, and blend mode. */
 	private void drawLayer(final BufferedImage layer, final int x, final int y) {
 		final AffineTransform saveAt = this.g.getTransform();
 		final Composite saveComposite = this.g.getComposite();
@@ -559,8 +559,8 @@ public class G2DGC implements GC {
 	}
 
 	/**
-	 * 形を現在の塗りで層へ描き、ガウスぼかしを掛けて戻す(2026-08-29)。
-	 * σ はユーザー空間単位で、現在の変換でデバイス空間へ写す。
+	 * Draws the shape into a layer with the current fill, applies Gaussian blur, and composites it back (2026-08-29).
+	 * σ is in user space units and maps to device space through the current transform.
 	 */
 	@Override
 	public void fillBlurred(Shape shape, final double sigma) throws GraphicsException {
@@ -603,22 +603,22 @@ public class G2DGC implements GC {
 	}
 
 	/**
-	 * 軸に沿った矩形の塗りを装置の画素格子へ揃えます(2026-09-02)。
+	 * Aligns axis-aligned rectangle fills to the device pixel grid (2026-09-02).
 	 *
 	 * <p>
-	 * アンチエイリアスのまま矩形を突き合わせると、共有する辺が画素の途中に
-	 * あるとき両側が半透明に塗られて下地が 1px の筋になる(表のセル・1×1 の
-	 * タイル・隣接する背景)。解像度を上げても筋は 1px のまま。辺を同じ規則
-	 * (四捨五入)で整数へ寄せれば、隣り合う矩形は同じ画素列を境に接する。
-	 * 回転・斜行のある変換、1 画素に満たない矩形(罫線の細線)は触らない。
+	 * When antialiased rectangles meet along an edge inside a pixel, both sides paint translucently,
+	 * leaving a 1 px stripe of the background (table cells, 1x1 tiles, adjacent backgrounds).
+	 * The stripe remains 1 px even at higher resolutions. Rounding edges to integers with the same rule
+	 * makes adjacent rectangles meet at the same pixel boundary.
+	 * Leaves transforms with rotation or skew and rectangles smaller than one pixel (thin rules) untouched.
 	 * </p>
 	 *
-	 * @return 揃えて塗ったなら {@code true}
+	 * @return {@code true} if aligned and filled
 	 */
 	private boolean fillSnappedRectangle(final Shape shape) {
 		if (!(shape instanceof Rectangle2D rect) || this.fillAt != null
 				|| !(this.awtFillPaint instanceof java.awt.Color)) {
-			// グラデーション等は利用者座標で定義されるので、装置座標で塗れない
+			// Gradients and similar paints are defined in user coordinates, so they cannot be filled in device coordinates.
 			return false;
 		}
 		final AffineTransform at = this.g.getTransform();
@@ -651,7 +651,7 @@ public class G2DGC implements GC {
 		this.g.setComposite(BlendComposite.getInstance(this.blendMode, this.fillAlpha));
 
 		if (this.fillSnappedRectangle(shape)) {
-			// 揃えて塗った
+			// Aligned and filled.
 		} else if (this.fillAt != null) {
 			AffineTransform saveAt = g.getTransform();
 			this.g.transform(this.fillAt);

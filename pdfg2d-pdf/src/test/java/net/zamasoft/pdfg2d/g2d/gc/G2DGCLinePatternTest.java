@@ -12,12 +12,12 @@ import net.zamasoft.pdfg2d.gc.GC;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 
 /**
- * 実線の線種を読み出せることの検査(2026-08-30)。
+ * Verifies that the line pattern of a solid stroke can be retrieved (2026-08-30).
  *
  * <p>
- * {@code BasicStroke.getDashArray()}は実線のときnullを返す。これをそのまま
- * 配列として扱うと、線種を保存して元へ戻す処理(擬似ボールドの
- * {@code FontUtils.drawText}など)がJava2D出力で必ず落ちていた。
+ * {@code BasicStroke.getDashArray()} returns null for a solid stroke. Treating it directly
+ * as an array always caused Java2D output to fail when saving and restoring the line pattern
+ * (for example, in {@code FontUtils.drawText} for synthetic bold).
  */
 class G2DGCLinePatternTest {
 	private static G2DGC gc() {
@@ -41,7 +41,7 @@ class G2DGCLinePatternTest {
 		assertArrayEquals(GC.STROKE_SOLID, gc.getLinePattern(), "nullで実線に戻した後");
 	}
 
-	/** 明示的に設定する前でも色は{@code null}にならない(PDF出力と同じ契約)。 */
+	/** Colors are never {@code null}, even before they are explicitly set (the same contract as PDF output). */
 	@Test
 	void paintsDefaultToBlack() {
 		final G2DGC gc = gc();
@@ -50,8 +50,8 @@ class G2DGCLinePatternTest {
 	}
 
 	/**
-	 * 線種と色を保存・復元する経路(擬似ボールド)を最小の形でなぞる。
-	 * {@code FontUtils.drawText}が擬似ボールドのために行う保存・復元と同じ順番。
+	 * Exercises the minimal path for saving and restoring the line pattern and colors (synthetic bold).
+	 * Uses the same save/restore order as {@code FontUtils.drawText} for synthetic bold.
 	 */
 	@Test
 	void saveAndRestoreAroundSolidStroke() {

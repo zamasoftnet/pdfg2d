@@ -21,7 +21,7 @@ import net.zamasoft.pdfg2d.font.table.MaxpTable;
  */
 public class CFFGlyphList implements GlyphList {
 
-	/** 字形座標を揃える基準のem(TrueType側と同じ1000)。 */
+	/** Reference em for normalized glyph coordinates (1000, as on the TrueType side). */
 	private static final double DEFAULT_UNITS_PER_EM = 1000.0;
 
 	private final CFFTable cff;
@@ -66,22 +66,21 @@ public class CFFGlyphList implements GlyphList {
 	}
 
 	/**
-	 * charstringの座標を1000単位のemへ揃えます。
+	 * Normalizes charstring coordinates to a 1000-unit em.
 	 *
 	 * <p>
-	 * {@link net.zamasoft.pdfg2d.font.truetype.TrueTypeGlyphList}が
-	 * {@code 1000/unitsPerEm}で正規化しているのに対し、CFF側は
-	 * charstringの生の座標をそのまま返していました。CFFの既定em(1000)と
-	 * {@code head}の{@code unitsPerEm}が食い違うフォント
-	 * (Pretendard = 2048、FontMatrixなし)で、**字形だけが2.048倍**になり、
-	 * アドバンスは正しいので文字が重なって版面からはみ出します
-	 * (2026-09-01)。埋め込みPDFもこのパスから字形を再生成するので、
-	 * ここで直すとPDF・画像・SVGのすべてが揃います。
+	 * While {@link net.zamasoft.pdfg2d.font.truetype.TrueTypeGlyphList} normalizes by
+	 * {@code 1000/unitsPerEm}, the CFF path previously returned raw charstring coordinates.
+	 * For fonts where the CFF default em (1000) differs from {@code head}'s {@code unitsPerEm}
+	 * (Pretendard = 2048, no FontMatrix), **only glyphs were scaled by 2.048**.
+	 * Advances were correct, so characters overlapped and extended beyond the type area
+	 * (2026-09-01). Embedded PDFs also regenerate glyphs through this path,
+	 * so fixing it here aligns PDF, image, and SVG output.
 	 * </p>
 	 *
-	 * @param glyph          復号したglyph
-	 * @param glyphUnitsPerEm charstring座標系の1em
-	 * @return 1000単位へ揃えたglyph(倍率が1なら引数のまま)
+	 * @param glyph          decoded glyph
+	 * @param glyphUnitsPerEm one em in the charstring coordinate system
+	 * @return glyph normalized to 1000 units (the argument unchanged if the scale is 1)
 	 */
 	private static Glyph normalize(final Glyph glyph, final double glyphUnitsPerEm) {
 		if (glyph == null || glyph.path() == null || glyphUnitsPerEm <= 0
@@ -91,8 +90,8 @@ public class CFFGlyphList implements GlyphList {
 		final double scale = DEFAULT_UNITS_PER_EM / glyphUnitsPerEm;
 		final GeneralPath path = new GeneralPath(glyph.path());
 		path.transform(AffineTransform.getScaleInstance(scale, scale));
-		// charstringは元の座標系のままなので、拡縮したら整合しない。
-		// 消費側(CFFGenerator)はpathから作り直せる
+		// The charstring retains its original coordinate system, so it becomes inconsistent after scaling.
+		// The consumer (CFFGenerator) can regenerate it from the path.
 		return new Glyph(path, null);
 	}
 }

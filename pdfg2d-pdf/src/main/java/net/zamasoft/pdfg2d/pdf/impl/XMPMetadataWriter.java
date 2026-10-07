@@ -38,7 +38,7 @@ final class XMPMetadataWriter {
 		// static use only
 	}
 
-	/** trailerの第1ファイルIDをXMPのUUID表記へ変換します。 */
+	/** Converts the first file ID in the trailer to XMP UUID notation. */
 	private static String documentId(final byte[] fileId) {
 		final var hex = HexFormat.of().formatHex(fileId);
 		return "uuid:" + hex.substring(0, 8) + '-' + hex.substring(8, 12) + '-'
@@ -122,7 +122,7 @@ final class XMPMetadataWriter {
 	 * @param create      creation timestamp in epoch milliseconds
 	 * @param modify      modification timestamp in epoch milliseconds, or
 	 *                    {@code -1} to omit
-	 * @param fileId      trailerの第1ファイルID(16バイト)
+	 * @param fileId      the first file ID in the trailer (16 bytes)
 	 * @throws IOException if an I/O error occurs
 	 */
 	static void write(final PDFFragmentOutputImpl xmpmetaFlow, final PDFParams.Version version, final int pdfuaPart,
@@ -239,7 +239,7 @@ final class XMPMetadataWriter {
 			}
 			sb.append("  </rdf:Description>\n");
 
-			// XMP Media Management schema (PDF/X-4必須プロパティ)
+			// XMP Media Management schema (required PDF/X-4 properties).
 			if (version.isPdfX()) {
 				sb.append("  <rdf:Description rdf:about=\"\"")
 						.append(" xmlns:xmpMM=\"http://ns.adobe.com/xap/1.0/mm/\">\n");

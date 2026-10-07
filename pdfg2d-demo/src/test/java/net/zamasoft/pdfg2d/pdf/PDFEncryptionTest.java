@@ -118,8 +118,9 @@ public class PDFEncryptionTest {
     }
 
     /**
-     * V4 の RC4(CFM V2)は鍵の長さを最上位の /Length にも書く。暗号フィルタにだけ書いていた頃は、最上位を読む
-     * PDFBox が 40 ビットの鍵で開こうとして、空のパスワードでも開けなかった(2026-10-05、入出力プロパティの境界値試験)。
+     * V4 RC4 (CFM V2) also writes the key length to the top-level /Length. When only the crypt filter had it,
+     * PDFBox read the top-level value and tried a 40-bit key, failing even with an empty password
+     * (2026-10-05, I/O property boundary-value tests).
      */
     @Test
     public void testEncryptionV4RC4OpensWithEmptyUserPassword() throws IOException {

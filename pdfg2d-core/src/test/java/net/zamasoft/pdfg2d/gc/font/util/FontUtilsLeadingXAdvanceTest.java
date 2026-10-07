@@ -20,7 +20,7 @@ import net.zamasoft.pdfg2d.gc.font.FontStyle;
 import net.zamasoft.pdfg2d.gc.font.FontStyleImpl;
 import net.zamasoft.pdfg2d.gc.text.TextImpl;
 
-/** {@link FontUtils#addTextPath}のペン送りと行方向を検証する。 */
+/** Verifies the pen advance and line direction of {@link FontUtils#addTextPath}. */
 public class FontUtilsLeadingXAdvanceTest {
 	private static final FontSource SOURCE = (FontSource) Proxy.newProxyInstance(
 			FontUtilsLeadingXAdvanceTest.class.getClassLoader(), new Class<?>[] { FontSource.class },

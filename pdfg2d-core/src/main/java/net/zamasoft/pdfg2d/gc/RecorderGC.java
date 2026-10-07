@@ -85,14 +85,14 @@ public class RecorderGC extends NoOpGC {
 	public record DrawImage(Image image) implements Command {
 	}
 
-	/** 効果付きの画像描画(2026-08-29)。再生先が対応すれば厳密に、しなければ効果なしで描かれる。 */
+	/** Image drawing with effects (2026-08-29). Renders accurately if the replay target supports it, or without effects otherwise. */
 	public record DrawImageEffects(Image image, GroupEffects effects) implements Command {
 	}
 
 	public record Fill(Shape shape) implements Command {
 	}
 
-	/** ぼかし塗り(2026-08-29)。再生先が対応しなければ普通の塗りになる。 */
+	/** Blurred fill (2026-08-29). Becomes a regular fill if the replay target does not support it. */
 	public record FillBlurred(Shape shape, double sigma) implements Command {
 	}
 

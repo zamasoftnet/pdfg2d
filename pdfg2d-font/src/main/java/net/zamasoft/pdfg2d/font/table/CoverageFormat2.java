@@ -27,7 +27,7 @@ public record CoverageFormat2(RangeRecord[] rangeRecords, boolean sorted) implem
 		for (int i = 0; i < rangeCount; i++) {
 			rangeRecords[i] = RangeRecord.read(raf);
 			if (i > 0 && rangeRecords[i - 1].start() >= rangeRecords[i].start()) {
-				// 仕様(開始GID昇順)に反するフォント——線形走査へ縮退
+				// Font violates the specification (ascending start GIDs): fall back to a linear scan.
 				sorted = false;
 			}
 		}
@@ -41,8 +41,8 @@ public record CoverageFormat2(RangeRecord[] rangeRecords, boolean sorted) implem
 
 	@Override
 	public int findGlyph(final int glyphId) {
-		// 整形中グリフ毎に呼ばれる。仕様どおり整列済みなら二分探索
-		// (2026-08-01、95点計画増分2)
+		// Called for each glyph during shaping. Use binary search if sorted as specified
+		// (2026-08-01, 95-point plan increment 2).
 		if (this.sorted) {
 			int low = 0, high = this.rangeRecords.length - 1;
 			while (low <= high) {

@@ -29,24 +29,23 @@ import net.zamasoft.pdfg2d.pdf.font.cid.embedded.OpenTypeEmbeddedCIDFontSource;
 import net.zamasoft.pdfg2d.pdf.font.cid.identity.OpenTypeCIDIdentityFontSource;
 
 /**
- * フォントディレクトリスキャンの永続索引です(2026-08-01)。
+ * Persistent index for font directory scanning (2026-08-01).
  *
  * <p>
- * fonts.xmlの{@code <font-dir>}は従来、JVM起動のたびに全フォント
- * ファイルを開いてname/OS2/cmap等をパースしていた(O(ファイル数)、
- * 290フォントで約1秒・数千フォントで数十秒)。この索引は選択に必要な
- * メタデータ(名前・別名・weight/italic/PANOSE・メトリクス・圧縮cmap)を
- * (パス, サイズ, mtime, スキャン条件)キーで永続化し、ヒット時は
- * フォントファイルを一切開かずに{@link OpenTypeFontSource}を再構築する。
- * グリフ実データが必要になった時点で初めてファイルが開かれる。
+ * Previously, {@code <font-dir>} in fonts.xml opened every font file and parsed name/OS2/cmap, etc.
+ * on every JVM startup (O(number of files), about one second for 290 fonts and tens of seconds
+ * for thousands). This index persists selection metadata (name, aliases, weight/italic/PANOSE,
+ * metrics, compressed cmap) keyed by (path, size, mtime, scan conditions).
+ * On a hit, reconstructs {@link OpenTypeFontSource} without opening the font file.
+ * The file opens only when actual glyph data is needed.
  * </p>
  *
  * <p>
- * 設定ファイル(fonts.xml)の仕様変更はない——{@code DirectSession}が
- * 従来から渡していた{@code fonts.xml.db}のパス(長らく無視されていた
- * 引数)をそのまま使う。索引の読み込み失敗・バージョン不一致・
- * 鮮度不一致は全て「その項目だけ従来どおりパース」へ静かに縮退する。
- * 書き込みは一時ファイル+renameで、壊れた索引が残らないようにする。
+ * The configuration file (fonts.xml) format is unchanged: uses the {@code fonts.xml.db} path
+ * already passed by {@code DirectSession} (an argument long ignored).
+ * Index read failures, version mismatches, and stale entries all silently fall back
+ * to parsing only the affected entry as before.
+ * Writes via a temporary file and rename to avoid leaving a corrupt index.
  * </p>
  *
  * @author MIYABE Tatsuhiko
@@ -54,25 +53,25 @@ import net.zamasoft.pdfg2d.pdf.font.cid.identity.OpenTypeCIDIdentityFontSource;
 public final class FontIndex {
 	private static final Logger LOG = Logger.getLogger(FontIndex.class.getName());
 
-	/** 形式変更時はこの値を上げる(旧版は黙って捨てられ再構築される)。 */
+	/** Increment when the format changes (older versions are silently discarded and rebuilt). */
 	private static final int MAGIC = 0x43504649; // "CPFI"
 	/**
-	 * 2: font-dir走査のitalic/weightがOS/2由来になった(2026-08-27、
-	 * FontLoader.readTTFのjavadoc参照)。旧索引はnormal/400固定の値を
-	 * 再生するため破棄して再構築する。
-	 * 3: 幅級(OS/2 usWidthClass)を記録(2026-08-29、font-stretchの
-	 * 書体選択)。レコードにwidthClassの1バイトを追加した。
-	 * 4: name ID 6のASCII PostScript名優先を反映するため、旧索引に
-	 * 保存されたローカライズ名を破棄する(2026-09-01)。
-	 * 5: 可変フォントの太さの写し(wght を固定した座標)を記録(2026-10-04)。
-	 * レコードに wght の 2 バイト(0 は固定なし)を追加した。
+	 * 2: font-dir scans derive italic/weight from OS/2 (2026-08-27,
+	 * see FontLoader.readTTF's Javadoc). Discard and rebuild old indexes,
+	 * which restore fixed normal/400 values.
+	 * 3: records the width class (OS/2 usWidthClass) (2026-08-29, font-stretch selection).
+	 * Added one widthClass byte to each record.
+	 * 4: discards localized names stored in old indexes to reflect the preference
+	 * for ASCII PostScript names in name ID 6 (2026-09-01).
+	 * 5: records variable font weight copies (pinned wght coordinates) (2026-10-04).
+	 * Added two bytes for wght to each record (0 means unpinned).
 	 */
 	private static final int VERSION = 5;
 
 	private static final int SUBTYPE_EMBEDDED = 0;
 	private static final int SUBTYPE_CID_IDENTITY = 1;
 
-	/** 1ファイル分のスキャン結果です。 */
+	/** Scan results for one file. */
 	static final class FileEntry {
 		final long size;
 		final long lastModified;
@@ -90,7 +89,7 @@ public final class FontIndex {
 		}
 	}
 
-	/** 1 FontSource分の再構築メタデータです。 */
+	/** Reconstruction metadata for one FontSource. */
 	static final class SourceRecord {
 		final int subtype;
 		final Direction direction;
@@ -107,7 +106,7 @@ public final class FontIndex {
 		final short ascent, descent, spaceAdvance;
 		final GenericCmapFormat cmap;
 		final UvsCmapFormat uvsCmap;
-		/** 可変フォントの wght を固定した写しならその座標、そうでなければ 0(2026-10-04)。 */
+		/** Pinned wght coordinate for a variable font copy, or 0 otherwise (2026-10-04). */
 		final int wght;
 
 		SourceRecord(final int subtype, final Direction direction, final int ttcIndex, final String fontName,
@@ -141,10 +140,10 @@ public final class FontIndex {
 	private boolean dirty = false;
 
 	/**
-	 * 索引を読み込みます。ファイルが無い・読めない・形式が違う場合は
-	 * 空の索引になる(致命的エラーにはしない)。
+	 * Loads the index. A missing, unreadable, or differently formatted file produces
+	 * an empty index (not a fatal error).
 	 *
-	 * @param file 索引ファイル(通常はfonts.xml.db)
+	 * @param file index file (usually fonts.xml.db)
 	 */
 	public FontIndex(final File file) {
 		this.file = file;
@@ -162,9 +161,9 @@ public final class FontIndex {
 				final long lastModified = in.readLong();
 				final String scanKey = in.readUTF();
 				final int numFonts = in.readInt();
-				// cmap/UVSはファイル内の全ソース(縦横×types)で共有される
-				// ため、エントリ毎のプールで一度だけ格納する(索引サイズと
-				// ウォーム再構築時のヒープの両方を約1/4にする)
+				// All sources in a file (vertical/horizontal × types) share cmap/UVS,
+				// so store them only once in a pool per entry (reduces both index size
+				// and heap use during warm reconstruction to about one quarter).
 				final GenericCmapFormat[] cmapPool = new GenericCmapFormat[in.readUnsignedShort()];
 				for (int j = 0; j < cmapPool.length; ++j) {
 					cmapPool[j] = readCmap(in);
@@ -181,7 +180,7 @@ public final class FontIndex {
 				this.pathToEntry.put(path, new FileEntry(size, lastModified, scanKey, numFonts, sources));
 			}
 		} catch (final Exception e) {
-			// 壊れた索引は捨てて再構築(部分的に読めた分も信用しない)
+			// Discard and rebuild a corrupt index (do not trust even the portions successfully read).
 			LOG.log(Level.WARNING, "Ignoring unreadable font index " + file, e);
 			this.pathToEntry.clear();
 		}
@@ -248,12 +247,12 @@ public final class FontIndex {
 	}
 
 	/**
-	 * ファイルの鮮度とスキャン条件が一致する索引項目を探し、あれば
-	 * FontSource列を再構築して返します。
+	 * Looks for an index entry matching file freshness and scan conditions,
+	 * then reconstructs and returns the FontSource sequence if found.
 	 *
-	 * @param fontFile フォントファイル
-	 * @param scanKey  スキャン条件(types+face属性のダイジェスト)
-	 * @return 再構築したFontSource列(記録時の順序)、索引ミスならnull
+	 * @param fontFile font file
+	 * @param scanKey  scan conditions (digest of types + face attributes)
+	 * @return reconstructed FontSource sequence (in recorded order), or null on an index miss
 	 */
 	public List<FontSource> lookup(final File fontFile, final String scanKey) {
 		final FileEntry entry = this.pathToEntry.get(fontFile.getPath());
@@ -272,7 +271,7 @@ public final class FontIndex {
 					r.cmap, r.uvsCmap);
 			default -> throw new IllegalStateException(String.valueOf(r.subtype));
 			};
-			// 幅級は復元コンストラクタの引数を増やさずsetterで戻す(2026-08-29)
+			// Restore width class through a setter without adding reconstruction constructor arguments (2026-08-29).
 			source.setWidthClass(r.widthClass);
 			if (r.wght != 0) {
 				source.setVariation(Map.of("wght", (double) r.wght));
@@ -283,13 +282,13 @@ public final class FontIndex {
 	}
 
 	/**
-	 * スキャン結果を索引に記録します。OpenType系以外のソースが混じって
-	 * いた場合はそのファイルを索引対象外とする(次回も通常パース)。
+	 * Records scan results in the index. If sources include non-OpenType fonts,
+	 * excludes the file from indexing (parses normally again next time).
 	 *
-	 * @param fontFile フォントファイル
-	 * @param scanKey  スキャン条件
-	 * @param numFonts TTC内のフォント数
-	 * @param sources  スキャンで構築したソース列(face属性適用済み)
+	 * @param fontFile font file
+	 * @param scanKey  scan conditions
+	 * @param numFonts number of fonts in the TTC
+	 * @param sources  source sequence built by the scan (face attributes already applied)
 	 */
 	public void put(final File fontFile, final String scanKey, final int numFonts,
 			final List<FontSource> sources) {
@@ -301,12 +300,12 @@ public final class FontIndex {
 			} else if (source instanceof OpenTypeCIDIdentityFontSource) {
 				subtype = SUBTYPE_CID_IDENTITY;
 			} else {
-				// AWT経由のType1等は再構築できないため索引しない
+				// Do not index Type1 and similar fonts accessed through AWT, which cannot be reconstructed.
 				return;
 			}
 			final OpenTypeFontSource ot = (OpenTypeFontSource) source;
 			if (ot.getPanose() == null || ot.getCmapFormat() == null) {
-				// 再構築に必要なメタデータが欠けるファイルは索引しない
+				// Do not index files lacking the metadata needed for reconstruction.
 				return;
 			}
 			final Map<String, Double> variation = ot.getVariation();
@@ -314,7 +313,7 @@ public final class FontIndex {
 			if (variation != null) {
 				final Double w = variation.get("wght");
 				if (variation.size() != 1 || w == null || w < 1 || w > 1000 || w != Math.rint(w)) {
-					// 索引は wght の整数座標だけを再生できる
+					// The index can restore only integer wght coordinates.
 					return;
 				}
 				wght = w.intValue();
@@ -331,8 +330,8 @@ public final class FontIndex {
 	}
 
 	/**
-	 * 変更があれば索引をファイルへ書き出します(一時ファイル+rename)。
-	 * 失敗しても警告のみ(次回起動が遅いだけで機能に影響しない)。
+	 * Writes the index to a file if changed (temporary file + rename).
+	 * Failure only produces a warning (slows the next startup but does not affect functionality).
 	 */
 	public void save() {
 		if (!this.dirty || this.file == null) {
@@ -351,8 +350,8 @@ public final class FontIndex {
 					out.writeLong(entry.lastModified);
 					out.writeUTF(entry.scanKey);
 					out.writeInt(entry.numFonts);
-					// identityで重複排除したcmap/UVSプール(FontFile経由で
-					// 同一ファイルの全ソースが同じインスタンスを共有している)
+					// cmap/UVS pool deduplicated by identity (through FontFile,
+					// all sources for the same file share the same instances).
 					final java.util.IdentityHashMap<GenericCmapFormat, Integer> cmapToIndex = new java.util.IdentityHashMap<>();
 					final java.util.IdentityHashMap<UvsCmapFormat, Integer> uvsToIndex = new java.util.IdentityHashMap<>();
 					final List<GenericCmapFormat> cmapPool = new ArrayList<>();
@@ -381,7 +380,7 @@ public final class FontIndex {
 				}
 			}
 			if (!tmp.renameTo(this.file)) {
-				// Windowsでは既存ファイルへのrenameが失敗する——削除してから
+				// On Windows, renaming over an existing file fails: delete it first.
 				this.file.delete();
 				if (!tmp.renameTo(this.file)) {
 					throw new IOException("rename failed: " + tmp + " -> " + this.file);

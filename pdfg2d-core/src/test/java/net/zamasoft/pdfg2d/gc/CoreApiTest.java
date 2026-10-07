@@ -159,7 +159,7 @@ class CoreApiTest {
         assertEquals(2.5, recordedBlur.sigma());
         assertEquals(new RecorderGC.DrawImageEffects(image, effects), page.commands().get(1));
 
-        // 対応する再生先には厳密な呼び出しがそのまま届く
+        // Supported replay targets receive the accurate rendering calls unchanged.
         final var calls = new ArrayList<String>();
         final var exact = new NoOpGC(null) {
             @Override
@@ -175,7 +175,7 @@ class CoreApiTest {
         page.drawTo(exact);
         assertEquals(List.of("fillBlurred:2.5", "drawImage:3.0", "drawImage:0.0"), calls);
 
-        // 対応しない再生先では既定の fill / drawImage へ落ちる
+        // Unsupported replay targets fall back to the default fill / drawImage.
         calls.clear();
         final var fallback = new NoOpGC(null) {
             @Override

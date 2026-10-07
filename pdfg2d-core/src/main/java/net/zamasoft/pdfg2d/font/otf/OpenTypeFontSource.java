@@ -44,16 +44,16 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	private static final long serialVersionUID = 4L;
 
 	/**
-	 * パース済みフォントファイルのキャッシュです。
+	 * Cache of parsed font files.
 	 *
 	 * <p>
-	 * 旧実装は{@code WeakHashMap<File, FontFile>}だったが、キーのFile
-	 * インスタンスを各FontSourceが{@code this.file}として強参照するため
-	 * エントリが決して回収されず、実質的に永久キャッシュだった——
-	 * 全宣言フォントの全テーブル(loca・GSUB・name等)がヒープに残る
-	 * (290フォントで約66MB、2026-08-01実測)。パス文字列キー+
-	 * SoftReference値に変更: 使用中のフォントはヒープ圧まで温存され、
-	 * 未使用フォントの表はOutOfMemoryErrorより先に回収される。
+	 * The old implementation used {@code WeakHashMap<File, FontFile>}, but each FontSource
+	 * held a strong reference to the File key instance as {@code this.file}, so entries
+	 * were never collected, making the cache effectively permanent.
+	 * All tables (loca, GSUB, name, etc.) of all declared fonts stayed on the heap
+	 * (about 66 MB for 290 fonts, measured on 2026-08-01). Changed to path string keys
+	 * and SoftReference values: fonts in use remain until heap pressure arises, and
+	 * tables of unused fonts are collected before an OutOfMemoryError.
 	 * </p>
 	 */
 	protected static final Map<String, java.lang.ref.SoftReference<FontFile>> fileToFont = new java.util.HashMap<>();
@@ -71,16 +71,16 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	protected final short ascent, descent, spaceAdvance, stemH, stemV;
 
 	/**
-	 * xHeight/capHeightは'x'/'H'のグリフ実データ(glyf/CFF)のパースを
-	 * 要するため、初回参照まで遅延します(2026-08-01)。従来は
-	 * コンストラクタで計算しており、宣言しただけの全フォントの
-	 * グリフ表パースが起動時間に乗っていた。
+	 * Defers xHeight/capHeight until first access because they require parsing
+	 * the actual 'x'/'H' glyph data (glyf/CFF) (2026-08-01). Previously computed
+	 * in the constructor, so parsing glyph tables for every declared font
+	 * added to startup time.
 	 */
 	private transient short xHeight, capHeight;
 
 	private transient volatile boolean heightsComputed;
 
-	/** {@link #hasVerticalLayout()} の結果(未計算なら null)。 */
+	/** Result of {@link #hasVerticalLayout()} (null if not yet computed). */
 	private transient volatile Boolean verticalLayout;
 
 	protected Panose panose;
@@ -124,10 +124,10 @@ public class OpenTypeFontSource extends AbstractFontSource {
 			for (int i = 0; i < name.size(); ++i) {
 				final var record = name.get(i);
 				final short nameId = record.getNameId();
-				// 16/17はtypographic family/subfamily(2026-08-27)。可変フォント
-				// の多くはlegacy family(1)が既定インスタンス名込み
-				// (例: Bitterのname1="Bitter Thin")で、16の"Bitter"を
-				// 拾わないと素のファミリ名で照合できない
+				// 16/17 are the typographic family/subfamily (2026-08-27). Many variable fonts
+				// include the default instance name in the legacy family (1)
+				// (e.g. Bitter has name1="Bitter Thin"), so without picking up "Bitter" from 16,
+				// the plain family name cannot match.
 				if (nameId == 1 || nameId == 3 || nameId == 4 || nameId == 16) {
 					aliases.add(record.getRecordString());
 				}
@@ -144,7 +144,7 @@ public class OpenTypeFontSource extends AbstractFontSource {
 			final var os2 = (Os2Table) ttFont.getTable(Table.OS_2);
 			final var weight = TextUtils.decodeFontWeight((short) os2.getWeightClass());
 			this.setWeight(weight);
-			// font-stretchの書体選択用(2026-08-29)。範囲外はsetter側で通常幅へ
+			// For font-stretch selection (2026-08-29). The setter defaults out-of-range values to normal width.
 			this.setWidthClass(os2.getWidthClass());
 			final short cFamilyClass = os2.getFamilyClass();
 			final var panose = os2.getPanose();
@@ -195,9 +195,9 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
-	 * name ID 6のうち、PDF/CFFにそのまま使えるASCII PostScript名を
-	 * 優先します。同じフォントにASCIIとローカライズ済みの名が両方ある場合、
-	 * レコード順の最後の名で上書きすると非ASCII名が選ばれていた。
+	 * Prefers an ASCII PostScript name among name ID 6 records that can be used directly in PDF/CFF.
+	 * When a font had both ASCII and localized names, overwriting with the last name
+	 * in record order selected a non-ASCII name.
 	 */
 	static String selectPostScriptName(final NameTable name) {
 		String asciiName = null;
@@ -262,25 +262,25 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
-	 * 永続フォント索引からの再構築コンストラクタです(2026-08-01)。
-	 * ファイルI/Oを一切行わない——グリフ実データが必要になったとき
-	 * ({@link #getOpenTypeFont()}経由)に初めてフォントファイルを開く。
+	 * Constructor for reconstruction from the persistent font index (2026-08-01).
+	 * Performs no file I/O: opens the font file only when actual glyph data is needed
+	 * (through {@link #getOpenTypeFont()}).
 	 *
-	 * @param file         フォントファイル(この時点では開かない)
-	 * @param index        TTC内インデックス
-	 * @param direction    組方向
+	 * @param file         font file (not opened at this point)
+	 * @param index        index in the TTC
+	 * @param direction    writing direction
 	 * @param upm          units per em
-	 * @param bbox         フォントBBox(1000upm正規化済み)
-	 * @param fontName     PostScript名
-	 * @param aliases      別名(ソート済み)
-	 * @param italic       斜体か
-	 * @param weight       ウェイト
-	 * @param panose       PANOSE分類
-	 * @param ascent       アセント(1000upm正規化済み)
-	 * @param descent      ディセント(同)
-	 * @param spaceAdvance 空白幅(同)
-	 * @param cmap         文字→GID写像(圧縮範囲)
-	 * @param uvsCmap      UVS写像、無ければnull
+	 * @param bbox         font BBox (normalized to 1000 upm)
+	 * @param fontName     PostScript name
+	 * @param aliases      aliases (sorted)
+	 * @param italic       whether italic
+	 * @param weight       weight
+	 * @param panose       PANOSE classification
+	 * @param ascent       ascent (normalized to 1000 upm)
+	 * @param descent      descent (same normalization)
+	 * @param spaceAdvance space advance (same normalization)
+	 * @param cmap         character-to-GID mapping (compressed ranges)
+	 * @param uvsCmap      UVS mapping, or null if absent
 	 */
 	protected OpenTypeFontSource(final File file, final int index, final Direction direction, final short upm,
 			final BBox bbox, final String fontName, final String[] aliases, final boolean italic,
@@ -337,33 +337,33 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
-	 * 可変フォントの軸を固定する座標です(2026-10-04)。null なら{@link #file}をそのまま使う。
+	 * Coordinates that pin variable font axes (2026-10-04). Uses {@link #file} unchanged if null.
 	 *
 	 * <p>
-	 * 書体ディレクトリの可変フォントは、既定の実体のほかに太さ(wght)を固定した写しを登録する。
-	 * 写しの寸法・cmap は既定の実体のものを借り、静的フォントは字を描く・幅を測るときに初めて作る
-	 * ({@link #instanceFile})。Google Fonts 一式のように可変フォントが数百あっても、起動時に
-	 * 実体化しない。
+	 * For variable fonts in a font directory, registers copies with pinned weight (wght) in addition to the default instance.
+	 * Copies borrow the default instance's metrics and cmap; the static font is created only when drawing characters
+	 * or measuring widths ({@link #instanceFile}). Even with hundreds of variable fonts, such as the entire
+	 * Google Fonts collection, no instantiation occurs at startup.
 	 * </p>
 	 */
 	private Map<String, Double> variation;
 
-	/** 実体化した静的フォントの一時ファイル(ファイルの鮮度+座標→ファイル)。 */
+	/** Temporary files for instantiated static fonts (file freshness + coordinates -> file). */
 	private static final Map<String, File> INSTANCES = new java.util.concurrent.ConcurrentHashMap<>();
 
 	/**
-	 * 可変フォントの軸を固定します。単一フォント(TTC でない)のファイルに限ります。
+	 * Pins variable font axes. Only single-font files (not TTCs) are supported.
 	 *
-	 * @param variation 軸タグ→ユーザー座標(例: {@code {"wght": 700}})、null で解除
+	 * @param variation axis tag -> user coordinate (e.g. {@code {"wght": 700}}), or null to unpin
 	 */
 	public void setVariation(final Map<String, Double> variation) {
 		this.variation = variation == null ? null : Map.copyOf(variation);
 	}
 
 	/**
-	 * 可変フォントの固定座標を返します。
+	 * Returns the pinned coordinates of the variable font.
 	 *
-	 * @return 軸タグ→ユーザー座標、固定していなければ null
+	 * @return axis tag -> user coordinate, or null if not pinned
 	 */
 	public Map<String, Double> getVariation() {
 		return this.variation;
@@ -374,13 +374,13 @@ public class OpenTypeFontSource extends AbstractFontSource {
 				+ new java.util.TreeMap<>(variation);
 		return INSTANCES.computeIfAbsent(key, k -> {
 			try (final FontFile fontFile = new FontFile(file)) {
-				// 書体ディレクトリの書体の写しはプロセスの間使い回すので、消すのは終わるとき
+				// Font copies from font directories are reused throughout the process, so delete them only on exit.
 				final File instance = net.zamasoft.pdfg2d.font.VariableFontInstancer
 						.instantiate(fontFile.getSfntFile(), variation);
 				instance.deleteOnExit();
 				return instance;
 			} catch (final Exception e) {
-				// 作れなければ既定の実体で組む(太さは合わないが字は出る)
+				// If creation fails, lay out with the default instance (the weight differs, but the characters appear).
 				LOG.log(Level.WARNING, "variable font instantiation failed; using default instance: " + file, e);
 				return file;
 			}
@@ -414,7 +414,7 @@ public class OpenTypeFontSource extends AbstractFontSource {
 			if (fontFile == null) {
 				final var loadedFontFile = new FontFile(file);
 				synchronized (fileToFont) {
-					// 並行ロードの勝者を採る(従来と同じdouble-check)
+					// Use the winner of concurrent loading (the same double-check as before).
 					final var ref = fileToFont.get(key);
 					fontFile = ref == null ? null : ref.get();
 					if (fontFile == null || fontFile.timestamp != timestamp) {
@@ -423,7 +423,7 @@ public class OpenTypeFontSource extends AbstractFontSource {
 					}
 				}
 				if (fontFile != loadedFontFile) {
-					// 並行ロードに負けた側は解凍した一時ファイルごと捨てる
+					// Discard the loser of concurrent loading, including its decompressed temporary files.
 					loadedFontFile.close();
 				}
 			}
@@ -434,11 +434,11 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
-	 * {@code file} から開いた書体をキャッシュから外して閉じます(2026-10-05)。文書ごとに作った書体ファイル
-	 * ({@code @font-face} の取得結果・可変フォントの写し)の持ち主が、消す前に呼ぶ。外さないと、キャッシュが
-	 * 解凍した一時ファイルを握ったまま、常駐するサーバーに溜まった。
+	 * Removes the font opened from {@code file} from the cache and closes it (2026-10-05). Owners of font files
+	 * created per document (fetched {@code @font-face} resources and variable font copies) call this before deletion.
+	 * Without removal, the cache retained decompressed temporary files, which accumulated in long-running servers.
 	 *
-	 * @param file 書体ファイル
+	 * @param file font file
 	 */
 	public static void release(final File file) {
 		final java.lang.ref.SoftReference<FontFile> ref;
@@ -592,12 +592,13 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
-	 * 縦組みで横倒しにする半角の字か(U+00FF 以下と半角形 U+FF60〜U+FFDF)。縦組みの元は{@link #canDisplay(int)}で
-	 * これらを外し(横組みの書体を回して置く)、{@code text-orientation: upright}のときだけ受け持つ
-	 * ({@link #canDisplayUpright(int)})。
+	 * Whether this is a half-width character turned sideways in vertical writing (U+00FF and below, and half-width forms
+	 * U+FF60 through U+FFDF). Vertical writing sources exclude these in {@link #canDisplay(int)} (using rotated
+	 * horizontal writing fonts) and handle them only for {@code text-orientation: upright}
+	 * ({@link #canDisplayUpright(int)}).
 	 *
-	 * @param c 字
-	 * @return 半角の字なら{@code true}
+	 * @param c character
+	 * @return {@code true} for a half-width character
 	 */
 	public static boolean isSidewaysHalfWidth(final int c) {
 		return c <= 0xFF || (c >= 0xFF60 && c <= 0xFFDF);
@@ -619,13 +620,14 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
-	 * 縦組のmixed用除外を掛けず、基礎cmapに字形があるかを返す。
-	 * text-orientation: uprightのフォント選択だけが使う。
+	 * Returns whether the base cmap contains a glyph, without applying exclusions for mixed vertical writing.
+	 * Used only for font selection with text-orientation: upright.
 	 *
 	 * <p>
-	 * 縦組みの組み方を持たない書体({@link #hasVerticalLayout()}が偽、STIX Two Text のような欧文書体)は
-	 * 正立の半角の字を受け持たない(2026-10-06)。縦の送りも原点も無く横組みの書体として書き出されるので、
-	 * 正立に置くと字が次の字に重なった。font-family の次の書体へ回す。
+	 * Fonts without vertical layout ({@link #hasVerticalLayout()} is false, e.g. Latin fonts such as STIX Two Text)
+	 * do not handle upright half-width characters (2026-10-06). They have neither vertical advances nor origins
+	 * and are output as horizontal writing fonts, so upright glyphs overlapped the next character.
+	 * Try the next font in font-family.
 	 * </p>
 	 */
 	@Override
@@ -641,23 +643,24 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	/**
-	 * cmapに登録があるのに字形が空かどうかを返します。
+	 * Returns whether a glyph is empty despite having a cmap entry.
 	 *
 	 * <p>
-	 * 空の字形をcmapに載せたフォントが実在します——JejuGothic /
-	 * JejuHallasan / JejuMyeongjoは漢字(代表字の{@code 漢}を含む)が全て
-	 * 中身の無いglyfを指し、Adobe Blankは全字がそうです。cmapだけを見て
-	 * 「表示できる」と答えると、代替フォントを探さず警告も出ないまま
-	 * **文字が黙って消えます**(2026-09-01、ハングルのフォント見本で発覚)。
+	 * Some real fonts list empty glyphs in cmap: all kanji in JejuGothic /
+	 * JejuHallasan / JejuMyeongjo (including the representative character {@code 漢})
+	 * point to empty glyf data, as do all characters in Adobe Blank. Reporting
+	 * "displayable" based only on cmap makes **characters silently disappear**
+	 * without searching for a fallback font or issuing a warning
+	 * (2026-09-01, found in a Hangul font specimen).
 	 * </p>
 	 *
 	 * <p>
-	 * 空白・制御・書式文字は字形が無いのが正常なので除外します。
+	 * Excludes whitespace, control, and format characters, which normally have no glyph.
 	 * </p>
 	 *
-	 * @param gid cmapが返したglyph ID
-	 * @param c   もとの文字
-	 * @return 字形が無く、その文字にとって不正なら{@code true}
+	 * @param gid glyph ID returned by cmap
+	 * @param c   original character
+	 * @return {@code true} if the glyph is absent and its absence is invalid for the character
 	 */
 	private boolean isGlyphless(final int gid, final int c) {
 		if (Character.isWhitespace(c) || Character.isSpaceChar(c)) {
@@ -677,17 +680,18 @@ public class OpenTypeFontSource extends AbstractFontSource {
 			final var glyph = this.getOpenTypeFont().getGlyph(gid);
 			return glyph == null || glyph.isBlank();
 		} catch (final RuntimeException e) {
-			// 字形が読めないことを理由にフォントを外さない(従来どおり選ぶ)
+			// Do not exclude a font because its glyph cannot be read (select it as before).
 			LOG.log(Level.FINE, "Failed to read a glyph: " + this.file, e);
 			return false;
 		}
 	}
 
 	/**
-	 * 縦組みの組み方(縦組みの元で、vrt2 か vert の置き換えと vmtx)を持つか(2026-10-06)。
-	 * {@link net.zamasoft.pdfg2d.font.otf.OpenTypeFont} が縦組みの書体として組み・書き出す条件と同じ。
+	 * Whether vertical layout is available (a vertical writing source with vrt2 or vert substitution and vmtx)
+	 * (2026-10-06). These are the same conditions under which
+	 * {@link net.zamasoft.pdfg2d.font.otf.OpenTypeFont} lays out and outputs a vertical writing font.
 	 *
-	 * @return 縦組みの書体として使えるなら{@code true}
+	 * @return {@code true} if usable as a vertical writing font
 	 */
 	public boolean hasVerticalLayout() {
 		if (this.getDirection() != Direction.TB) {

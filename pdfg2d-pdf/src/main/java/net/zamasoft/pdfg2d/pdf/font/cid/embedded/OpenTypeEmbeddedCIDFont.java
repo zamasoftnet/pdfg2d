@@ -42,7 +42,7 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	/** Direction-specific CID-to-Unicode map; gaps belong to the other wrapper. */
 	private IntList gidToCid = new IntList(-1);
 
-	/** 2 字以上を表す字形(合字)の元の字(ToUnicode 用、2026-10-06)。 */
+	/** Original characters for glyphs representing two or more characters (ligatures), for ToUnicode (2026-10-06). */
 	private java.util.Map<Integer, int[]> clusters = new java.util.HashMap<Integer, int[]>();
 
 	/**
@@ -75,9 +75,9 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 	public int toGID(int c, net.zamasoft.pdfg2d.gc.font.FontFeatureSet features) {
 		OpenTypeEmbeddedCIDFontSource source = (OpenTypeEmbeddedCIDFontSource) this.getFontSource();
 		int fgid = source.getCmapFormat().mapCharCode(c);
-		// cmap後・subset登録前にfeature置換(jp78等)。addGIDが縦書き置換と
-		// subset GIDの採番・width登録を行うため、置換後のfont GIDを渡せば
-		// advanceも置換後グリフのものが自然に載る
+		// Apply feature substitutions (jp78, etc.) after cmap and before subset registration. addGID handles
+		// vertical writing substitution, subset GID assignment, and width registration, so passing the substituted font GID
+		// naturally registers the substituted glyph's advance as well.
 		fgid = this.substituteFeatures(fgid, features);
 		return this.addGID(c, fgid);
 	}
@@ -206,11 +206,11 @@ class OpenTypeEmbeddedCIDFont extends OpenTypeFont implements PDFEmbeddedFont {
 				return kern;
 			}
 		}
-		// サブセットGIDのままsuper(フォントGIDキーのGPOS対表)を引く
-		// 旧フォールバックは禁止。サブセットの採番(使用順の小さな番号)が
-		// フォントGIDの実在ペアと偶然一致し、フォントが定義していない
-		// 字間調整が無関係な文字対に乗っていた(2026-08-27、Minion Proの
-		// 「56」「78」等でPDF実出力から確認)
+		// Prohibit the old fallback that queried super (the GPOS pair table keyed by font GIDs)
+		// using subset GIDs unchanged. Subset numbering (small numbers in usage order)
+		// could coincidentally match real font GID pairs, applying spacing adjustments
+		// not defined by the font to unrelated character pairs (2026-08-27, confirmed in actual PDF output
+		// for Minion Pro's "56", "78", etc.).
 		return this.verticalDashKerning(sgid, gid);
 	}
 

@@ -15,9 +15,9 @@ import net.zamasoft.pdfg2d.gc.text.pipeline.TotalFit.LastLinePolicy;
 import net.zamasoft.pdfg2d.gc.text.pipeline.TotalFit.Parameters;
 
 /**
- * {@link TotalFit}(Knuth-Plass total-fit)の単体テスト。合成ノード列で
- * アルゴリズム契約(貪欲法との差・強制/禁止/flagged penalty・最終行
- * ポリシー・fit-anyway縮退)を固定する。
+ * Unit tests for {@link TotalFit} (Knuth-Plass total-fit). Synthetic node sequences
+ * fix the algorithm's contract: differences from greedy fitting, forced/prohibited/flagged
+ * penalties, last-line policy, and fit-anyway fallback.
  */
 class TotalFitTest {
 
@@ -53,14 +53,14 @@ class TotalFitTest {
 		final BrokenLine line = lines.get(0);
 		assertEquals(BreakKind.PARAGRAPH_END, line.kind());
 		assertEquals(0, line.begin());
-		// RAGGED既定なので最終行のadjustment ratioは0(自然幅のまま)。
+		// RAGGED is the default, so the last line's adjustment ratio is 0 (retains its natural width).
 		assertEquals(0.0, line.adjustmentRatio());
 	}
 
 	@Test
 	void justifiedLastLineStretches() {
 		final Parameters params = Parameters.texDefaults().withLastLine(LastLinePolicy.JUSTIFY);
-		// 自然幅 10+5+10=25、行幅30 → 5をstretch 6で埋める → r=5/6
+		// Natural width 10+5+10=25, line width 30 -> fill 5 with stretch 6 -> r=5/6.
 		final List<BrokenLine> lines = TotalFit.totalFit(words(10, 2, 5, 6, 1), 30, params);
 		assertEquals(1, lines.size());
 		assertEquals(5.0 / 6, lines.get(0).adjustmentRatio(), 1e-9);
@@ -82,8 +82,8 @@ class TotalFitTest {
 
 	@Test
 	void forbiddenPenaltyKeepsBoxesTogetherEvenOverfull() {
-		// 禁則(分離禁止)で結ばれた2つのboxは、行幅を超えても分割されない
-		// (fit-anyway縮退ではみ出したまま1行になる)。
+		// Two boxes joined by kinsoku (line-breaking rules) prohibiting separation stay together even beyond the line width
+		// (the fit-anyway fallback produces one overflowing line).
 		final List<BreakNode> nodes = new ArrayList<>();
 		nodes.add(box(8));
 		nodes.add(BreakNode.Penalty.forbidden());
@@ -95,8 +95,8 @@ class TotalFitTest {
 
 	@Test
 	void flaggedPenaltyAddsHyphenWidthOnlyWhenBroken() {
-		// box(4) [hyphen: width1 cost50] box(4)、行幅5。
-		// ハイフンで割れば 4+1=5 でちょうど収まる。
+		// box(4) [hyphen: width1 cost50] box(4), line width 5.
+		// Breaking at the hyphen gives 4+1=5, an exact fit.
 		final List<BreakNode> nodes = new ArrayList<>();
 		nodes.add(box(4));
 		nodes.add(new BreakNode.Penalty(1, 50, true));
@@ -109,15 +109,15 @@ class TotalFitTest {
 
 	@Test
 	void totalFitAvoidsGreedyTrap() {
-		// 貪欲法は先の行を詰め込みすぎて最後の行が1語だけになる。
-		// total-fitは全体のdemerits最小化により2語ずつへ均す。
-		// box(5)×4をglue(1, stretch 8, shrink 0.3)で結合、行幅17。
-		// 貪欲: [5,1,5,1,5]=17 → 2行目 [5](1語のみ)。
-		// K-P: 2-2分割(各行 natural 11、r=0.75、badness 42 ≤ tolerance)。
+		// Greedy fitting packs earlier lines too tightly, leaving only one word on the last line.
+		// Total-fit minimizes overall demerits to balance the lines at two words each.
+		// Four box(5) nodes joined with glue(1, stretch 8, shrink 0.3), line width 17.
+		// Greedy: [5,1,5,1,5]=17 -> second line [5] (only one word).
+		// K-P: 2-2 split (each line: natural 11, r=0.75, badness 42 <= tolerance).
 		final List<BreakNode> nodes = words(5, 4, 1, 8, 0.3);
 		final List<BrokenLine> optimal = TotalFit.totalFit(nodes, 17,
 				Parameters.texDefaults().withLastLine(LastLinePolicy.JUSTIFY));
-		// total-fitは貪欲法と同じ2行のまま、どの行も2語を保つ(極端な最終行を回避)
+		// Total-fit keeps two lines, as greedy fitting does, but puts two words on each (avoiding an extreme last line).
 		assertEquals(2, optimal.size());
 		for (final BrokenLine line : optimal) {
 			final long boxes = nodes.subList(line.begin(), Math.min(line.end(), nodes.size())).stream()
@@ -128,7 +128,7 @@ class TotalFitTest {
 
 	@Test
 	void varyingLineMeasureIsRespected() {
-		// 1行目だけ狭い(text-indent相当)。1行目は2語、2行目に4語。
+		// Only the first line is narrow (equivalent to text-indent). Two words on the first line, four on the second.
 		final List<BreakNode> nodes = words(5, 6, 1, 2, 0.5);
 		final LineMeasure measure = lineIndex -> lineIndex == 0 ? 11 : 100;
 		final List<BrokenLine> lines = TotalFit.totalFit(nodes, measure, Parameters.texDefaults());
@@ -156,11 +156,11 @@ class TotalFitTest {
 
 	@Test
 	void longCjkParagraphSolvesInLinearTime() {
-		// 和文の典型: 全文字境界が分割候補(box+penalty(0)の繰り返し)。
-		// deactivation(shrink限界超過のactive除去)がないとactiveが
-		// 分割候補数に比例して伸び、実測で数分規模にハングした
-		// (2026-07-24、text.line-breaker既定化時に発覚)。10000字でも
-		// 秒未満で解けることを固定する。
+		// Typical Japanese text: every character boundary is a break candidate (repeated box+penalty(0)).
+		// Without deactivation (removing active nodes that exceed the shrink limit), the active set
+		// grew in proportion to the number of break candidates and stalled for minutes in measurements
+		// (2026-07-24, discovered when making text.line-breaker the default). Require a solution
+		// in under a second even for 10000 characters.
 		final List<BreakNode> nodes = new ArrayList<>();
 		for (int i = 0; i < 10000; ++i) {
 			if (i > 0) {
@@ -178,13 +178,13 @@ class TotalFitTest {
 
 	@Test
 	void allCandidatesHopelessForcesProgress() {
-		// 分割禁止で結ばれた長大な塊の後に通常の分割候補が続く場合、
-		// 全activeが一斉にshrink限界を超えても、fit-anywayで前進する
-		// (無限ループ・空active落ちしない)。
+		// When normal break candidates follow a large chunk joined by prohibited breaks,
+		// fit-anyway makes progress even if all active nodes exceed the shrink limit at once
+		// (no infinite loop or failure due to an empty active set).
 		final List<BreakNode> nodes = new ArrayList<>();
 		nodes.add(box(5));
 		nodes.add(glue(1, 0.5, 0));
-		// 幅50の行に対し到底収まらない不可分の塊
+		// An indivisible chunk far too large to fit in a line of width 50.
 		for (int i = 0; i < 30; ++i) {
 			nodes.add(box(10));
 			if (i < 29) {

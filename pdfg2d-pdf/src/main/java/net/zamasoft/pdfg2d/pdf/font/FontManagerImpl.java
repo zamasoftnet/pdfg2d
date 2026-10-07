@@ -74,20 +74,21 @@ public class FontManagerImpl implements FontManager, Closeable {
 	}
 
 	/**
-	 * 字形を持たない中核書体(Type 1 の AFM だけの書体)を候補の最後に回すか(2026-10-04)。
+	 * Whether to move core fonts without glyph outlines (Type 1 fonts with AFM only) to the end of the candidates (2026-10-04).
 	 */
 	private boolean coreFontsLast;
 
 	/**
-	 * 字形を持たない中核書体(Type 1 の AFM だけの書体)を、選んだ書体の候補の最後に回します。
+	 * Moves core fonts without glyph outlines (Type 1 fonts with AFM only) to the end of the selected font candidates.
 	 * <p>
-	 * ラスタ出力(PNG・JPEG)では中核書体を Java2D の書体で描くが、Times-Roman のような名前は
-	 * Java2D が知らず sans の既定(Dialog)で描かれ、それを AFM の送り幅で並べるので字形も字間も
-	 * 崩れた(既定の欧文が Times)。字形を持つ書体が候補にあればそちらで描き、無ければ従来どおり
-	 * 中核書体を使う(字が消えない)。PDF は中核書体を閲覧ソフトが描くので変えない。
+	 * Raster output (PNG/JPEG) draws core fonts using Java2D fonts, but Java2D does not recognize names such as
+	 * Times-Roman and uses the default sans font (Dialog). Placing those glyphs with AFM advances distorted both
+	 * shapes and spacing (Times was the default for Latin text). Uses a candidate with outlines if available;
+	 * otherwise, uses core fonts as before (characters do not disappear).
+	 * PDF remains unchanged because the viewer renders its core fonts.
 	 * </p>
 	 *
-	 * @param coreFontsLast 回すなら true
+	 * @param coreFontsLast true to move them to the end
 	 */
 	public void setCoreFontsLast(final boolean coreFontsLast) {
 		if (this.coreFontsLast != coreFontsLast) {

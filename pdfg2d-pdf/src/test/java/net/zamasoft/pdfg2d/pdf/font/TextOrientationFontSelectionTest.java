@@ -19,7 +19,7 @@ import net.zamasoft.pdfg2d.gc.font.FontStyleImpl;
 import net.zamasoft.pdfg2d.pdf.font.cid.embedded.OpenTypeEmbeddedCIDFontSource;
 import net.zamasoft.pdfg2d.pdf.font.util.MultimapUtils;
 
-/** text-orientationによる縦/横font source選択を固定する。 */
+/** Ensures that text-orientation selects the appropriate font source for vertical or horizontal writing. */
 public class TextOrientationFontSelectionTest {
 	private static final File FONT = new File("../pdfg2d-demo/src/main/resources/ipaexm.ttf");
 	private static final FontPolicyList EMBEDDED = new FontPolicyList(

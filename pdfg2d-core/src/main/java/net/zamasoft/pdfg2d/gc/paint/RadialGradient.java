@@ -30,7 +30,7 @@ public record RadialGradient(double cx, double cy, double radius, double fx, dou
 		// Default constructor
 	}
 
-	/** 定義域外は端の色で埋める(PAD)。 */
+	/** Fills outside the domain with the endpoint colors (PAD). */
 	public RadialGradient(final double cx, final double cy, final double radius, final double fx, final double fy, final double[] fractions, final Color[] colors,
 			final AffineTransform transform) {
 		this(cx, cy, radius, fx, fy, fractions, colors, transform, SpreadMethod.PAD);

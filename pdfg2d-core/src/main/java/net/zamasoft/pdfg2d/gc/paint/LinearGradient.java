@@ -38,7 +38,7 @@ public record LinearGradient(double x1, double y1, double x2, double y2, double[
 		}
 	}
 
-	/** 定義域外は端の色で埋める(PAD)。 */
+	/** Fills outside the domain with the endpoint colors (PAD). */
 	public LinearGradient(final double x1, final double y1, final double x2, final double y2, final double[] fractions, final Color[] colors,
 			final AffineTransform transform) {
 		this(x1, y1, x2, y2, fractions, colors, transform, SpreadMethod.PAD);

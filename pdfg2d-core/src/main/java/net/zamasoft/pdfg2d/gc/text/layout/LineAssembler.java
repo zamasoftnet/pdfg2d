@@ -12,16 +12,16 @@ import net.zamasoft.pdfg2d.gc.text.TextImpl;
 import net.zamasoft.pdfg2d.gc.text.layout.control.Control;
 
 /**
- * 行の組み立て(グリフ蓄積・切断機会でのrun分割・justify・行メトリクス
- * 計測)です(2026-08-01、90点計画増分13——
- * {@link PageLayoutGlyphHandler#endLine}が行分割・justify・計測・段あふれ・
- * 描画バッファ登録を同時に行っていたのを分離した)。
+ * Line assembly (glyph accumulation, run splitting at break opportunities, justification,
+ * and line metrics measurement) (2026-08-01, 90-point plan increment 13).
+ * Separated from {@link PageLayoutGlyphHandler#endLine}, which previously handled line splitting,
+ * justification, measurement, column overflow, and drawing buffer registration together.
  *
  * <p>
- * このクラスは「切断機会({@link #markBreakOpportunity()})までの内容で
- * 1行を確定し、開いているテキスト単位を次行へ持ち越す」ところまでを担い、
- * 段配置・ページ送り・描画は{@link PageLayoutGlyphHandler}に残る。
- * XMLやGCなしで行分割を単体テストできる。
+ * This class finalizes a line using content through the break opportunity
+ * ({@link #markBreakOpportunity()}) and carries the open text unit over to the next line.
+ * Column placement, page advancement, and drawing remain in {@link PageLayoutGlyphHandler}.
+ * Line splitting can be unit-tested without XML or GC.
  * </p>
  *
  * @author MIYABE Tatsuhiko
@@ -29,11 +29,11 @@ import net.zamasoft.pdfg2d.gc.text.layout.control.Control;
 final class LineAssembler {
 
 	/**
-	 * 確定した1行です。
+	 * A finalized line.
 	 *
-	 * @param elements 行の内容(描画順)
-	 * @param ascent   行の最大アセント(fontSize指定時は補正済み)
-	 * @param descent  行の最大ディセント(同)
+	 * @param elements line content (in drawing order)
+	 * @param ascent   maximum ascent of the line (adjusted if fontSize is specified)
+	 * @param descent  maximum descent of the line (likewise)
 	 */
 	record LineBox(Element[] elements, double ascent, double descent) {
 	}
@@ -46,10 +46,10 @@ final class LineAssembler {
 
 	private double advance = 0;
 
-	/** 現在のテキスト単位(切断機会以降)の要素数です。 */
+	/** Number of elements in the current text unit (since the break opportunity). */
 	private int textUnitElementCount = 0;
 
-	/** 現在のテキスト単位のうち、開いているrunに属するグリフ数です。 */
+	/** Number of glyphs in the current text unit that belong to the open run. */
 	private int textUnitGlyphCount = 0;
 
 	void setLetterSpacing(final double letterSpacing) {
@@ -60,7 +60,7 @@ final class LineAssembler {
 		return this.letterSpacing;
 	}
 
-	/** 蓄積中の行の送り量(タブ位置計算と切断判定に使う)。 */
+	/** Advance of the accumulating line (used for tab positioning and break decisions). */
 	double advance() {
 		return this.advance;
 	}
@@ -81,7 +81,7 @@ final class LineAssembler {
 		assert this.text.getGlyphCount() > 0;
 	}
 
-	/** 開いているrunを確定して行バッファへ移します。 */
+	/** Finalizes the open run and moves it to the line buffer. */
 	void closeTextRun() {
 		if (this.text != null) {
 			this.text.pack();
@@ -92,7 +92,7 @@ final class LineAssembler {
 		}
 	}
 
-	/** 制御要素(タブ・改行マーカー等)を行バッファへ加えます。 */
+	/** Adds a control element (tab, line break marker, etc.) to the line buffer. */
 	void addControl(final Control control) {
 		this.closeTextRun();
 		this.textBuffer.add(control);
@@ -101,8 +101,8 @@ final class LineAssembler {
 	}
 
 	/**
-	 * 切断機会を刻みます。以降の内容は「次行へ持ち越しうる単位」として
-	 * 数え直される。
+	 * Marks a break opportunity. Restarts counting subsequent content as a unit
+	 * that may be carried over to the next line.
 	 */
 	void markBreakOpportunity() {
 		this.textUnitElementCount = 0;
@@ -110,16 +110,16 @@ final class LineAssembler {
 	}
 
 	/**
-	 * 行を確定します。
+	 * Finalizes the line.
 	 *
-	 * @param last       強制改行(改行文字・末尾)なら{@code true}——開いている
-	 *                   単位を含む全内容で行を閉じる。{@code false}ならあふれ
-	 *                   切断——最後の切断機会までで行を閉じ、現在の単位
-	 *                   (開いているrunの分割を含む)は次行へ持ち越す
-	 * @param justify    行末を揃える(あふれ切断の行のみ適用)か
-	 * @param maxAdvance 行の最大送り量(justifyの分配に使う)
-	 * @param fontSize   固定行高のためのフォントサイズ(0なら実測ディセント)
-	 * @return 確定した行
+	 * @param last       {@code true} for a forced break (newline or end): closes the line with all
+	 *                   content, including the open unit. {@code false} for an overflow break:
+	 *                   closes the line at the last break opportunity and carries the current unit
+	 *                   (including splitting the open run) over to the next line
+	 * @param justify    whether to justify the line end (applies only to overflow breaks)
+	 * @param maxAdvance maximum line advance (used to distribute justification)
+	 * @param fontSize   font size for fixed line height (0 uses measured descent)
+	 * @return finalized line
 	 */
 	LineBox breakLine(final boolean last, final boolean justify, final double maxAdvance, final double fontSize) {
 		final Element[] elements;

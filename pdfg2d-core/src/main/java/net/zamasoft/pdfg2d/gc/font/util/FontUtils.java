@@ -48,12 +48,12 @@ public final class FontUtils {
 	}
 
 	/**
-	 * 縦組みで横書きフォントを横倒しにする変換を作成します。
-	 * 90度回転後の字面が行の中央に来るよう、フォントのBBox中央で補正します。
+	 * Creates a transform that turns a horizontal writing font sideways for vertical writing.
+	 * Adjusts by the center of the font BBox to center the rotated glyph bounds (ink) on the line after a 90-degree rotation.
 	 *
-	 * @param source   フォントソース
-	 * @param fontSize フォントサイズ
-	 * @return 横倒し用の変換
+	 * @param source   font source
+	 * @param fontSize font size
+	 * @return transform for sideways orientation
 	 */
 	public static AffineTransform createSidewaysTransform(final FontSource source, final double fontSize) {
 		final var transform = AffineTransform.getRotateInstance(Math.PI / 2.0);
@@ -130,7 +130,7 @@ public final class FontUtils {
 				}
 			}
 		} else {
-			// 横書き。縦組みではローカルX方向のペン送りを回転してY方向へ向ける。
+			// Horizontal writing. For vertical writing, rotate the pen advance along local X to point along Y.
 			int pgid = 0;
 			for (int i = 0; i < glyphCount; ++i) {
 				final int gid = glyphIds[i];
@@ -152,8 +152,8 @@ public final class FontUtils {
 				}
 				var shape = ((ShapedFont) font).getShapeByGID(gid);
 				if (shape != null) {
-					// 字面の視覚シフト(palt xPlacement——増分⑤): ペン(at)は
-					// 進めず、このグリフの描画にだけ適用する
+					// Visual shift of glyph bounds (ink) (palt xPlacement, increment ⑤): do not advance the pen (at);
+					// apply only when drawing this glyph.
 					final double placement = fm.getPlacementAdjustment(gid);
 					if (placement != 0) {
 						at2.translate(placement, 0);
@@ -290,7 +290,7 @@ public final class FontUtils {
 				}
 			} else {
 				if (direction == Direction.TB) {
-					// 横書きフォントを縦組みの行へ横倒しにする
+					// Turn a horizontal writing font sideways for a vertical writing line.
 					gc.transform(createSidewaysTransform(font.getFontSource(), fontSize));
 				}
 				// Horizontal writing
@@ -309,8 +309,8 @@ public final class FontUtils {
 						}
 						at.preConcatenate(AffineTransform.getTranslateInstance(dx, 0));
 					}
-					// 字面の視覚シフト(palt xPlacement——増分⑤): ペン(at)は
-					// 進めず、このグリフの描画にだけ適用する
+					// Visual shift of glyph bounds (ink) (palt xPlacement, increment ⑤): do not advance the pen (at);
+					// apply only when drawing this glyph.
 					var gat = at;
 					final double placement = fm.getPlacementAdjustment(gid);
 					if (placement != 0) {

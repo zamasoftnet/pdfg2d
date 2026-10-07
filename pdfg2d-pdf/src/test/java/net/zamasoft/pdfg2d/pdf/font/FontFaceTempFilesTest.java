@@ -16,11 +16,12 @@ import net.zamasoft.pdfg2d.gc.font.FontFace;
 import net.zamasoft.zstream.resolver.protocol.stream.StreamSource;
 
 /**
- * {@code @font-face} のために作った一時ファイルが、管理を閉じると残らないことを固定します(2026-10-05)。
+ * Ensures that closing the manager leaves no temporary files created for {@code @font-face} (2026-10-05).
  *
  * <p>
- * 取得結果の写しだけが消され、可変フォントの写し(太さ 9 段)と、それを開いたキャッシュが握る書体は
- * プロセスが終わるまで残っていた。常駐するサーバーでは変換ごとに溜まる。
+ * Only the copy of the fetched data was deleted. Variable font copies (nine weights) and the fonts held
+ * by the cache that opened them remained until the process exited. In a persistent server, they
+ * accumulated with each conversion.
  * </p>
  */
 public class FontFaceTempFilesTest {
@@ -55,7 +56,7 @@ public class FontFaceTempFilesTest {
 		}
 		final Set<String> made = tempFiles();
 		made.removeAll(before);
-		// 取得結果 1 本と太さの写し
+		// One copy of the fetched data, plus copies for the weights
 		assertTrue(made.size() > 1, made.toString());
 
 		manager.close();

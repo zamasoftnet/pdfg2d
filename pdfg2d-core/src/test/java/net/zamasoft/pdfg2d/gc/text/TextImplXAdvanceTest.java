@@ -93,8 +93,8 @@ public class TextImplXAdvanceTest {
 	@Test
 	void splitCarriesAdjustmentsToBothParts() {
 		final TextImpl text = text(4);
-		text.addXAdvance(0, -5); // head側
-		text.addXAdvance(3, -2); // tail側
+		text.addXAdvance(0, -5); // Head side.
+		text.addXAdvance(3, -2); // Tail side.
 		final TextImpl head = (TextImpl) text.split(2);
 		// head: glyphs 0-1, adjustments [-5, 0]
 		assertArrayEquals(new double[] { -5, 0 }, toArray(head.xAdvances()), 0.0001);

@@ -8,9 +8,9 @@ import net.zamasoft.pdfg2d.pdf.params.OutputIntent;
 import net.zamasoft.pdfg2d.pdf.params.PDFParams;
 
 /**
- * {@code /OutputIntents}のOutputIntent辞書とICCプロファイルストリームを
- * 書き出します(2026-08-01、PDFWriterImplコンストラクタからの抽出——
- * ViewerPreferencesWriter/XMPMetadataWriterと同じ様式)。
+ * Writes the OutputIntent dictionary and ICC profile stream for {@code /OutputIntents}
+ * (2026-08-01, extracted from the PDFWriterImpl constructor,
+ * following the same pattern as ViewerPreferencesWriter/XMPMetadataWriter).
  *
  * @author MIYABE Tatsuhiko
  * @since 1.3
@@ -26,7 +26,7 @@ final class OutputIntentWriter {
 		// static use only
 	}
 
-	/** 同梱ICCを一度だけ読み込み、既定のCMYK出力インテントを返します。 */
+	/** Loads the bundled ICC profile once and returns the default CMYK output intent. */
 	static OutputIntent defaultCmykIntent() throws IOException {
 		var intent = defaultCmykIntent;
 		if (intent == null) {
@@ -44,7 +44,7 @@ final class OutputIntentWriter {
 		return intent;
 	}
 
-	/** CMYK変換に使う、明示指定または既定の出力インテントICCを返します。 */
+	/** Returns the explicit or default output intent ICC profile used for CMYK conversion. */
 	static byte[] cmykProfile(final PDFParams params) throws IOException {
 		final var intent = params.outputIntent();
 		if (intent != null && intent.colorComponents() == 4 && intent.iccProfile() != null) {
@@ -53,7 +53,7 @@ final class OutputIntentWriter {
 		return defaultCmykIntent().iccProfile();
 	}
 
-	/** 同梱ICCを一度だけ読み込み、既定のRGB出力インテントを返します。 */
+	/** Loads the bundled ICC profile once and returns the default RGB output intent. */
 	private static OutputIntent defaultRgbIntent() throws IOException {
 		var intent = defaultRgbIntent;
 		if (intent == null) {
@@ -70,12 +70,12 @@ final class OutputIntentWriter {
 	}
 
 	/**
-	 * OutputIntentオブジェクトを書き出します。
+	 * Writes the OutputIntent object.
 	 *
-	 * @param mainFlow 出力先
-	 * @param xref     クロスリファレンス(ICCプロファイル用の間接参照を割り当てる)
-	 * @param params   PDF生成パラメータ
-	 * @param ref      OutputIntent辞書に割り当て済みの間接参照
+	 * @param mainFlow output destination
+	 * @param xref     cross-reference (allocates the indirect reference for the ICC profile)
+	 * @param params   PDF generation parameters
+	 * @param ref      indirect reference already allocated for the OutputIntent dictionary
 	 * @throws IOException if an I/O error occurs
 	 */
 	static void write(final PDFFragmentOutputImpl mainFlow, final XRefImpl xref, final PDFParams params,
@@ -91,8 +91,8 @@ final class OutputIntentWriter {
 		mainFlow.writeName(pdfVersion.isPdfX() ? "GTS_PDFX" : "GTS_PDFA1");
 		mainFlow.lineBreak();
 
-		// 明示指定を常に優先する。PDF/Xでは内容の色モードにかかわらず、
-		// 印刷条件を表すCMYK出力インテントが必要になる。
+		// Always prefer an explicit setting. PDF/X requires a CMYK output intent describing
+		// the printing conditions, regardless of the content's color mode.
 		var intent = params.outputIntent();
 		if (intent == null) {
 			if (pdfVersion.isPdfX()

@@ -48,8 +48,8 @@ public record GlyfCompositeComp(
 	protected static GlyfCompositeComp read(final int firstIndex, final int firstContour, final RandomAccessFile raf)
 			throws IOException {
 		final short flags = (short) (raf.read() << 8 | raf.read());
-		// glyphIndexはuint16。shortへ丸めてabsを取ると、glyphが32768個以上の
-		// フォントで別のglyphを指す(2026-09-01)
+		// glyphIndex is uint16. Converting to short and taking abs points to a different glyph
+		// in fonts with 32768 or more glyphs (2026-09-01).
 		final int glyphIndex = raf.read() << 8 | raf.read();
 
 		short argument1, argument2;
@@ -58,10 +58,10 @@ public record GlyfCompositeComp(
 			argument1 = (short) (raf.read() << 8 | raf.read());
 			argument2 = (short) (raf.read() << 8 | raf.read());
 		} else {
-			// **符号付き**の1バイト。read()の0..255をそのまま使うと、
-			// 左へ寄せる成分(例: -16)が+240へ化けて合成字が崩れる
-			// ——Gothic A1のά(α+トノス)やзで、字面が右へずれて
-			// 次の字と重なっていた(2026-09-01)
+			// One **signed** byte. Using read()'s 0..255 unchanged turns
+			// leftward component offsets (e.g. -16) into +240, distorting composite glyphs.
+			// In Gothic A1, the glyph bounds (ink) of ά (α + tonos) and з shifted right
+			// and overlapped the next character (2026-09-01).
 			argument1 = (byte) raf.read();
 			argument2 = (byte) raf.read();
 		}

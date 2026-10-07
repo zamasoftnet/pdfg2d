@@ -55,9 +55,9 @@ public interface KernSubtable {
 			case 2 -> KernSubtableFormat2.read(raf);
 			default -> null;
 		};
-		// 次の副表の先頭へ進める。未知形式は宣言長で読み飛ばす。lengthは
-		// 16bitで、大きなペア表では溢れて実際より短い値が入っている実フォント
-		// があるため(Arial等の既知問題)、解析済み位置より後退はしない
+		// Advance to the next subtable. Skip unknown formats by their declared length. length is
+		// 16-bit, and some real fonts have large pair tables with overflowed values shorter than their actual size
+		// (a known issue in Arial, etc.), so never move backward past the parsed position.
 		final long declaredEnd = start + length;
 		if (raf.getFilePointer() < declaredEnd) {
 			raf.seek(declaredEnd);

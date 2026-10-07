@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import net.zamasoft.pdfg2d.pdf.color.ColorConverter;
 import net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl;
 
-/** 出力インテントICCによるsRGB→CMYK変換の性質試験です。 */
+/** Property tests for sRGB-to-CMYK conversion using the output intent ICC profile. */
 public class ColorConverterTest {
 	private static ColorConverter converter() throws IOException {
 		try (final var in = PDFWriterImpl.class.getResourceAsStream("ISOcoated_v2_300_eci.icc")) {

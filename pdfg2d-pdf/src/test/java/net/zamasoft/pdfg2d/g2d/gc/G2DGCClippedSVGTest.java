@@ -25,15 +25,16 @@ import net.zamasoft.pdfg2d.svg.SVGDimension;
 import net.zamasoft.pdfg2d.svg.SVGImage;
 import net.zamasoft.pdfg2d.svg.SVGUserAgent;
 
-/** 外側のクリップと変換を通したSVGでも子Graphics2Dの座標が変わらないことの検査。 */
+/** Verifies that SVGs drawn through an outer clip and transform preserve child Graphics2D coordinates. */
 class G2DGCClippedSVGTest {
 	private static final double SCALE = 2.0 / 3.0;
 	private static final Rectangle2D OUTER_CLIP = new Rectangle2D.Double(0, 0, 35, 50);
 	private static final Color[] RECT_COLORS = { Color.RED, Color.GREEN, Color.BLUE };
 
 	/**
-	 * Batikはクリップ付き要素に{@code create()}したGraphics2Dを使う。その子で
-	 * 変換を復元した後も、保存点に既に含まれる親変換を二重に適用してはならない。
+	 * Batik uses a Graphics2D created with {@code create()} for clipped elements. Even after
+	 * restoring the transform in that child, it must not apply the parent transform twice,
+	 * since the saved state already includes it.
 	 */
 	@Test
 	void clippedSvgKeepsPositionWhenDrawnThroughOuterClipAndScale() throws Exception {

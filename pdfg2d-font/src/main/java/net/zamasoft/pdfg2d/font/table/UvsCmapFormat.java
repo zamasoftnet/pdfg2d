@@ -10,14 +10,14 @@ import net.zamasoft.pdfg2d.util.LongIntLookup;
  * UVS (Unicode Variation Sequence) cmap format.
  *
  * <p>
- * 2026-08-01にboxed Map/Setからプリミティブ索引({@link LongIntLookup}+
- * ソート済みint[])へ圧縮({@link GenericCmapFormat}と同方針)。IVS
- * コレクションを持つCJKフォントは数千〜数万対を持つため、boxed実装は
- * フォントあたり数百KBの保持と参照毎のboxingを生んでいた。
+ * Compressed from boxed Map/Set to primitive indexes ({@link LongIntLookup} and
+ * sorted int[]) on 2026-08-01 (the same approach as {@link GenericCmapFormat}).
+ * CJK fonts with IVS collections have thousands to tens of thousands of pairs,
+ * so the boxed implementation retained hundreds of KB per font and boxed values on every lookup.
  * </p>
  *
- * @param codeToGlyphId {@code (unicodeValue << 32) | varSelector} →GIDの索引
- * @param selectors     異体字セレクタの昇順配列
+ * @param codeToGlyphId index from {@code (unicodeValue << 32) | varSelector} to GID
+ * @param selectors     array of variation selectors in ascending order
  */
 public record UvsCmapFormat(LongIntLookup codeToGlyphId, int[] selectors) implements CmapFormat {
 

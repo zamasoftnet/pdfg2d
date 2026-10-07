@@ -7,7 +7,7 @@ import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link LongIntLookup}のテストです(2026-08-01、95点計画増分1)。
+ * Tests for {@link LongIntLookup} (2026-08-01, 95-point plan increment 1).
  */
 public class LongIntLookupTest {
 
@@ -28,7 +28,7 @@ public class LongIntLookupTest {
 
 	@Test
 	public void testOversizedBackingArrays() {
-		// 有効長より大きい配列を渡した場合は切り詰める
+		// Truncate arrays longer than the valid length.
 		final LongIntLookup lookup = LongIntLookup.fromUnsorted(new long[] { 3, 1, 2, 0, 0, 0 },
 				new int[] { 30, 10, 20, 0, 0, 0 }, 3);
 		assertEquals(3, lookup.size());
@@ -49,7 +49,7 @@ public class LongIntLookupTest {
 			}
 			final long[] keys = new long[n];
 			final int[] values = new int[n];
-			// 挿入順(=ランダム順)で構築
+			// Construct in insertion (= random) order.
 			final java.util.List<Long> shuffled = new java.util.ArrayList<>(reference.keySet());
 			java.util.Collections.shuffle(shuffled, random);
 			for (int i = 0; i < n; ++i) {
@@ -65,7 +65,7 @@ public class LongIntLookupTest {
 				final long probe = random.nextLong();
 				assertEquals(reference.getOrDefault(probe, -7), lookup.getOrDefault(probe, -7));
 			}
-			// keyAt/valueAtはキー昇順
+			// keyAt/valueAt use ascending key order.
 			long prev = Long.MIN_VALUE;
 			for (int i = 0; i < lookup.size(); ++i) {
 				assertEquals(true, lookup.keyAt(i) > prev);

@@ -80,7 +80,7 @@ public abstract class AbstractType1FontSource extends AbstractFontSource impleme
 		return gi.advance;
 	}
 
-	/** AFM の KPX の値(負なら詰める)です。first の後ろに second が続く組。 */
+	/** AFM KPX value (negative reduces spacing) for the pair where second follows first. */
 	short getKerning(int first, int second) {
 		if (!this.canDisplayGID(first)) {
 			return 0;

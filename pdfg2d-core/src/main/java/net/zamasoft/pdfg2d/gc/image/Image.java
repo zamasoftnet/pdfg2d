@@ -11,23 +11,23 @@ import net.zamasoft.pdfg2d.gc.GraphicsException;
  */
 public interface Image {
 	/**
-	 * 固有寸法の種別です(css-images-3 §sizing、2026-08-27)。
-	 * ラスタ画像は常にSIZE。SVGはwidth/height属性が無ければviewBoxの
-	 * 縦横比だけを持ち(RATIO)、viewBoxも無ければ寸法情報なし(NONE)。
-	 * 背景描画のbackground-size:autoはこれで既定サイズ規則を分岐する
-	 * (SIZE=原寸、RATIO=contain制約、NONE=配置領域いっぱい)。
+	 * Intrinsic dimension type (css-images-3 §sizing, 2026-08-27).
+	 * Raster images always use SIZE. SVGs without width/height attributes have only
+	 * the viewBox aspect ratio (RATIO), or no dimension information (NONE) if viewBox is also absent.
+	 * For background-size:auto, background drawing uses this to choose the default sizing rule
+	 * (SIZE=original size, RATIO=contain constraint, NONE=fill the positioning area).
 	 */
 	public enum Intrinsic {
 		SIZE, RATIO, NONE;
 	}
 
 	/**
-	 * 固有寸法の種別を返します({@link Intrinsic}参照)。
-	 * {@link #getWidth()}/{@link #getHeight()}はRATIO/NONEでも描画用の
-	 * 具体値(viewBox寸法・既定300x150)を返す——本メソッドは
-	 * その値が「固有寸法」か「代用値」かを区別する。
+	 * Returns the intrinsic dimension type (see {@link Intrinsic}).
+	 * {@link #getWidth()}/{@link #getHeight()} return concrete drawing values
+	 * (viewBox dimensions or the default 300x150) even for RATIO/NONE.
+	 * This method distinguishes whether those values are intrinsic dimensions or substitutes.
 	 *
-	 * @return 固有寸法の種別
+	 * @return intrinsic dimension type
 	 */
 	public default Intrinsic getIntrinsic() {
 		return Intrinsic.SIZE;

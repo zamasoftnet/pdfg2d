@@ -20,9 +20,9 @@ public class FontFace {
 	public Weight fontWeight = Weight.W_400;
 	public Style fontStyle = Style.NORMAL;
 	/**
-	 * {@code font-stretch}ディスクリプタの幅級(OS/2 usWidthClass 1..9、
-	 * 5=normal、2026-08-29)。@font-face経路ではファイルのOS/2でなく
-	 * この宣言値が書体の幅級になる(weight/styleと同じ扱い)。
+	 * Width class of the {@code font-stretch} descriptor (OS/2 usWidthClass 1..9,
+	 * 5=normal, 2026-08-29). In the @font-face path, this declared value determines
+	 * the font's width class instead of the file's OS/2 value (as with weight/style).
 	 */
 	public int widthClass = net.zamasoft.pdfg2d.font.FontSource.NORMAL_WIDTH_CLASS;
 	public UnicodeRangeList unicodeRange = null;
@@ -30,9 +30,9 @@ public class FontFace {
 	public String cmap = null, vcmap = null;
 
 	/**
-	 * 可変フォントの軸座標です(font-variation-settingsディスクリプタ、
-	 * 2026-08-20)。nullなら既定値。指定があれば静的インスタンス化
-	 * ({@code VariableFontInstancer})の座標に使われる。
+	 * Axis coordinates for variable fonts (font-variation-settings descriptor,
+	 * 2026-08-20). Null means defaults. If specified, used as the coordinates
+	 * for static instantiation ({@code VariableFontInstancer}).
 	 */
 	public java.util.Map<String, Double> variationSettings = null;
 

@@ -53,16 +53,16 @@ public class JapaneseBreakingRules implements TextBreakingRules {
 	 * Prohibited characters at the start of a line (SPEC JIS-X4051 8.1.1 + custom).
 	 */
 	private static final String GYOTO_KINSOKU = "～〜ヽヾゝゞ ー ァ ィ ゥ ェ ォ ッ ャ ュ ョ ヮ ヵ ヶ ぁ ぃ ぅ ぇ ぉ っ ゃ ゅ ょ ゎ ゕ ゖ ㇰ ㇱ ㇳ ㇲ ㇳ ㇴ ㇵ ㇶ ㇷ ㇸ ㇹ ㇺ ㇻ ㇼ ㇽ ㇾ ㇿ 々 〻\u3000・”"
-			// JLREQ 3.1.7: ハイフン類(cl-03)は行頭禁則。カテゴリPdはswitchに
-			// 掛からないため明示する(U+2010, U+2013, U+30A0。波ダッシュは既出)
+			// JLREQ 3.1.7: kinsoku (line-breaking rules) prohibits hyphens (cl-03) at line start. Category Pd is not
+			// handled by the switch, so list it explicitly (U+2010, U+2013, U+30A0; wave dash is already listed).
 			+ "\u2010\u2013\u30A0";
 
 	/**
 	 * Exclude emphatic dots that are mistakenly treated as line-start prohibited.
 	 */
 	private static final String GYOTO_KINSOKU_EX = "\uFE45\uFE46"
-			// JLREQ 3.1.7: 分離禁止文字(cl-08)は行頭禁則ではない。三点リーダ・
-			// 二点リーダはPo一律禁止から除外(……の対自体はcanSeparate=falseで不可分)
+			// JLREQ 3.1.7: inseparable characters (cl-08) are allowed at line start. Exclude horizontal ellipsis and
+			// two dot leader from the blanket Po prohibition (the …… pair itself is inseparable via canSeparate=false).
 			+ "\u2026\u2025";
 
 	/**
@@ -150,9 +150,9 @@ public class JapaneseBreakingRules implements TextBreakingRules {
 				// A space, a bracket or a kanji after the mark still breaks.
 				return LATIN_OR_DIGIT;
 			}
-			// JLREQ 3.1.10: 分離禁止文字(cl-08)の同字連続は分割禁止
-			// (2倍ダーシ——・2倍リーダ……・‥‥)。―(U+2015)は同注記の
-			// 処理系拡張。異字の組は分割可(附属書C.2)
+			// JLREQ 3.1.10: prohibit breaks between consecutive identical inseparable characters (cl-08)
+			// (double em dash ——, double ellipsis ……, and ‥‥). ― (U+2015) is an implementation
+			// extension per that note. Pairs of different characters may be split (Annex C.2).
 			if (c == '—' || c == '…' || c == '‥' || c == '―') {
 				return cc -> cc == c;
 			}

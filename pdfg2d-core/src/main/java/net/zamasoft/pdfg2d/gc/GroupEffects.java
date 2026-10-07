@@ -3,22 +3,23 @@ package net.zamasoft.pdfg2d.gc;
 import net.zamasoft.pdfg2d.gc.paint.Color;
 
 /**
- * 1枚の層(グループ画像)にまとめて掛ける効果(CSSのfilter相当、2026-08-29)。
+ * Effects applied together to a single layer (group image), equivalent to CSS filter (2026-08-29).
  *
  * <p>
- * 適用順は CSS の filter 関数列に合わせ、利用側が「色行列 → ぼかし → 落とし影」
- * の順で1つに畳んで渡す。どれも null / 0 なら効果なし。出力先が
+ * The caller combines the effects in the order "color matrix -> blur -> drop shadow",
+ * following the order of CSS filter functions. All null / 0 means no effects.
+ * Accurate rendering requires output target support for
  * {@link GC.Capability#GROUP_FILTER} / {@link GC.Capability#GAUSSIAN_BLUR} /
- * {@link GC.Capability#DROP_SHADOW} に対応するときだけ厳密に描かれる。
+ * {@link GC.Capability#DROP_SHADOW}.
  * </p>
  *
- * @param colorMatrix 4×5 の色行列(行優先、20要素)。null なら恒等
- * @param blurSigma   ガウスぼかしの標準偏差(ユーザー空間単位)。0 以下なら無し
- * @param dropShadow  落とし影。null なら無し
- * @param opacity     層全体の不透明度 0..1
+ * @param colorMatrix 4x5 color matrix (row-major, 20 elements). Null means identity
+ * @param blurSigma   Gaussian blur standard deviation (user space units). No blur if 0 or less
+ * @param dropShadow  drop shadow. Null means none
+ * @param opacity     opacity of the entire layer, 0..1
  */
 public record GroupEffects(float[] colorMatrix, double blurSigma, DropShadow dropShadow, double opacity) {
-	/** 落とし影: 層のシルエットを (dx, dy) ずらし sigma でぼかして color で塗り、層の下に置く。 */
+	/** Drop shadow: shifts the layer silhouette by (dx, dy), blurs by sigma, fills with color, and places it below the layer. */
 	public record DropShadow(double dx, double dy, double sigma, Color color) {
 	}
 

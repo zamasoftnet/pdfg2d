@@ -36,7 +36,7 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 
 	protected final IntList unicodes = new IntList();
 
-	/** 2 字以上を表す字形(合字)の元の字(ToUnicode 用、2026-10-06)。 */
+	/** Original characters for glyphs representing two or more characters (ligatures), for ToUnicode (2026-10-06). */
 	protected final java.util.Map<Integer, int[]> clusters = new java.util.HashMap<Integer, int[]>();
 
 	protected OpenTypeCIDIdentityFont(OpenTypeCIDIdentityFontSource metaFont, String name, ObjectRef fontRef) {
@@ -138,7 +138,7 @@ class OpenTypeCIDIdentityFont extends OpenTypeFont implements PDFFont {
 				this.heights.set(glyphIds[i], this.getVAdvance(glyphIds[i]));
 				this.origins.set(glyphIds[i], this.getVerticalOrigin(glyphIds[i]));
 			}
-			// 字形の最初の字(以前は字形の番号で字を引いていて、合字の後ろでずれた)
+			// First character of the glyph (previously looked up characters by glyph index, causing offsets after ligatures).
 			if (c < chars.length) {
 				this.unicodes.set(glyphIds[i], chars[c]);
 			}

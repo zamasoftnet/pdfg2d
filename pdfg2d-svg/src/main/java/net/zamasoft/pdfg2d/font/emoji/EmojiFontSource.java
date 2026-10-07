@@ -245,11 +245,12 @@ public class EmojiFontSource extends AbstractFontSource {
 				java.nio.file.Files.copy(is, tempFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 				emojiZip = new java.util.zip.ZipFile(tempFile);
 			} catch (final java.io.IOException | RuntimeException e) {
-				// 次の呼び出しが作り直すので、作りかけは残さない(2026-10-05 までは失敗のたびに 1 本残った)
+				// Remove the partial file since the next call recreates it.
+				// (Until 2026-10-05, each failure left one file behind.)
 				tempFile.delete();
 				throw e;
 			}
-			// 展開した 1 本はプロセスの間使い回す
+			// Reuse the single extracted file for the lifetime of the process.
 			tempFile.deleteOnExit();
 			Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 				try {

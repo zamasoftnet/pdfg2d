@@ -17,12 +17,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * 画素数の上限を確かめたあとも、同じリーダで画像を読めることを固定します(2026-10-04)。
+ * Ensures that the same reader can read an image after checking the pixel count limit (2026-10-04).
  *
  * <p>
- * 寸法を読んだ JDK の PNG リーダは「ヘッダを読んだ」状態を覚えていて、呼び出し側が入力を先頭へ
- * 戻すと、次の {@code getImageTypes} が署名をチャンクとして読んで失敗した。上限を設けた本番で
- * 透明度の無い PNG(RGB・グレー・パレット)が「読めない画像」として消えていた。
+ * After reading the dimensions, the JDK PNG reader remembered that it had read the header. When the caller
+ * rewound the input, the next {@code getImageTypes} read the signature as a chunk and failed. In production
+ * with the limit enabled, opaque PNGs (RGB, grayscale, and palette) disappeared as unreadable images.
  * </p>
  */
 public class PixelLimitReaderResetTest {
@@ -38,11 +38,11 @@ public class PixelLimitReaderResetTest {
 	@ValueSource(ints = { BufferedImage.TYPE_INT_RGB, BufferedImage.TYPE_BYTE_GRAY, BufferedImage.TYPE_BYTE_INDEXED,
 			BufferedImage.TYPE_INT_ARGB })
 	public void readerStillReadsAfterTheCheck(final int type) throws Exception {
-		// 本番の読み込み(foliojet の RasterImageLoader)と同じく、先頭へ戻せるよう flush しない入力
+		// As in production (foliojet's RasterImageLoader), do not flush input so it can be rewound
 		try (ImageInputStream in = new MemoryCacheImageInputStream(new ByteArrayInputStream(png(type))) {
 			@Override
 			public void flushBefore(final long pos) {
-				// 戻せるように捨てない
+				// Retain data so the input can be rewound
 			}
 		}) {
 			final Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
@@ -51,7 +51,7 @@ public class PixelLimitReaderResetTest {
 			try {
 				reader.setInput(in);
 				G2DUtils.checkPixelLimit(reader, 25_000_000L);
-				// 呼び出し側の手順: 先頭へ戻して型を見る(ここが署名をチャンクとして読んで失敗していた)
+				// Caller sequence: rewind and check the type (this read the signature as a chunk and failed)
 				in.seek(0);
 				assertTrue(reader.getImageTypes(0).hasNext());
 				in.seek(0);

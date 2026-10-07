@@ -21,29 +21,29 @@ import net.zamasoft.pdfg2d.font.table.Program;
  */
 public class GlyfCompositeDescript extends GlyfDescript {
 
-	/** 解けなかった成分の点数・輪郭数。 */
+	/** Point and contour counts for unresolved components. */
 	private static final int[] EMPTY_SIZE = { 0, 0 };
 
 	private final List<GlyfCompositeComp> components;
 
 	/**
-	 * 全成分を合わせた点と輪郭の数です。
+	 * Total point and contour counts across all components.
 	 *
 	 * <p>
-	 * 読み取りの途中で数え上げた値をそのまま持つ(2026-09-01)。以前は
-	 * {@link #getPointCount()}が最後の成分を<b>解き直して</b>その点数を足していた。
-	 * 成分がそれ自体合成グリフだと部分木を丸ごと読み直すので、小片を大量に
-	 * 積む書体(点字体・ピクセル書体)で1グリフに何分もかかっていた。
+	 * Retains the values counted during reading (2026-09-01). Previously,
+	 * {@link #getPointCount()} <b>resolved the last component again</b> and added its point count.
+	 * If that component was itself a composite glyph, the entire subtree was reread,
+	 * so fonts built from many small pieces (braille and pixel fonts) took minutes per glyph.
 	 * </p>
 	 */
 	private final int pointCount, contourCount;
 
 	/**
-	 * 成分のグリフ番号→解いた記述(2026-09-02)。読み取りのときに1度だけ解き、
-	 * 点や輪郭を引くたびに{@code parentTable.getDescription}(ファイルの
-	 * seek+パース)へ戻らない。以前は1点ごとに全成分を解き直していたので、
-	 * 合成の入れ子が深い書体で1グリフに長い時間がかかっていた。
-	 * 解けなかった成分は{@code null}のまま覚える。
+	 * Component glyph ID -> resolved description (2026-09-02). Resolves each only once during reading,
+	 * instead of returning to {@code parentTable.getDescription} (file seek and parsing)
+	 * on every point or contour lookup. Previously, every point caused all components to be resolved again,
+	 * so fonts with deeply nested composites took a long time per glyph.
+	 * Remembers unresolved components as {@code null}.
 	 */
 	private final java.util.Map<Integer, GlyfDescript> resolved;
 
@@ -57,7 +57,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		this.resolved = resolved;
 	}
 
-	/** 成分の記述。読み取り時に解いたものを返し、無ければ表へ問い合わせる。 */
+	/** Component description. Returns the one resolved during reading, or queries the table if absent. */
 	private GlyfDescript descript(final GlyfCompositeComp c) {
 		final Integer gid = c.getGlyphIndex();
 		if (this.resolved.containsKey(gid)) {
@@ -88,9 +88,9 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		GlyfCompositeComp comp;
 		int firstIndex = 0;
 		int firstContour = 0;
-		// 同じ成分を何度も指す書体(小片を積むピクセル書体・点字体)は、
-		// 同じグリフを何百回も読み直していた。1グリフを読む間だけ覚える
-		// (2026-09-01。Handjetは1グリフに2.2秒かかっていた)
+		// Fonts referencing the same component repeatedly (pixel and braille fonts built from small pieces)
+		// reread the same glyph hundreds of times. Cache only while reading one glyph
+		// (2026-09-01. Handjet took 2.2 seconds per glyph).
 		final java.util.Map<Integer, int[]> counts = new java.util.HashMap<>();
 		final java.util.Map<Integer, GlyfDescript> resolved = new java.util.HashMap<>();
 		do {
@@ -100,8 +100,8 @@ public class GlyfCompositeDescript extends GlyfDescript {
 			int[] size = counts.get(comp.getGlyphIndex());
 			if (size == null) {
 				final GlyfDescript desc = parentTable.getDescription(comp.getGlyphIndex());
-				// 解けない成分(字形の無いグリフ、または自分へ戻る循環——
-				// GlyfTableが読み取り中の番号を覚えて切っている)は0として数える
+				// Count unresolved components as zero (glyphs without shapes, or cycles back to themselves,
+				// which GlyfTable cuts off by tracking IDs currently being read).
 				size = desc == null ? EMPTY_SIZE : new int[] { desc.getPointCount(), desc.getContourCount() };
 				counts.put(comp.getGlyphIndex(), size);
 				resolved.put(comp.getGlyphIndex(), desc);
@@ -109,12 +109,12 @@ public class GlyfCompositeDescript extends GlyfDescript {
 			components.add(comp);
 			firstIndex += size[0];
 			firstContour += size[1];
-			// **読み位置を戻すのは問い合わせを終えてから**(2026-09-01)。
-			// 成分がそれ自体合成グリフのとき、getPointCount/getContourCountは
-			// 中でgetDescriptionを呼んでrafを動かす。解決の直後だけ戻していたので、
-			// 次の成分をずれた位置から読み、flagsとglyphIndexが0xFFFFになっていた——
-			// 範囲外のグリフ番号、EOF、MORE_COMPONENTSが立ちっぱなしの無限ループ、
-			// そしてStackOverflowError。本番のフォント一覧が500になった原因
+			// **Restore the read position only after finishing the queries** (2026-09-01).
+			// When a component is itself a composite glyph, getPointCount/getContourCount
+			// call getDescription internally and move raf. Restoring only immediately after resolution
+			// read the next component at the wrong position, making flags and glyphIndex 0xFFFF:
+			// out-of-range glyph IDs, EOF, infinite loops with MORE_COMPONENTS always set,
+			// and StackOverflowError. This caused the production font list to return HTTP 500.
 			raf.seek(off);
 		} while ((comp.getFlags() & GlyfCompositeComp.MORE_COMPONENTS) != 0);
 
@@ -254,8 +254,8 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		for (int n = 0; n < this.components.size(); n++) {
 			final GlyfCompositeComp c = this.components.get(n);
 			final GlyfDescript gd = this.descript(c);
-			// 解けない成分は点を持たないので、どの番号も含まない
-			// (字形の無いグリフを指す成分でここが落ちていた——2026-09-01)
+			// Unresolved components have no points, so they contain no index
+			// (this failed for components referencing glyphs without shapes: 2026-09-01).
 			if (gd == null) {
 				continue;
 			}
@@ -270,7 +270,7 @@ public class GlyfCompositeDescript extends GlyfDescript {
 		for (int j = 0; j < this.components.size(); j++) {
 			final GlyfCompositeComp c = this.components.get(j);
 			final GlyfDescript gd = this.descript(c);
-			// 同上
+			// Same as above.
 			if (gd == null) {
 				continue;
 			}

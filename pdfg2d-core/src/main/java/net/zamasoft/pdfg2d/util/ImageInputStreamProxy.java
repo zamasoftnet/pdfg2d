@@ -51,8 +51,8 @@ public class ImageInputStreamProxy extends InputStream {
 
 	@Override
 	public int available() throws IOException {
-		// length()が不明(-1)のストリームで負のavailableを返さない
-		// (foliojet側フォークにあった改良を2026-08-01の一本化で移植)
+		// Do not return a negative available value for a stream with unknown length() (-1).
+		// (Ported the improvement from the foliojet fork during consolidation on 2026-08-01.)
 		long length = imageInputStream.length();
 		if (length < 0) {
 			return 0;

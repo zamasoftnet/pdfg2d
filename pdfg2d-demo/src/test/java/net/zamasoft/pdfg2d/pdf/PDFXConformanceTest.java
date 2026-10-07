@@ -290,8 +290,8 @@ public class PDFXConformanceTest {
 
 	@Test
 	public void testPdfX4DefaultUsesIccBasedRgb() throws Exception {
-		// PDFWriterImplはX-4の既定PRESERVEへ同梱sRGBを補い、
-		// DeviceRGBではなくICCBasedのベクタ色として保持する。
+		// PDFWriterImpl supplies the bundled sRGB profile for X-4's default PRESERVE mode
+		// and preserves vector colors as ICCBased instead of DeviceRGB.
 		final var params = PDFParams.createDefault()
 				.withVersion(PDFParams.Version.V_PDFX4)
 				.withCompression(PDFParams.Compression.NONE);
@@ -643,7 +643,7 @@ public class PDFXConformanceTest {
 						version + " must reject a monitor RGB profile");
 			}
 		}
-		// 通常 PDF は従来どおり受け付ける
+		// Regular PDF continues to accept this as before.
 		final var plain = PDFParams.createDefault().withVersion(PDFParams.Version.V_1_7).withOutputIntent(noProfile);
 		new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()), plain).close();
 	}

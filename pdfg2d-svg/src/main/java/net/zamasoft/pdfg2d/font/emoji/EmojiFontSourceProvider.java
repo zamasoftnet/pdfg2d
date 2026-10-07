@@ -6,8 +6,8 @@ import net.zamasoft.pdfg2d.font.FontSource;
 import net.zamasoft.pdfg2d.font.FontSourceProvider;
 
 /**
- * 絵文字フォントをフォントデータベースへ供給します(2026-08-01、
- * 旧Class.forName継ぎ目のServiceLoader化)。
+ * Supplies emoji fonts to the font database (2026-08-01: replaced the former Class.forName integration point
+ * with ServiceLoader).
  *
  * @author MIYABE Tatsuhiko
  */

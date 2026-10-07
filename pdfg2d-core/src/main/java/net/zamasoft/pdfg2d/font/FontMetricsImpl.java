@@ -156,8 +156,8 @@ public class FontMetricsImpl implements FontMetrics {
 
 	@Override
 	public double getKerning(final int gid, final int sgid) {
-		// font-feature-settings "kern" 0: 明示offのみ無効化(無指定=-1は
-		// 既定どおり有効)。push型と新pipelineの両経路がここへ委譲する
+		// font-feature-settings "kern" 0: disable only when explicitly off (unspecified=-1
+		// remains enabled by default). Both the push model and the new pipeline delegate here.
 		if (this.features.value(TAG_KERN) == 0) {
 			return 0;
 		}
