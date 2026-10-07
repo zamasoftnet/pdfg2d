@@ -544,6 +544,48 @@ public class PdfXPreflightTest {
 		assertOnlyRule(pdf, Flavour.X1A, "R9");
 	}
 
+	/** 型の誤りと名前で選ぶ網点(2026-10-07)。値が合っていても型が違えば違反。 */
+	private static void addExtGState(final org.apache.pdfbox.pdmodel.PDDocument document, final COSDictionary state) {
+		final var resources = document.getPage(0).getResources().getCOSObject();
+		var states = resources.getCOSDictionary(COSName.EXT_G_STATE);
+		if (states == null) {
+			states = new COSDictionary();
+			resources.setItem(COSName.EXT_G_STATE, states);
+		}
+		states.setItem(COSName.getPDFName("GSnegative"), state);
+	}
+
+	@Test
+	public void testR9RejectsHalftoneName() throws Exception {
+		final var pdf = mutate(generate(Flavour.X4), document -> {
+			final var halftone = new COSDictionary();
+			halftone.setName(COSName.TYPE, "Halftone");
+			halftone.setInt(COSName.getPDFName("HalftoneType"), 1);
+			halftone.setString(COSName.getPDFName("HalftoneName"), "Dot");
+			final var state = new COSDictionary();
+			state.setItem(COSName.getPDFName("HT"), halftone);
+			addExtGState(document, state);
+		});
+		assertOnlyRule(pdf, Flavour.X4, "R9");
+	}
+
+	@Test
+	public void testR8RejectsNonNumericAlpha() throws Exception {
+		final var pdf = mutate(generate(Flavour.X1A), document -> {
+			final var state = new COSDictionary();
+			state.setName(COSName.getPDFName("CA"), "One");
+			addExtGState(document, state);
+		});
+		assertOnlyRule(pdf, Flavour.X1A, "R8");
+	}
+
+	@Test
+	public void testR3RejectsTrappedString() throws Exception {
+		final var pdf = mutate(generate(Flavour.X1A), document -> document.getDocumentInformation().getCOSObject()
+				.setString(COSName.TRAPPED, "False"));
+		assertOnlyRule(pdf, Flavour.X1A, "R3");
+	}
+
 	@Test
 	public void testR10RejectsTrimAndArtTogether() throws Exception {
 		final var pdf = mutate(generate(Flavour.X1A), document -> {

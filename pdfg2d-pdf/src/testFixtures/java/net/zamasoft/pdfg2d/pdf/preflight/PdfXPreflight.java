@@ -341,9 +341,13 @@ public final class PdfXPreflight {
 			violations.add(new Violation("R3",
 					"InfoのGTS_PDFXVersionが" + flavour.pdfxVersion + "ではありません: " + pdfxVersion));
 		}
-		final var trapped = nameOrString(info.getDictionaryObject(COSName.TRAPPED));
+		final var trappedObject = resolve(info.getDictionaryObject(COSName.TRAPPED));
+		final var trapped = nameOrString(trappedObject);
 		if (!"True".equals(trapped) && !"False".equals(trapped)) {
 			violations.add(new Violation("R3", "InfoのTrappedがTrueまたはFalseではありません"));
+		} else if (!(trappedObject instanceof COSName)) {
+			// 2026-10-07: 値が合っていても文字列の (True) は型が違う(名前の /True)
+			violations.add(new Violation("R3", "InfoのTrappedが名前ではありません"));
 		}
 		if (isBlank(info.getString(COSName.TITLE))) {
 			violations.add(new Violation("R3", "InfoのTitleがありません"));
@@ -1368,11 +1372,16 @@ public final class PdfXPreflight {
 		if (state.containsKey(SMASK) && !COSName.NONE.equals(resolve(state.getItem(SMASK)))) {
 			violations.add(new Violation("R8", location + "の/SMaskが/Noneではありません"));
 		}
-		if (state.getFloat(CA_NONSTROKE, 1) < 1) {
-			violations.add(new Violation("R8", location + "の/caが1未満です"));
-		}
-		if (state.getFloat(CA_STROKE, 1) < 1) {
-			violations.add(new Violation("R8", location + "の/CAが1未満です"));
+		for (final COSName key : new COSName[] { CA_NONSTROKE, CA_STROKE }) {
+			if (!state.containsKey(key)) {
+				continue;
+			}
+			// 2026-10-07: 数でない値は getFloat が既定の1を返して素通りしていた
+			if (!(resolve(state.getItem(key)) instanceof org.apache.pdfbox.cos.COSNumber number)) {
+				violations.add(new Violation("R8", location + "の/" + key.getName() + "が数ではありません"));
+			} else if (number.floatValue() < 1) {
+				violations.add(new Violation("R8", location + "の/" + key.getName() + "が1未満です"));
+			}
 		}
 		if (state.containsKey(BM) && !hasOnlyAllowedBlendModes(state.getItem(BM))) {
 			violations.add(new Violation("R8", location + "の/BMが/Normalまたは/Compatibleではありません"));
@@ -1440,6 +1449,10 @@ public final class PdfXPreflight {
 		checkDefaultTransfer(dictionary, TR2, violations);
 		if (dictionary.containsKey(HTP)) {
 			violations.add(new Violation("R9", "/HTPがあります"));
+		}
+		if (dictionary.containsKey(HALFTONE_TYPE) && dictionary.containsKey(COSName.getPDFName("HalftoneName"))) {
+			// 2026-10-07: 名前で選ぶ網点(装置に依存する)は不可
+			violations.add(new Violation("R9", "Halftone辞書に/HalftoneNameがあります"));
 		}
 		if (dictionary.containsKey(HALFTONE_TYPE)) {
 			final var type = dictionary.getInt(HALFTONE_TYPE, -1);
