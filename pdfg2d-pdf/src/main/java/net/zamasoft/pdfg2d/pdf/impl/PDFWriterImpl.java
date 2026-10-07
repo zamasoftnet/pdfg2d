@@ -989,7 +989,12 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		gsOut.writeName("ExtGState");
 		gsOut.lineBreak();
 
-		return new PDFNamedOutput(gsOut, this.params.platformEncoding()) {
+		// Under PDF/X the caller's entries are buffered and checked before they
+		// reach the file: the output is raw, so the keys cannot be checked as
+		// they are written (2026-10-07).
+		final var version = this.params.version();
+		final var buffer = version.isPdfX() ? new java.io.ByteArrayOutputStream() : null;
+		return new PDFNamedOutput(buffer != null ? buffer : gsOut, this.params.platformEncoding()) {
 			{
 				this.setPrecision(PDFWriterImpl.this.params.precision());
 			}
@@ -1002,6 +1007,12 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 			@Override
 			public void close() throws IOException {
 				this.flush();
+				if (buffer != null) {
+					final byte[] body = buffer.toByteArray();
+					PdfXRawDictionaryCheck.checkGraphicsState(body, version);
+					gsOut.write(body);
+					gsOut.lineBreak();
+				}
 				gsOut.endHash();
 				gsOut.endObject();
 			}

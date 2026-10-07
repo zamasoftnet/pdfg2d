@@ -531,6 +531,75 @@ public class PDFXConformanceTest {
 		}
 	}
 
+	/** Writes a raw extended graphics state with {@code entries} and closes it. */
+	private static void rawGraphicsState(final PDFParams.Version version, final String entries) throws Exception {
+		final var pdf = new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+				PDFParams.createDefault().withVersion(version));
+		try (final var gs = pdf.createSpecialGraphicsState()) {
+			gs.write(entries);
+		}
+	}
+
+	@Test
+	public void testRawGraphicsStateIsCheckedUnderPdfX() throws Exception {
+		// X-1a/X-3 have no transparency; X-4 has, but no transfer function or halftone name anywhere
+		org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> rawGraphicsState(PDFParams.Version.V_PDFX1A, "/CA 0.5"));
+		org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> rawGraphicsState(PDFParams.Version.V_PDFX3, "/BM /Multiply"));
+		org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> rawGraphicsState(PDFParams.Version.V_PDFX1A, "/SMask << /S /Luminosity /G 3 0 R >>"));
+		org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> rawGraphicsState(PDFParams.Version.V_PDFX4, "/TR /Identity"));
+		org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> rawGraphicsState(PDFParams.Version.V_PDFX4,
+						"/HT << /Type /Halftone /HalftoneType 1 /HalftoneName (Dot) /Frequency 60 /Angle 45 /SpotFunction /Round >>"));
+		// allowed
+		rawGraphicsState(PDFParams.Version.V_PDFX1A, "/SMask /None /CA 1 /ca 1.0 /BM [/Normal /Compatible] /TR2 /Default");
+		rawGraphicsState(PDFParams.Version.V_PDFX4, "/CA 0.5 /ca 0.25 /BM /Multiply /SMask /None /OP true /OPM 1");
+		rawGraphicsState(PDFParams.Version.V_PDFX4,
+				"/HT << /Type /Halftone /HalftoneType 1 /Frequency 60 /Angle 45 /SpotFunction /Round >>");
+		rawGraphicsState(PDFParams.Version.V_1_4, "/TR /Identity /CA 0.5");
+	}
+
+	/** An annotation that writes any action through the raw output. */
+	private static final class ActionAnnot extends net.zamasoft.pdfg2d.pdf.annot.Annot {
+		private final String extra;
+
+		ActionAnnot(final String extra) {
+			this.extra = extra;
+			this.setShape(new Rectangle2D.Double(5, 5, 20, 20)); // in the slug area
+		}
+
+		@Override
+		public void writeTo(final net.zamasoft.pdfg2d.pdf.PDFOutput out, final net.zamasoft.pdfg2d.pdf.PDFPageOutput pageOut)
+				throws java.io.IOException {
+			super.writeTo(out, pageOut);
+			out.writeName("Subtype");
+			out.writeName("Text");
+			out.write(" " + this.extra + " ");
+		}
+	}
+
+	@Test
+	public void testAnnotationActionIsCheckedOnPdf14BasedPdfX() throws Exception {
+		for (final String extra : new String[] { "/A << /S /JavaScript /JS (app.alert(1)) >>",
+				"/AA << /E << /S /GoTo /D [3 0 R /Fit] >> >>" }) {
+			final var pdf = new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+					PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX1A));
+			final var page = pdf.nextPage(595, 842);
+			page.setTrimBox(new Rectangle2D.Double(60, 60, 475, 722));
+			org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+					() -> page.addAnnotation(new ActionAnnot(extra)), extra);
+		}
+		final var pdf = new PDFWriterImpl(new StreamFragmentedOutput(new ByteArrayOutputStream()),
+				PDFParams.createDefault().withVersion(PDFParams.Version.V_PDFX1A));
+		final var page = pdf.nextPage(595, 842);
+		page.setTrimBox(new Rectangle2D.Double(60, 60, 475, 722));
+		page.addAnnotation(new ActionAnnot("/A << /S /GoTo /D (proof) >>"));
+		page.close();
+	}
+
 	@Test
 	public void testAnnotationInsideTrimIsRejected() throws Exception {
 		final var file = TestOutputFiles.outputFile(getClass(), "pdfx_annot_inside.pdf");

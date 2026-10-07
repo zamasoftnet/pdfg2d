@@ -284,7 +284,21 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		try (final var objectsFlow = pdfWriterImpl.objectsFlow.forkFragment()) {
 			objectsFlow.startObject(annotRef);
 			objectsFlow.startHash();
-			annot.writeTo(objectsFlow, this);
+			if (params.version().isPdfXOnPdf14()) {
+				// Any Annot subclass may write an action; read the body back and
+				// allow only in-document GoTo actions (2026-10-07)
+				final var buffer = new java.io.ByteArrayOutputStream();
+				final var raw = new net.zamasoft.pdfg2d.pdf.PDFOutput(buffer, params.platformEncoding());
+				raw.setPrecision(params.precision());
+				annot.writeTo(raw, this);
+				raw.flush();
+				final byte[] body = buffer.toByteArray();
+				PdfXRawDictionaryCheck.checkAnnotation(body);
+				objectsFlow.write(body);
+				objectsFlow.lineBreak();
+			} else {
+				annot.writeTo(objectsFlow, this);
+			}
 
 			// Required flags for PDF/A or PDF/X
 			if (params.version().isPdfA() || params.version().isPdfX()) {
