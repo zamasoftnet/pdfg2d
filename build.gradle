@@ -149,3 +149,16 @@ gradle.taskGraph.whenReady { graph ->
         }
     }
 }
+
+// API documentation in English and in Japanese (javadoc/ja.json), and the GitHub Pages layout: English at the root,
+// Japanese under ja/ (javadocPages -> build/pages). See gradle/javadoc-i18n/javadoc-i18n.gradle.
+def publishedModules = ['pdfg2d-font', 'pdfg2d-core', 'pdfg2d-pdf', 'pdfg2d-svg', 'pdfg2d-svg-emoji']
+ext.javadocI18n = [
+    title     : "pdfg2d API ${version}",
+    sourceDirs: { publishedModules.collect { project(":$it").file('src/main/java') }.findAll { it.isDirectory() } },
+    classpath : { files(publishedModules.collect { project(":$it").sourceSets.main.compileClasspath }) },
+    // pdfg2d-demo is not published
+    scope     : 'net.zamasoft.pdfg2d,net.zamasoft.pdfg2d.font.**,net.zamasoft.pdfg2d.g2d.**,net.zamasoft.pdfg2d.gc.**,' +
+                'net.zamasoft.pdfg2d.pdf.**,net.zamasoft.pdfg2d.svg.**,net.zamasoft.pdfg2d.util.**',
+]
+apply from: 'gradle/javadoc-i18n/javadoc-i18n.gradle'

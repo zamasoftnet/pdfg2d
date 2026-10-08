@@ -1,0 +1,91 @@
+// Javadoc in English and in Japanese, and the GitHub Pages layout (English at the root, Japanese under /ja/).
+// The same file in every repository (gradle/javadoc-i18n/), next to JavadocI18n.java. See
+// copperpdf4/docs/design/javadoc-i18n-design.md.
+//
+// The build sets ext.javadocI18n before `apply from: 'gradle/javadoc-i18n/javadoc-i18n.gradle'`:
+//   title       window and document title
+//   sourceDirs  closure returning the source directories (src/main/java) of the published modules
+//   classpath   closure returning the compile classpath of those modules
+//   includes    Ant patterns of the published packages (empty or absent: everything in sourceDirs)
+//   scope       JavadocI18n scope of the translated elements (comma separated; `pkg.**` for subpackages)
+//   checkSourceDirs  optional closure: the source directories the check reads (default: sourceDirs), when more
+//               modules are translated than the site publishes
+//
+// Tasks (group documentation): javadocEn, javadocJa, javadocPages; javadocI18nCheck (verification) fails when a
+// published element has no Japanese text or an outdated one. It is not wired into `check`.
+// The JavadocI18n tool runs on the JVM that runs Gradle (Java 17 or later).
+
+def i18n = project.ext.javadocI18n
+def i18nTool = file('gradle/javadoc-i18n/JavadocI18n.java')
+def jaFile = file('javadoc/ja.json')
+def jaSources = layout.buildDirectory.dir('javadoc-ja-src')
+def javaCommand = new File(System.getProperty('java.home'), 'bin/java').absolutePath
+
+def i18nArgs = { List<File> dirs -> dirs.collectMany { ['--src', it.absolutePath] } }
+
+def configureApiDoc = { Javadoc t, String locale ->
+    t.group = 'documentation'
+    t.classpath = i18n.classpath()
+    t.options.encoding = 'UTF-8'
+    t.options.docEncoding = 'UTF-8'
+    t.options.charSet = 'UTF-8'
+    t.options.locale = locale
+    t.options.windowTitle = i18n.title
+    t.options.docTitle = i18n.title
+    t.options.addStringOption('Xdoclint:none', '-quiet')
+    if (i18n.includes) {
+        t.include(i18n.includes)
+    }
+}
+
+tasks.register('javadocEn', Javadoc) { Javadoc t ->
+    description = 'Generates the API documentation in English (the source comments).'
+    configureApiDoc(t, 'en')
+    source = files(i18n.sourceDirs()).asFileTree
+    destinationDir = layout.buildDirectory.dir('docs/javadoc-en').get().asFile
+}
+
+tasks.register('javadocJaSources', Exec) {
+    description = 'Writes the sources with the Japanese Javadoc of javadoc/ja.json (JavadocI18n inject).'
+    def dirs = i18n.sourceDirs()
+    inputs.file(jaFile)
+    inputs.file(i18nTool)
+    inputs.files(dirs)
+    outputs.dir(jaSources)
+    doFirst {
+        delete jaSources
+    }
+    executable = javaCommand
+    args([i18nTool.absolutePath, 'inject'] + i18nArgs(dirs)
+            + ['--ja', jaFile.absolutePath, '-o', jaSources.get().asFile.absolutePath])
+}
+
+tasks.register('javadocJa', Javadoc) { Javadoc t ->
+    description = 'Generates the API documentation in Japanese (javadoc/ja.json; untranslated comments stay English).'
+    dependsOn 'javadocJaSources'
+    configureApiDoc(t, 'ja')
+    def dirs = i18n.sourceDirs()
+    // JavadocI18n inject writes one source tree, or one per source directory (0, 1, ...)
+    def roots = dirs.size() == 1 ? [jaSources.get().asFile]
+            : (0..<dirs.size()).collect { new File(jaSources.get().asFile, Integer.toString(it)) }
+    source = files(roots).asFileTree
+    destinationDir = layout.buildDirectory.dir('docs/javadoc-ja').get().asFile
+}
+
+tasks.register('javadocPages', Sync) {
+    group = 'documentation'
+    description = 'Assembles the GitHub Pages site in build/pages: English at the root, Japanese under ja/.'
+    from(tasks.named('javadocEn'))
+    into('ja') {
+        from(tasks.named('javadocJa'))
+    }
+    into layout.buildDirectory.dir('pages')
+}
+
+tasks.register('javadocI18nCheck', Exec) {
+    group = 'verification'
+    description = 'Fails when a published element has no Japanese Javadoc or an outdated one (JavadocI18n check).'
+    executable = javaCommand
+    args([i18nTool.absolutePath, 'check'] + i18nArgs((i18n.checkSourceDirs ?: i18n.sourceDirs)())
+            + ['--scope', i18n.scope, '--ja', jaFile.absolutePath])
+}
