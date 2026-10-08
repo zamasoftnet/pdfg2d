@@ -3429,6 +3429,11 @@
     "en": "Returns a new image with blur applied to a premultiplied TYPE_INT_ARGB_PRE image.",
     "ja": "乗算済み TYPE_INT_ARGB_PRE 画像をぼかした新しい画像を返す。"
   },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#blurSolidInPlace(BufferedImage,double,float,float,float)": {
+    "hash": "a143264cb0dce0bb",
+    "en": "Blurs, in place, a TYPE_INT_ARGB_PRE layer filled with one solid color, giving what\n{@link #blurPremultiplied(BufferedImage, double)} gives up to rounding (2026-10-09).\n\n<p>\nEvery pixel of such a layer is the color scaled by its coverage, so only the alpha plane is blurred and\nthe color planes are rebuilt from it; a black layer comes out the same as with {@code blurPremultiplied}.\nThe blur is {@link #gaussianBlurSparse(float[], int, int, double)}, which convolves only near the edges\nof the shape. A blurred box shadow behind a code block costs a thin frame instead of the whole box.\n</p>\n\n@param image a TYPE_INT_ARGB_PRE layer holding {@code red, green, blue} scaled by coverage; overwritten\n@param sigma the standard deviation in pixels\n@param red the red component of the fill (0..1, not premultiplied)\n@param green the green component of the fill (0..1, not premultiplied)\n@param blue the blue component of the fill (0..1, not premultiplied)\n@return the number of pixels convolved, as {@link #gaussianBlurSparse(float[], int, int, double)} counts them",
+    "ja": "単色で塗った TYPE_INT_ARGB_PRE の層をその場でぼかし、{@link #blurPremultiplied(BufferedImage, double)} と\n丸めの差を除いて同じ結果にする(2026-10-09)。\n\n<p>\nこの層の画素はどれも塗りの色を被覆率倍したものなので、アルファの面だけをぼかし、色の面はそこから\n組み直す。黒の層は {@code blurPremultiplied} と同じ結果になる。ぼかしは\n{@link #gaussianBlurSparse(float[], int, int, double)} で、形の縁の近くだけを畳み込む。コードブロックの\n背後のぼかした箱の影は、箱全体ではなく細い枠の分の手間で済む。\n</p>\n\n@param image 塗りの色 {@code red, green, blue} を被覆率倍した TYPE_INT_ARGB_PRE の層。結果で上書きされる\n@param sigma 画素単位の標準偏差\n@param red 塗りの赤成分(0..1、非乗算)\n@param green 塗りの緑成分(0..1、非乗算)\n@param blue 塗りの青成分(0..1、非乗算)\n@return 畳み込んだ画素の数({@link #gaussianBlurSparse(float[], int, int, double)} の数え方)"
+  },
   "net.zamasoft.pdfg2d.g2d.util.RasterEffects#deviceSigma(AffineTransform,double)": {
     "hash": "014f516209104310",
     "en": "Maps user-space σ to device space (square root of the transform's area scale).\nAverages anisotropic transforms (different horizontal and vertical scales).",
@@ -3448,6 +3453,11 @@
     "hash": "10cc676996e4fd65",
     "en": "Blurs all four planes.",
     "ja": "4面すべてをぼかす。"
+  },
+  "net.zamasoft.pdfg2d.g2d.util.RasterEffects#gaussianBlurSparse(float[],int,int,double)": {
+    "hash": "eca0571e63611a6a",
+    "en": "Applies the same Gaussian blur as {@link #gaussianBlur(float[], int, int, double)} to one plane, convolving\nonly where the values under the kernel differ (2026-10-09).\n\n<p>\nEach pass copies a value through when the 2r+1 values under the kernel are all equal (zero outside the\nplane, as in {@code gaussianBlur}), and convolves the rest exactly as {@code gaussianBlur} does. A filled\nshape is uniform inside and outside, so the work is about its perimeter times the kernel width instead of\nits area. The copies skip the kernel's rounding (its weights sum to 1 only within float precision), which\ncan move an 8-bit value by one in rare cases.\n</p>\n\n@param plane w*h values; modified in place\n@param w the width\n@param h the height\n@param sigma the standard deviation in pixels\n@return the number of pixels convolved in the two passes (at most 2*w*h), for tests of the work done",
+    "ja": "{@link #gaussianBlur(float[], int, int, double)} と同じガウスぼかしを1面に掛けるが、畳み込むのは\n窓の中の値が揃っていないところだけにする(2026-10-09)。\n\n<p>\nどちらの段でも、窓の 2r+1 個の値がすべて等しければ(面の外は {@code gaussianBlur} と同じく 0)その値を\nそのまま写し、それ以外は {@code gaussianBlur} とまったく同じに畳み込む。塗った形は内側も外側も一様なので、\n手間は面積ではなく周の長さ×窓の幅程度になる。写した値は窓の丸め(重みの和は float の精度でしか 1 に\nならない)を経ないので、まれに 8 ビットの値が 1 ずれることがある。\n</p>\n\n@param plane w*h の値。書き換えられる\n@param w 幅\n@param h 高さ\n@param sigma 画素単位の標準偏差\n@return 2 つの段で畳み込んだ画素の数(最大 2*w*h)。手間の試験に使う"
   },
   "net.zamasoft.pdfg2d.g2d.util.RasterEffects#gaussianKernel(double)": {
     "hash": "f59457886d608659",

@@ -162,6 +162,140 @@ public final class RasterEffects {
 	}
 
 	/**
+	 * Blurs, in place, a TYPE_INT_ARGB_PRE layer filled with one solid color, giving what
+	 * {@link #blurPremultiplied(BufferedImage, double)} gives up to rounding (2026-10-09).
+	 *
+	 * <p>
+	 * Every pixel of such a layer is the color scaled by its coverage, so only the alpha plane is blurred and
+	 * the color planes are rebuilt from it; a black layer comes out the same as with {@code blurPremultiplied}.
+	 * The blur is {@link #gaussianBlurSparse(float[], int, int, double)}, which convolves only near the edges
+	 * of the shape. A blurred box shadow behind a code block costs a thin frame instead of the whole box.
+	 * </p>
+	 *
+	 * @param image a TYPE_INT_ARGB_PRE layer holding {@code red, green, blue} scaled by coverage; overwritten
+	 * @param sigma the standard deviation in pixels
+	 * @param red the red component of the fill (0..1, not premultiplied)
+	 * @param green the green component of the fill (0..1, not premultiplied)
+	 * @param blue the blue component of the fill (0..1, not premultiplied)
+	 * @return the number of pixels convolved, as {@link #gaussianBlurSparse(float[], int, int, double)} counts them
+	 */
+	public static long blurSolidInPlace(final BufferedImage image, final double sigma, final float red,
+			final float green, final float blue) {
+		final int w = image.getWidth(), h = image.getHeight();
+		final int[] data = intData(image);
+		final float[] a = new float[w * h];
+		for (int i = 0; i < a.length; ++i) {
+			a[i] = (data[i] >>> 24) / 255f;
+		}
+		final long work = gaussianBlurSparse(a, w, h, sigma);
+		// Runs of one value (inside and outside the shape) reuse the last pixel.
+		float lastValue = Float.NaN;
+		int lastPixel = 0;
+		for (int i = 0; i < a.length; ++i) {
+			final float av = a[i];
+			if (av != lastValue) {
+				lastValue = av;
+				final int a8 = to8(av);
+				if (a8 == 0) {
+					lastPixel = 0;
+				} else {
+					final int r = Math.min(a8, to8(av * red));
+					final int g = Math.min(a8, to8(av * green));
+					final int b = Math.min(a8, to8(av * blue));
+					lastPixel = (a8 << 24) | (r << 16) | (g << 8) | b;
+				}
+			}
+			data[i] = lastPixel;
+		}
+		return work;
+	}
+
+	/**
+	 * Applies the same Gaussian blur as {@link #gaussianBlur(float[], int, int, double)} to one plane, convolving
+	 * only where the values under the kernel differ (2026-10-09).
+	 *
+	 * <p>
+	 * Each pass copies a value through when the 2r+1 values under the kernel are all equal (zero outside the
+	 * plane, as in {@code gaussianBlur}), and convolves the rest exactly as {@code gaussianBlur} does. A filled
+	 * shape is uniform inside and outside, so the work is about its perimeter times the kernel width instead of
+	 * its area. The copies skip the kernel's rounding (its weights sum to 1 only within float precision), which
+	 * can move an 8-bit value by one in rare cases.
+	 * </p>
+	 *
+	 * @param plane w*h values; modified in place
+	 * @param w the width
+	 * @param h the height
+	 * @param sigma the standard deviation in pixels
+	 * @return the number of pixels convolved in the two passes (at most 2*w*h), for tests of the work done
+	 */
+	public static long gaussianBlurSparse(final float[] plane, final int w, final int h, final double sigma) {
+		if (!(sigma > 0) || w <= 0 || h <= 0) {
+			return 0;
+		}
+		final float[] k = gaussianKernel(sigma);
+		final int r = k.length / 2;
+		final float[] tmp = new float[w * h];
+		long work = 0;
+		// Horizontal. j is the right end of the window of output x = j - r; runStart is where the run of equal
+		// values ending at j begins (the zeros left of the plane run from minus infinity).
+		for (int y = 0; y < h; ++y) {
+			final int row = y * w;
+			int runStart = Integer.MIN_VALUE / 2;
+			float prev = 0;
+			for (int j = 0; j < w + r; ++j) {
+				final float v = j < w ? plane[row + j] : 0;
+				if (v != prev) {
+					runStart = j;
+					prev = v;
+				}
+				final int x = j - r;
+				if (x < 0) {
+					continue;
+				}
+				if (runStart <= x - r) {
+					tmp[row + x] = v;
+					continue;
+				}
+				float sum = 0;
+				final int lo = Math.max(-r, -x), hi = Math.min(r, w - 1 - x);
+				for (int i = lo; i <= hi; ++i) {
+					sum += plane[row + x + i] * k[i + r];
+				}
+				tmp[row + x] = sum;
+				++work;
+			}
+		}
+		// Vertical, row by row (the bottom row j of each column's window advances together).
+		final int[] colRunStart = new int[w];
+		java.util.Arrays.fill(colRunStart, Integer.MIN_VALUE / 2);
+		for (int j = 0; j < h + r; ++j) {
+			final int y = j - r;
+			for (int x = 0; x < w; ++x) {
+				final float v = j < h ? tmp[j * w + x] : 0;
+				final float above = j == 0 ? 0 : (j - 1 < h ? tmp[(j - 1) * w + x] : 0);
+				if (v != above) {
+					colRunStart[x] = j;
+				}
+				if (y < 0) {
+					continue;
+				}
+				if (colRunStart[x] <= y - r) {
+					plane[y * w + x] = v;
+					continue;
+				}
+				float sum = 0;
+				final int lo = Math.max(-r, -y), hi = Math.min(r, h - 1 - y);
+				for (int i = lo; i <= hi; ++i) {
+					sum += tmp[(y + i) * w + x] * k[i + r];
+				}
+				plane[y * w + x] = sum;
+				++work;
+			}
+		}
+		return work;
+	}
+
+	/**
 	 * Applies a 4x5 color matrix (row-major, same order as CSS/SVG feColorMatrix, range 0..1)
 	 * to non-premultiplied planes and clamps to 0..1.
 	 *

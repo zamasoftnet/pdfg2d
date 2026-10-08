@@ -863,10 +863,20 @@ public class PDFGC implements GC, Closeable {
 		}
 
 		final BufferedImage blurred;
-		try {
-			blurred = RasterEffects.blurPremultiplied(layer, pixelSigma);
-		} finally {
-			layer.flush();
+		final Rectangle2D shapeBounds = shape.getBounds2D();
+		if (2 * pad < Math.min(shapeBounds.getWidth(), shapeBounds.getHeight()) * localScale) {
+			// The layer is one solid color and the blur is narrower than the shape (box shadows): blur the alpha
+			// plane only, convolving near the edges (2026-10-09; the shadows of Docusaurus' code blocks had
+			// made blurring 47% of its conversion time).
+			RasterEffects.blurSolidInPlace(layer, pixelSigma, color.getRed() / 255f, color.getGreen() / 255f,
+					color.getBlue() / 255f);
+			blurred = layer;
+		} else {
+			try {
+				blurred = RasterEffects.blurPremultiplied(layer, pixelSigma);
+			} finally {
+				layer.flush();
+			}
 		}
 		final Image image;
 		try {

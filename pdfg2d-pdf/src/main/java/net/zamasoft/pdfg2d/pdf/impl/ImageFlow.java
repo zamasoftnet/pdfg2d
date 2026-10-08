@@ -87,8 +87,13 @@ class ImageFlow {
 	/** Mapping from BufferedImage instance to image (PDFImage). */
 	private final Map<BufferedImage, Image> bufferedImages = new IdentityHashMap<>();
 
-	/** Generated images use a separate cache because their encoding policy differs. */
-	private final Map<BufferedImage, Image> generatedImages = new IdentityHashMap<>();
+	/**
+	 * Generated images use a separate cache because their encoding policy differs. Its keys are weak
+	 * (BufferedImage keeps Object's identity equality): blurred shadows and filter layers are new images that are
+	 * written at once and never come back, and holding them kept every shadow's pixels until the end of the
+	 * document (65MB on Docusaurus, 2026-10-09).
+	 */
+	private final Map<BufferedImage, Image> generatedImages = new java.util.WeakHashMap<>();
 
 	private int imageNumber = 0;
 
