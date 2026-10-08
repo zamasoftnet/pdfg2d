@@ -58,6 +58,43 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	 */
 	protected static final Map<String, java.lang.ref.SoftReference<FontFile>> fileToFont = new java.util.HashMap<>();
 
+	/**
+	 * How long a font file's last-modified time read from the disk is trusted (2026-10-08).
+	 *
+	 * <p>
+	 * The cache above reloads a font whose file was replaced on the disk while the process runs (a server whose font
+	 * directory is updated). That check read {@link File#lastModified()} on every {@link #getOpenTypeFont()}, which
+	 * runs per character and per fallback candidate: a stat call each time. It became visible once {@code @font-face}
+	 * fonts were used under the default font policy (rustdoc-std on WSL: about 15 seconds with the document on ext4
+	 * and over 300 seconds with it on a DrvFs mount, 8 and 11 seconds after this change). The time is now read at
+	 * most once per second per file, so a replaced file is still picked up, within a second.
+	 * </p>
+	 */
+	private static final long LAST_MODIFIED_TTL_NANOS = 1_000_000_000L;
+
+	/** A last-modified time read from the disk and when it was read ({@link System#nanoTime()}). */
+	private record LastModified(long time, long readAt) {
+	}
+
+	/** Path -> the last-modified time last read for it. */
+	private static final Map<String, LastModified> LAST_MODIFIED = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/**
+	 * The last-modified time of {@code file}, read from the disk at most once per
+	 * {@link #LAST_MODIFIED_TTL_NANOS} (2026-10-08).
+	 */
+	private static long lastModified(final File file) {
+		final String path = file.getPath();
+		final long now = System.nanoTime();
+		final LastModified known = LAST_MODIFIED.get(path);
+		if (known != null && now - known.readAt() < LAST_MODIFIED_TTL_NANOS) {
+			return known.time();
+		}
+		final long time = file.lastModified();
+		LAST_MODIFIED.put(path, new LastModified(time, now));
+		return time;
+	}
+
 	protected final File file;
 
 	protected final int index;
@@ -370,7 +407,7 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	}
 
 	private static File instanceFile(final File file, final Map<String, Double> variation) {
-		final String key = file.getPath() + '\u0000' + file.lastModified() + '\u0000'
+		final String key = file.getPath() + '\u0000' + lastModified(file) + '\u0000'
 				+ new java.util.TreeMap<>(variation);
 		return INSTANCES.computeIfAbsent(key, k -> {
 			try (final FontFile fontFile = new FontFile(file)) {
@@ -408,16 +445,18 @@ public class OpenTypeFontSource extends AbstractFontSource {
 	 */
 	public static OpenTypeFont getOpenTypeFont(final File file, final int index) {
 		try {
-			final var timestamp = file.lastModified();
+			final var timestamp = lastModified(file);
 			final String key = file.getPath();
 			var fontFile = getCachedFontFile(key, timestamp);
 			if (fontFile == null) {
 				final var loadedFontFile = new FontFile(file);
+				// The file may have changed since the time above was read: trust the time the font was loaded with
+				LAST_MODIFIED.put(key, new LastModified(loadedFontFile.timestamp, System.nanoTime()));
 				synchronized (fileToFont) {
 					// Use the winner of concurrent loading (the same double-check as before).
 					final var ref = fileToFont.get(key);
 					fontFile = ref == null ? null : ref.get();
-					if (fontFile == null || fontFile.timestamp != timestamp) {
+					if (fontFile == null || fontFile.timestamp != loadedFontFile.timestamp) {
 						fileToFont.put(key, new java.lang.ref.SoftReference<>(loadedFontFile));
 						fontFile = loadedFontFile;
 					}
@@ -445,6 +484,7 @@ public class OpenTypeFontSource extends AbstractFontSource {
 		synchronized (fileToFont) {
 			ref = fileToFont.remove(file.getPath());
 		}
+		LAST_MODIFIED.remove(file.getPath());
 		final FontFile fontFile = ref == null ? null : ref.get();
 		if (fontFile != null) {
 			fontFile.close();
