@@ -117,51 +117,30 @@ public abstract class AbstractType1FontSource extends AbstractFontSource impleme
 		return true;
 	}
 
-	/**
-	 * @return this.Returns the bbox.
-	 */
 	public BBox getBBox() {
 		return this.bbox;
 	}
 
-	/**
-	 * @return this.Returns the ascent.
-	 */
 	public short getAscent() {
 		return this.fontInfo.ascent;
 	}
 
-	/**
-	 * @return this.Returns the capHeight.
-	 */
 	public short getCapHeight() {
 		return this.fontInfo.capHeight;
 	}
 
-	/**
-	 * @return this.Returns the descent.
-	 */
 	public short getDescent() {
 		return this.fontInfo.descent;
 	}
 
-	/**
-	 * @return this.Returns the stemh.
-	 */
 	public short getStemH() {
 		return this.fontInfo.stemh;
 	}
 
-	/**
-	 * @return this.Returns the stemv.
-	 */
 	public short getStemV() {
 		return this.fontInfo.stemv;
 	}
 
-	/**
-	 * @return this.Returns the xHeight.
-	 */
 	public short getXHeight() {
 		return this.fontInfo.xHeight;
 	}

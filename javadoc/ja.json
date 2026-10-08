@@ -894,6 +894,11 @@
     "en": "Creates a new font instance from this font source.\n\n@return a new EmojiFont instance",
     "ja": "このフォントソースから新しいフォントのインスタンスを作成します。\n\n@return 新しいEmojiFontのインスタンス"
   },
+  "net.zamasoft.pdfg2d.font.emoji.EmojiFontSource#direction": {
+    "hash": "3b131aa5e783a81c",
+    "en": "Text direction for this font source.",
+    "ja": "このフォントソースの組方向です。"
+  },
   "net.zamasoft.pdfg2d.font.emoji.EmojiFontSource#getAscent()": {
     "hash": "bf9803e4164bbd5e",
     "en": "Returns the ascent height.\n\n@return the default ascent value",
@@ -994,6 +999,26 @@
     "en": "Applies recorded flags with the vertical metric held by a shared subset.",
     "ja": "記録されたフラグを、共有のサブセットが保持する縦書きのメトリクスを使って適用します。"
   },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#cligLigatures": {
+    "hash": "7a7c21571b4eec0f",
+    "en": "GSUB {@code clig} pairs (contextual ligatures, default on).",
+    "ja": "GSUBの{@code clig}の組です(文脈依存の合字。既定で有効)。"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#colr": {
+    "hash": "c8fcfce2b9ab7640",
+    "en": "COLR color-layer table, or {@code null} for a monochrome font.",
+    "ja": "COLRの色レイヤーのテーブルです。単色のフォントでは{@code null}です。"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#cpal": {
+    "hash": "eabeb295014b1f22",
+    "en": "CPAL palette table, or {@code null}.",
+    "ja": "CPALのパレットのテーブル、または{@code null}です。"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#dligLigatures": {
+    "hash": "dd492f949cf2668d",
+    "en": "GSUB {@code dlig} pairs (discretionary ligatures, default off).",
+    "ja": "GSUBの{@code dlig}の組です(任意の合字。既定で無効)。"
+  },
   "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#drawColorLayers(GC,int,AffineTransform)": {
     "hash": "a7925cbfe701421e",
     "en": "Draws the COLR layers of the given font glyph id: each layer's outline\nfilled with its CPAL color (palette entry {@code 0xFFFF} uses the current\nfill paint). Glyph outlines are taken directly from the underlying font,\nso this works regardless of glyph subsetting.\n\n@param gc      the graphics context\n@param fontGid the base color glyph's font glyph id\n@param at      the design-units-to-user transform",
@@ -1013,6 +1038,11 @@
     "hash": "96890d81f19b1889",
     "en": "Returns the vertical advance width of the glyph, normalised to\n{@link FontSource#DEFAULT_UNITS_PER_EM}. Falls back to\n{@code DEFAULT_UNITS_PER_EM} when no vmtx table is present.\n\n@param gid the glyph ID\n@return the vertical advance width",
     "ja": "グリフの縦書きの送り幅を、{@link FontSource#DEFAULT_UNITS_PER_EM}に正規化して返します。vmtxテーブルが無い場合は{@code DEFAULT_UNITS_PER_EM}を使います。\n\n@param gid グリフID\n@return 縦書きの送り幅"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#glyphBounds": {
+    "hash": "aaa84e31a4d5f147",
+    "en": "Keys use this instance's glyph namespace, including subset CIDs.",
+    "ja": "キーは、サブセットのCIDを含む、このインスタンスのグリフの名前空間を使います。"
   },
   "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#gposKerning(int,int)": {
     "hash": "4b8c62510b09f77e",
@@ -1034,10 +1064,25 @@
     "en": "Returns whether the given font glyph id has COLR layers.\n\n@param fontGid the font glyph id\n@return {@code true} if it is a color glyph",
     "ja": "指定したフォントのグリフIDがCOLRレイヤーを持つかどうかを返します。\n\n@param fontGid フォントのグリフID\n@return カラーグリフなら{@code true}"
   },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#hligLigatures": {
+    "hash": "bcf133396e2e79a5",
+    "en": "GSUB {@code hlig} pairs (historical ligatures, default off).",
+    "ja": "GSUBの{@code hlig}の組です(歴史的な合字。既定で無効)。"
+  },
   "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#isVertical()": {
     "hash": "5f286f3fca7c49d5",
     "en": "Returns whether this font is configured for vertical writing.\n\n@return {@code true} if vertical tables are present",
     "ja": "このフォントが縦書き用に構成されているかどうかを返します。\n\n@return 縦書き用のテーブルがあれば{@code true}"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#kernPairs": {
+    "hash": "f6a26503c6e9f38c",
+    "en": "GPOS {@code kern} pair-adjustment subtables, or {@code null}.",
+    "ja": "GPOSの{@code kern}のペア調整のサブテーブル、または{@code null}です。"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#ligaLigatures": {
+    "hash": "eb9f703a4824401e",
+    "en": "GSUB {@code liga} pairs: key {@code (firstGid << 32) | secondGid} to\nligature glyph. Replaced the boxed Map with a primitive index (2026-08-01, 95-point plan\nincrement 3): this shaping hot path looks up every glyph pair.",
+    "ja": "GSUBの{@code liga}の組です。キー{@code (firstGid << 32) | secondGid}から\n合字のグリフへ対応付けます。boxedのMapをプリミティブの索引に置き換えました(2026-08-01、95点計画の\n増分3)。シェーピングで頻繁に通る経路で、グリフの組ごとに引くためです。"
   },
   "net.zamasoft.pdfg2d.font.otf.OpenTypeFont#substituteFeatures(int,net.zamasoft.pdfg2d.gc.font.FontFeatureSet)": {
     "hash": "836e5ecffc7fc264",
@@ -1188,6 +1233,11 @@
     "hash": "c2768b2fa76ab97c",
     "en": "Pins variable font axes. Only single-font files (not TTCs) are supported.\n\n@param variation axis tag -> user coordinate (e.g. {@code {\"wght\": 700}}), or null to unpin",
     "ja": "可変フォントの軸を固定します。単一フォント(TTC でない)のファイルに限ります。\n\n@param variation 軸タグ→ユーザー座標(例: {@code {\"wght\": 700}})、null で解除"
+  },
+  "net.zamasoft.pdfg2d.font.otf.OpenTypeFontSource#variation": {
+    "hash": "7441b05f3d29b675",
+    "en": "Coordinates that pin variable font axes (2026-10-04). Uses {@link #file} unchanged if null.\n\n<p>\nFor variable fonts in a font directory, registers copies with pinned weight (wght) in addition to the default instance.\nCopies borrow the default instance's metrics and cmap; the static font is created only when drawing characters\nor measuring widths ({@link #instanceFile}). Even with hundreds of variable fonts, such as the entire\nGoogle Fonts collection, no instantiation occurs at startup.\n</p>",
+    "ja": "可変フォントの軸を固定する座標です(2026-10-04)。nullなら{@link #file}をそのまま使います。\n\n<p>\nフォントディレクトリ内の可変フォントでは、既定のインスタンスに加えて、ウェイト(wght)を固定した写しを登録します。\n写しは既定のインスタンスのメトリクスとcmapを借り、静的なフォントは文字を描くときか幅を測るときに初めて作ります\n({@link #instanceFile})。Google Fontsのすべてのように数百の可変フォントがあっても、起動時にはインスタンス化しません。\n</p>"
   },
   "net.zamasoft.pdfg2d.font.table.ClassDef": {
     "hash": "5d0dbca51258d680",
@@ -1425,9 +1475,9 @@
     "ja": "スクリプトと言語をまたいで、指定したタグを持つすべてのフィーチャーのレコードの{@link SingleSubst}サブテーブルを集めます(集め方の方針は{@link #collectLigatures()}と同じで、スクリプト・言語による絞り込みはせず、共有されたルックアップは重複を除きます)。サブテーブルはルックアップリストの昇順で返すため、順に合成するとフォントが意図した優先順位で適用されます。\n\n@param tag 4バイトに詰めたフィーチャーのタグ(例: {@code jp78}は\n           {@code 0x6a703738})\n@return 単一置換のサブテーブル(空の場合もある)"
   },
   "net.zamasoft.pdfg2d.font.table.GsubTable#read(int,RandomAccessFile,int)": {
-    "hash": "cc899e839f7b4009",
-    "en": "1 - Single - Replace one glyph with one glyph 2 - Multiple - Replace one\nglyph\nwith more than one glyph 3 - Alternate - Replace one glyph with one of many\nglyphs 4 - Ligature - Replace multiple glyphs with one glyph 5 - Context -\nReplace one or more glyphs in context 6 - Chaining - Context Replace one or\nmore glyphs in chained context",
-    "ja": "1 - Single - 1つのグリフを1つのグリフに置換 2 - Multiple - 1つのグリフを\n複数のグリフに置換 3 - Alternate - 1つのグリフを複数の候補のうちの1つに置換\n4 - Ligature - 複数のグリフを1つのグリフに置換 5 - Context - 文脈の中で\n1つ以上のグリフを置換 6 - Chaining Context - 連鎖した文脈の中で1つ以上の\nグリフを置換"
+    "hash": "c49890460690b0da",
+    "en": "Reads a lookup subtable of the given GSUB lookup type. Only type 1 (single\nsubstitution: one glyph to one glyph) and type 4 (ligature substitution:\nseveral glyphs to one glyph) are read; the other types (2 multiple,\n3 alternate, 5 context, 6 chaining context, 7 extension and 8 reverse\nchaining single substitution) return {@code null}.\n\n@param type   the lookup type\n@param raf    the font file\n@param offset the offset of the subtable in the file\n@return the subtable, or {@code null} for a type that is not read\n@throws IOException if an I/O error occurs",
+    "ja": "指定したGSUBのルックアップタイプのルックアップサブテーブルを読みます。読むのはタイプ1(単一置換:\n1つのグリフを1つのグリフへ)とタイプ4(合字置換: 複数のグリフを1つのグリフへ)だけです。それ以外のタイプ\n(2 複数置換、3 代替置換、5 文脈置換、6 連鎖文脈置換、7 拡張、8 逆連鎖単一置換)では{@code null}を返します。\n\n@param type   ルックアップタイプ\n@param raf    フォントファイル\n@param offset ファイル内のサブテーブルのオフセット\n@return サブテーブル。読まないタイプでは{@code null}\n@throws IOException 入出力エラーが発生した場合"
   },
   "net.zamasoft.pdfg2d.font.table.HeadTable": {
     "hash": "132921b5b9e2922a",
@@ -4064,6 +4114,11 @@
     "en": "@param i the entry index (in canonical tag order)\n@return the packed tag of the {@code i}-th entry",
     "ja": "@param i 項目のインデックス(正規化されたタグの順)\n@return {@code i}番目の項目の詰めたタグ"
   },
+  "net.zamasoft.pdfg2d.gc.font.FontFeatureSet#tags": {
+    "hash": "610a1d988e126c9c",
+    "en": "Packed feature tags, ascending.",
+    "ja": "詰めたフィーチャーのタグです(昇順)。"
+  },
   "net.zamasoft.pdfg2d.gc.font.FontFeatureSet#value(int)": {
     "hash": "d70ac12a71ebdcd2",
     "en": "Returns the value set for a feature, or {@code -1} when unspecified.\n\n@param packedTag the packed tag (see {@link #packTag})\n@return the non-negative value, or {@code -1} when the tag is absent",
@@ -4073,6 +4128,11 @@
     "hash": "e767262a6021e6ed",
     "en": "@param i the entry index (in canonical tag order)\n@return the value of the {@code i}-th entry",
     "ja": "@param i 項目のインデックス(正規化されたタグの順)\n@return {@code i}番目の項目の値"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontFeatureSet#values": {
+    "hash": "40cf19424d99e80e",
+    "en": "Values parallel to {@link #tags} (0 = explicitly off).",
+    "ja": "{@link #tags}に並行する値です(0は明示的に無効)。"
   },
   "net.zamasoft.pdfg2d.gc.font.FontListMetrics": {
     "hash": "a07c90a05ef21088",
@@ -4190,9 +4250,9 @@
     "ja": "指定のグリフの幅を返します。\n\n@param gid グリフID\n@return 幅"
   },
   "net.zamasoft.pdfg2d.gc.font.FontMetrics#getXHeight()": {
-    "hash": "5643bdfc7c92a0c2",
-    "en": "Returns the height of the font.\n\n@return the font height",
-    "ja": "フォントの高さを返します。\n\n@return フォントの高さ"
+    "hash": "dfe3cefd23102dd1",
+    "en": "Returns the x-height of the font (the height of lowercase 'x') at this font size.\n\n@return the x-height",
+    "ja": "このフォントサイズでの、フォントのxハイト(小文字のxの高さ)を返します。\n\n@return xハイト"
   },
   "net.zamasoft.pdfg2d.gc.font.FontPolicyList": {
     "hash": "37e55262ca351cf4",
@@ -5218,6 +5278,11 @@
     "hash": "e4603e5610f8b9c7",
     "en": "Splits this text run at the specified glyph offset and returns the first\npart. This text instance is modified in place to become the second (tail)\npart.\n\n@param goff the glyph index at which to split (must be &gt; 0 and\n            &lt; {@link #getGlyphCount()})\n@return the first (head) part of the split",
     "ja": "このテキストランを指定のグリフ位置で分割し、前半を返します。このテキストのインスタンス自体は、その場で後半(末尾側)に変更されます。\n\n@param goff 分割するグリフの位置(&gt; 0かつ\n            &lt; {@link #getGlyphCount()}でなければならない)\n@return 分割した前半(先頭側)"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextImpl#xadvances": {
+    "hash": "820dd14eb80926c7",
+    "en": "The extra spacing added for each glyph. No longer exposes the raw array:\nreads use {@link #xAdvances()} (a read-only view), and writes are restricted to\n{@link #addXAdvance(int, double)}/{@link #resetXAdvances()}\n(2026-08-01, 90-point plan increment 12).",
+    "ja": "グリフごとに加える追加の間隔です。生の配列はもう公開しません。\n読み取りには{@link #xAdvances()}(読み取り専用のビュー)を使い、書き込みは\n{@link #addXAdvance(int, double)}/{@link #resetXAdvances()}に限ります\n(2026-08-01、90点計画の増分12)。"
   },
   "net.zamasoft.pdfg2d.gc.text.TextLayoutHandler": {
     "hash": "f7c4968313313c8e",
@@ -6954,6 +7019,11 @@
     "en": "Closes this font manager and releases any resources held by the local font source manager.",
     "ja": "このフォントマネージャを閉じ、ローカルのフォントソースマネージャが保持しているリソースを解放します。"
   },
+  "net.zamasoft.pdfg2d.pdf.font.FontManagerImpl#coreFontsLast": {
+    "hash": "906a8eaa6b1104ef",
+    "en": "Whether to move core fonts without glyph outlines (Type 1 fonts with AFM only) to the end of the candidates (2026-10-04).",
+    "ja": "グリフのアウトラインを持たないコアフォント(AFMだけのType 1フォント)を候補の最後に回すかどうかです(2026-10-04)。"
+  },
   "net.zamasoft.pdfg2d.pdf.font.FontManagerImpl#getFontListMetrics(FontStyle)": {
     "hash": "83f28c4844c875c2",
     "en": "Returns the {@link FontListMetrics} for the given font style, building and caching it if necessary.\nThe list is assembled from locally registered fonts, globally registered fonts, a space font,\nand a missing-glyph fallback font, in that priority order.\n\n@param fontStyle the font style to look up\n@return the font list metrics for the given style",
@@ -7394,6 +7464,11 @@
     "en": "Constructs an entry mapping CID code 0 to the given Unicode code points.\n\n@param unicodes the corresponding Unicode code points",
     "ja": "CIDコード0を与えられたUnicodeコードポイントに対応付けるエントリを構築します。\n\n@param unicodes 対応するUnicodeコードポイント"
   },
+  "net.zamasoft.pdfg2d.pdf.font.cid.ToUnicode.Unicode#firstCode": {
+    "hash": "13e3bc1a6ca5489a",
+    "en": "First and last CID codes.",
+    "ja": "最初と最後のCIDのコードです。"
+  },
   "net.zamasoft.pdfg2d.pdf.font.cid.ToUnicode.Unicode#getFirstCode()": {
     "hash": "a03142ec280e440b",
     "en": "Returns the first CID code in this mapping range.\n\n@return the first CID code",
@@ -7413,6 +7488,16 @@
     "hash": "4bb26256fe095d30",
     "en": "Returns the array of Unicode code points for the codes in this range.\n\n@return the Unicode code point array",
     "ja": "この範囲のコードに対応するUnicodeコードポイントの配列を返します。\n\n@return Unicodeコードポイントの配列"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.cid.ToUnicode.Unicode#lastCode": {
+    "hash": "13e3bc1a6ca5489a",
+    "en": "First and last CID codes.",
+    "ja": "最初と最後のCIDのコードです。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.cid.ToUnicode.Unicode#unicodes": {
+    "hash": "da96caf16cba75f1",
+    "en": "List of Unicode characters.",
+    "ja": "Unicodeの文字のリストです。"
   },
   "net.zamasoft.pdfg2d.pdf.font.cid.WArray": {
     "hash": "9a3a51462b0ccdfe",
@@ -7738,41 +7823,6 @@
     "hash": "9120a4c909f554d5",
     "en": "Standard Type1 font source.\n\n@author MIYABE Tatsuhiko\n@since 1.0",
     "ja": "標準Type1フォントのソースです。\n\n@author MIYABE Tatsuhiko\n@since 1.0"
-  },
-  "net.zamasoft.pdfg2d.pdf.font.type1.AbstractType1FontSource#getAscent()": {
-    "hash": "5cd3517cbacc796f",
-    "en": "@return this.Returns the ascent.",
-    "ja": "@return アセント。"
-  },
-  "net.zamasoft.pdfg2d.pdf.font.type1.AbstractType1FontSource#getBBox()": {
-    "hash": "0defecb7ed828caa",
-    "en": "@return this.Returns the bbox.",
-    "ja": "@return バウンディングボックス。"
-  },
-  "net.zamasoft.pdfg2d.pdf.font.type1.AbstractType1FontSource#getCapHeight()": {
-    "hash": "8085b8297c0cb66c",
-    "en": "@return this.Returns the capHeight.",
-    "ja": "@return キャップハイト。"
-  },
-  "net.zamasoft.pdfg2d.pdf.font.type1.AbstractType1FontSource#getDescent()": {
-    "hash": "4b48d62971cb04c2",
-    "en": "@return this.Returns the descent.",
-    "ja": "@return ディセント。"
-  },
-  "net.zamasoft.pdfg2d.pdf.font.type1.AbstractType1FontSource#getStemH()": {
-    "hash": "1fb4a148c7c0c022",
-    "en": "@return this.Returns the stemh.",
-    "ja": "@return 水平ステムの幅(StemH)。"
-  },
-  "net.zamasoft.pdfg2d.pdf.font.type1.AbstractType1FontSource#getStemV()": {
-    "hash": "8985493ac7f49c2b",
-    "en": "@return this.Returns the stemv.",
-    "ja": "@return 垂直ステムの幅(StemV)。"
-  },
-  "net.zamasoft.pdfg2d.pdf.font.type1.AbstractType1FontSource#getXHeight()": {
-    "hash": "bef3057592550745",
-    "en": "@return this.Returns the xHeight.",
-    "ja": "@return xハイト。"
   },
   "net.zamasoft.pdfg2d.pdf.font.type1.Encoding": {
     "hash": "539e44b058bf646a",

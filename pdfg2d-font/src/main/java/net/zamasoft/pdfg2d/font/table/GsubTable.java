@@ -70,12 +70,17 @@ public record GsubTable(ScriptList scriptList, FeatureList featureList, LookupLi
 	}
 
 	/**
-	 * 1 - Single - Replace one glyph with one glyph 2 - Multiple - Replace one
-	 * glyph
-	 * with more than one glyph 3 - Alternate - Replace one glyph with one of many
-	 * glyphs 4 - Ligature - Replace multiple glyphs with one glyph 5 - Context -
-	 * Replace one or more glyphs in context 6 - Chaining - Context Replace one or
-	 * more glyphs in chained context
+	 * Reads a lookup subtable of the given GSUB lookup type. Only type 1 (single
+	 * substitution: one glyph to one glyph) and type 4 (ligature substitution:
+	 * several glyphs to one glyph) are read; the other types (2 multiple,
+	 * 3 alternate, 5 context, 6 chaining context, 7 extension and 8 reverse
+	 * chaining single substitution) return {@code null}.
+	 *
+	 * @param type   the lookup type
+	 * @param raf    the font file
+	 * @param offset the offset of the subtable in the file
+	 * @return the subtable, or {@code null} for a type that is not read
+	 * @throws IOException if an I/O error occurs
 	 */
 	@Override
 	public LookupSubtable read(final int type, final RandomAccessFile raf, final int offset) throws IOException {

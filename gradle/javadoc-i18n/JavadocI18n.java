@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,8 +55,11 @@ import com.sun.source.util.Trees;
  *
  * <p>
  * A scope entry is a package name, or a package name followed by {@code .**} for the package and its subpackages.
- * Only elements that javadoc publishes by default (public and protected, in public or protected types) are in scope.
- * The tool parses only; it does not resolve types, so it runs on any source tree without a classpath.
+ * Only elements that javadoc publishes by default (public and protected, in public or protected types) are in scope,
+ * together with what the Serialized Form page publishes of those types when they are serializable: their instance
+ * fields that are not transient and their serialization methods, private ones included.
+ * The tool parses only; it does not resolve types, so it runs on any source tree without a classpath. Whether a type is
+ * serializable is therefore judged by the names in its extends and implements clauses.
  * </p>
  */
 public final class JavadocI18n {
@@ -244,7 +249,12 @@ public final class JavadocI18n {
 					// Replace from the end so that earlier offsets stay valid
 					final List<Doc> ordered = new ArrayList<>(list);
 					ordered.sort((a, b) -> Integer.compare(b.start, a.start));
+					int previous = -1;
 					for (final Doc d : ordered) {
+						if (d.start == previous) {
+							// one comment over several variables ("int a, b;") belongs to each key: replace it once
+							continue;
+						}
 						final Map<String, Object> e = map.get(d.key);
 						if (e == null || isBlank(e.get("ja")) || Boolean.TRUE.equals(e.get("stale"))
 								|| !hash(d.text).equals(e.get("hash"))) {
@@ -253,6 +263,7 @@ public final class JavadocI18n {
 						}
 						src = src.substring(0, d.start) + render((String) e.get("ja"), d.indent) + src.substring(d.end);
 						++replaced;
+						previous = d.start;
 					}
 					Files.writeString(target, src, StandardCharsets.UTF_8);
 				}
@@ -280,7 +291,10 @@ public final class JavadocI18n {
 			}, List.of("-proc:none"), null, units);
 			final Trees trees = Trees.instance(task);
 			final SourcePositions pos = trees.getSourcePositions();
-			for (final CompilationUnitTree cu : task.parse()) {
+			final List<CompilationUnitTree> parsed = new ArrayList<>();
+			task.parse().forEach(parsed::add);
+			final Set<String> serial = serializableTypes(parsed);
+			for (final CompilationUnitTree cu : parsed) {
 				final Path file = Path.of(cu.getSourceFile().toUri()).toAbsolutePath().normalize();
 				final String text = cu.getSourceFile().getCharContent(true).toString();
 				final String pkg = cu.getPackageName() == null ? "" : cu.getPackageName().toString();
@@ -289,7 +303,7 @@ public final class JavadocI18n {
 				}
 				for (final Tree t : cu.getTypeDecls()) {
 					if (t instanceof ClassTree c) {
-						scanClass(docs, file, text, pos, cu, c, pkg.isEmpty() ? "" : pkg + ".", true, false);
+						scanClass(docs, file, text, pos, cu, c, pkg.isEmpty() ? "" : pkg + ".", true, false, serial);
 					}
 				}
 			}
@@ -297,9 +311,73 @@ public final class JavadocI18n {
 		return docs;
 	}
 
+	/**
+	 * JDK types that make a parsed type serializable when it extends or implements them. A name that is not parsed and
+	 * ends with {@code Exception} or {@code Error} counts as a {@code Throwable}.
+	 */
+	private static final Set<String> SERIAL_ROOTS = Set.of("Serializable", "Externalizable", "Throwable", "Number",
+			"ArrayList", "LinkedList", "HashMap", "LinkedHashMap", "TreeMap", "HashSet", "LinkedHashSet", "TreeSet",
+			"Date", "EventObject");
+
+	/** The methods that the Serialized Form page publishes whatever their access. */
+	private static final Set<String> SERIAL_METHODS = Set.of("readObject", "writeObject", "readObjectNoData",
+			"readResolve", "writeReplace");
+
+	/**
+	 * The simple names of the parsed types that are serializable, judged by the simple names in their extends and
+	 * implements clauses, transitively. Types of the same simple name in different packages are not told apart; the
+	 * cost of a wrong guess is a key that the Serialized Form page does not show.
+	 */
+	private static Set<String> serializableTypes(final List<CompilationUnitTree> units) {
+		final Map<String, List<String>> supers = new HashMap<>();
+		for (final CompilationUnitTree cu : units) {
+			for (final Tree t : cu.getTypeDecls()) {
+				if (t instanceof ClassTree c) {
+					collectSupertypes(c, supers);
+				}
+			}
+		}
+		final Set<String> serial = new HashSet<>();
+		for (boolean changed = true; changed;) {
+			changed = false;
+			for (final Map.Entry<String, List<String>> e : supers.entrySet()) {
+				if (serial.contains(e.getKey())) {
+					continue;
+				}
+				for (final String s : e.getValue()) {
+					if (serial.contains(s) || !supers.containsKey(s)
+							&& (SERIAL_ROOTS.contains(s) || s.endsWith("Exception") || s.endsWith("Error"))) {
+						serial.add(e.getKey());
+						changed = true;
+						break;
+					}
+				}
+			}
+		}
+		return serial;
+	}
+
+	/** Records the simple names of the supertypes of a type and of its nested types (an interface's are in implements). */
+	private static void collectSupertypes(final ClassTree c, final Map<String, List<String>> supers) {
+		final List<String> list = supers.computeIfAbsent(c.getSimpleName().toString(), k -> new ArrayList<>());
+		final List<Tree> clauses = new ArrayList<>(c.getImplementsClause());
+		if (c.getExtendsClause() != null) {
+			clauses.add(c.getExtendsClause());
+		}
+		for (final Tree t : clauses) {
+			final String name = typeName(t.toString());
+			list.add(name.substring(name.lastIndexOf('.') + 1));
+		}
+		for (final Tree m : c.getMembers()) {
+			if (m instanceof ClassTree nested) {
+				collectSupertypes(nested, supers);
+			}
+		}
+	}
+
 	private static void scanClass(final List<Doc> docs, final Path file, final String text, final SourcePositions pos,
 			final CompilationUnitTree cu, final ClassTree c, final String prefix, final boolean outerVisible,
-			final boolean inInterface) {
+			final boolean inInterface, final Set<String> serial) {
 		final Set<Modifier> mods = c.getModifiers().getFlags();
 		final boolean visible = outerVisible && (mods.contains(Modifier.PUBLIC) || mods.contains(Modifier.PROTECTED)
 				|| inInterface);
@@ -307,12 +385,16 @@ public final class JavadocI18n {
 		add(docs, file, text, (int) pos.getStartPosition(cu, c), key, visible);
 		final boolean iface = c.getKind() == Tree.Kind.INTERFACE || c.getKind() == Tree.Kind.ANNOTATION_TYPE;
 		final boolean isEnum = c.getKind() == Tree.Kind.ENUM;
+		// the Serialized Form page of a published serializable class shows its private serial fields and methods too
+		final boolean serialForm = visible && (c.getKind() == Tree.Kind.CLASS || c.getKind() == Tree.Kind.RECORD)
+				&& serial.contains(c.getSimpleName().toString());
 		for (final Tree m : c.getMembers()) {
 			if (m instanceof ClassTree nested) {
-				scanClass(docs, file, text, pos, cu, nested, key + ".", visible, iface);
+				scanClass(docs, file, text, pos, cu, nested, key + ".", visible, iface, serial);
 			} else if (m instanceof MethodTree mt) {
 				final Set<Modifier> f = mt.getModifiers().getFlags();
-				final boolean v = visible && (iface || f.contains(Modifier.PUBLIC) || f.contains(Modifier.PROTECTED));
+				final boolean v = visible && (iface || f.contains(Modifier.PUBLIC) || f.contains(Modifier.PROTECTED))
+						|| serialForm && SERIAL_METHODS.contains(mt.getName().toString());
 				final String name = mt.getName().contentEquals("<init>") ? c.getSimpleName().toString()
 						: mt.getName().toString();
 				final StringBuilder sig = new StringBuilder(key).append('#').append(name).append('(');
@@ -327,7 +409,8 @@ public final class JavadocI18n {
 				final Set<Modifier> f = vt.getModifiers().getFlags();
 				final boolean constant = isEnum && isEnumConstant(text, (int) pos.getStartPosition(cu, vt), vt);
 				final boolean v = visible
-						&& (iface || constant || f.contains(Modifier.PUBLIC) || f.contains(Modifier.PROTECTED));
+						&& (iface || constant || f.contains(Modifier.PUBLIC) || f.contains(Modifier.PROTECTED))
+						|| serialForm && !f.contains(Modifier.STATIC) && !f.contains(Modifier.TRANSIENT);
 				add(docs, file, text, (int) pos.getStartPosition(cu, vt), key + "#" + vt.getName(), v);
 			}
 		}

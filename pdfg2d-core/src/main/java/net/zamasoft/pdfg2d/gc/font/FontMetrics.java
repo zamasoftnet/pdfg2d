@@ -19,9 +19,9 @@ public interface FontMetrics extends Serializable {
 	public double getFontSize();
 
 	/**
-	 * Returns the height of the font.
-	 * 
-	 * @return the font height
+	 * Returns the x-height of the font (the height of lowercase 'x') at this font size.
+	 *
+	 * @return the x-height
 	 */
 	public double getXHeight();
 
