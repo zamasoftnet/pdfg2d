@@ -126,7 +126,77 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 		return instance;
 	}
 
-	public synchronized void addFontFace(FontFace face) throws IOException {
+	/**
+	 * Faces with a {@link FontFace#loader} that no font style has asked for yet, by normalized family name
+	 * (2026-10-08). {@link #lookup(FontStyle, FontFamilyList, List, boolean)} reads the faces of a family the first
+	 * time a style names it; a family the document declares and never uses is never fetched or read.
+	 */
+	private transient Map<String, List<FontFace>> pendingFaces = null;
+
+	/**
+	 * Registers a font face. A face with a {@link FontFace#loader} is read when a font style first names one of its
+	 * families other than the generic ones (2026-10-08); a face that names only generic families, and a face whose
+	 * source is set, are read now.
+	 *
+	 * @param face the face
+	 * @throws IOException if the font of a face whose source is set cannot be read
+	 */
+	public synchronized void addFontFace(final FontFace face) throws IOException {
+		// Selections made before this face may have to take it (2026-10-08)
+		this.fontListCache = null;
+		if (face.loader == null) {
+			this.readFontFace(face);
+			return;
+		}
+		// Pending under the family names it declares; a generic family in the list (foliojet adds the default one) does
+		// not make a style that names only the generic family read it. A face that names no family is read now.
+		final List<String> names = new ArrayList<>();
+		for (int i = 0; face.fontFamily != null && i < face.fontFamily.getLength(); ++i) {
+			if (!face.fontFamily.get(i).isGenericFamily()) {
+				names.add(FontUtils.normalizeName(face.fontFamily.get(i).getName()));
+			}
+		}
+		if (names.isEmpty()) {
+			this.load(face);
+			return;
+		}
+		if (this.pendingFaces == null) {
+			this.pendingFaces = new HashMap<>();
+		}
+		for (final String name : names) {
+			final List<FontFace> faces = this.pendingFaces.computeIfAbsent(name, k -> new ArrayList<>());
+			if (!faces.contains(face)) {
+				faces.add(face);
+			}
+		}
+	}
+
+	/** Reads the pending faces of a family (normalized name) before it is looked up. */
+	private void loadPendingFaces(final String name) {
+		if (this.pendingFaces == null) {
+			return;
+		}
+		final List<FontFace> faces = this.pendingFaces.remove(name);
+		if (faces == null) {
+			return;
+		}
+		for (final FontFace face : faces) {
+			// A face with several family names is pending under each of them: read once
+			if (face.loader != null) {
+				this.load(face);
+			}
+		}
+	}
+
+	/** Lets the loader of a face find its source and read it. */
+	private void load(final FontFace face) {
+		final FontFace.Loader loader = face.loader;
+		face.loader = null;
+		this.fontListCache = null;
+		loader.load(face, this::readFontFace);
+	}
+
+	private void readFontFace(final FontFace face) throws IOException {
 		final List<FontSource> list = new ArrayList<FontSource>();
 		// A document's own fonts ({@link #outsidePolicy}) get only the embedded form (2026-10-08): the CID-identity
 		// form, which leaves the font out of the PDF, ranked above the embedded one under the cid-identity policy, and
@@ -432,6 +502,7 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				continue;
 			} else {
 				name = FontUtils.normalizeName(name);
+				this.loadPendingFaces(name);
 				fonts = MultimapUtils.get(this.nameToFonts, name);
 				if (fonts == null) {
 					continue;

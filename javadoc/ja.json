@@ -3989,6 +3989,11 @@
     "en": "Represents a font face configuration.\n\n@author MIYABE Tatsuhiko\n@since 1.0",
     "ja": "フォントフェイスの設定を表します。\n\n@author MIYABE Tatsuhiko\n@since 1.0"
   },
+  "net.zamasoft.pdfg2d.gc.font.FontFace#loader": {
+    "hash": "1778ed44d9d56728",
+    "en": "Finds the source of a face when the face is first needed, or {@code null} for a face whose {@link #src} or\n{@link #local} is already set (2026-10-08). A document declares faces it never uses (a site's style sheet that\nimports a CJK web font in 61 unicode-range files, about 20MB, for a page in English); reading them all when the\nstyle sheet was parsed doubled the time of such a page. A manager that supports it keeps the face pending until a\nfont style names its family.",
+    "ja": "フェースが初めて必要になったときにそのソースを探すものです。{@link #src}か{@link #local}を設定済みのフェースでは{@code null}です\n(2026-10-08)。文書は使わないフェースも宣言します(英語のページのために、CJKのWebフォントを61個のunicode-rangeのファイル、約20MBで\nインポートするサイトのスタイルシート)。スタイルシートを解析したときにすべて読むと、そうしたページの時間が倍になりました。\nこれに対応するマネージャは、フォントスタイルがファミリを指定するまでフェースを保留します。"
+  },
   "net.zamasoft.pdfg2d.gc.font.FontFace#variationSettings": {
     "hash": "2a9f5159bcfdd9e3",
     "en": "Axis coordinates for variable fonts (font-variation-settings descriptor,\n2026-08-20). Null means defaults. If specified, used as the coordinates\nfor static instantiation ({@code VariableFontInstancer}).",
@@ -3998,6 +4003,26 @@
     "hash": "19a6cd6b3a7fb5b7",
     "en": "Width class of the {@code font-stretch} descriptor (OS/2 usWidthClass 1..9,\n5=normal, 2026-08-29). In the @font-face path, this declared value determines\nthe font's width class instead of the file's OS/2 value (as with weight/style).",
     "ja": "{@code font-stretch}ディスクリプタの幅級(OS/2 usWidthClass 1..9、\n5=normal、2026-08-29)。@font-face経路ではファイルのOS/2でなく\nこの宣言値が書体の幅級になる(weight/styleと同じ扱い)。"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontFace.Loader": {
+    "hash": "1c95f60886c50e26",
+    "en": "Finds the source of a pending face (see {@link FontFace#loader}).",
+    "ja": "保留中のフェースのソースを探します({@link FontFace#loader}を参照)。"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontFace.Loader#load(FontFace,Reader)": {
+    "hash": "9c90012a4f5790d8",
+    "en": "Tries the sources of the face in order. For each one that can be opened, sets {@link FontFace#src} or\n{@link FontFace#local} and calls {@code reader}; stops at the first that it reads.\n\n@param face   the face\n@param reader reads the face with its source set\n@return {@code false} when no source could be read",
+    "ja": "フェースのソースを順に試します。開けたものごとに{@link FontFace#src}か{@link FontFace#local}を設定して\n{@code reader}を呼び、最初に読めたところで止めます。\n\n@param face   フェース\n@param reader ソースを設定したフェースを読むもの\n@return どのソースも読めなかった場合は{@code false}"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontFace.Reader": {
+    "hash": "fc065a8b5e1136f5",
+    "en": "Reads a face whose source is set (see {@link Loader}).",
+    "ja": "ソースを設定したフェースを読みます({@link Loader}を参照)。"
+  },
+  "net.zamasoft.pdfg2d.gc.font.FontFace.Reader#read(FontFace)": {
+    "hash": "7a5b1d4de6ad1ff2",
+    "en": "Reads the face.\n\n@param face the face, its {@link FontFace#src} or {@link FontFace#local} set\n@throws java.io.IOException if the font cannot be read",
+    "ja": "フェースを読みます。\n\n@param face {@link FontFace#src}か{@link FontFace#local}を設定したフェース\n@throws java.io.IOException フォントを読めない場合"
   },
   "net.zamasoft.pdfg2d.gc.font.FontFamily": {
     "hash": "c61d32b57b65f94c",
@@ -7213,6 +7238,11 @@
     "hash": "96afd97ee81c09ed",
     "en": "@author MIYABE Tatsuhiko\n@since 1.0",
     "ja": "@author MIYABE Tatsuhiko\n@since 1.0"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.PDFFontSourceManager#addFontFace(FontFace)": {
+    "hash": "9eed091cdfb716a1",
+    "en": "Registers a font face. A face with a {@link FontFace#loader} is read when a font style first names one of its\nfamilies other than the generic ones (2026-10-08); a face that names only generic families, and a face whose\nsource is set, are read now.\n\n@param face the face\n@throws IOException if the font of a face whose source is set cannot be read",
+    "ja": "フォントフェースを登録します。{@link FontFace#loader}を持つフェースは、フォントスタイルが総称ファミリ以外のファミリの\nいずれかを初めて指定したときに読みます(2026-10-08)。総称ファミリだけを指定するフェースと、ソースを設定済みのフェースは\nすぐに読みます。\n\n@param face フェース\n@throws IOException ソースを設定済みのフェースのフォントを読めない場合"
   },
   "net.zamasoft.pdfg2d.pdf.font.PDFFontSourceManager#close()": {
     "hash": "b7b04924ffbacaf3",
