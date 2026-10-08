@@ -1,6 +1,5 @@
 package net.zamasoft.pdfg2d.pdf.impl;
 
-import java.awt.color.ColorSpace;
 import java.awt.color.ICC_Profile;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
@@ -284,14 +283,13 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	/**
 	 * Fully validates an explicit PDF/X output intent (fail closed). The output intent describes
 	 * printing conditions, so DestOutputProfile must be a parseable CMYK output (class prtr) profile.
-	 * foliojet4 performs the same check at the I/O property stage (ERROR 0x380E),
-	 * but direct pdfg2d callers must meet the same preconditions (codex review 2026-09-05).
+	 * foliojet4 answers the same checks ({@link OutputIntent#checkProfile}) at the I/O property stage
+	 * (ERROR 0x380E), but direct pdfg2d callers must meet the same preconditions (codex review 2026-09-05).
 	 */
 	private static void validatePdfXOutputIntent(final OutputIntent intent, final PDFParams.Version version) {
-		// The identifiers name a printing condition (ICC registry names are all
-		// ASCII); a non-ASCII one cannot be matched by a RIP (2026-10-07).
+		// The identifiers name a printing condition (2026-10-07)
 		for (final String name : new String[] { intent.outputConditionIdentifier(), intent.registryName() }) {
-			if (name != null && !name.chars().allMatch(c -> c >= 0x20 && c <= 0x7E)) {
+			if (name != null && !OutputIntent.isPrintableAscii(name)) {
 				throw new IllegalArgumentException(
 						"PDF/X output intent identifier and registry name must be printable ASCII: " + name);
 			}
@@ -307,17 +305,14 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		} catch (final IllegalArgumentException e) {
 			throw new IllegalArgumentException("PDF/X output intent ICC profile cannot be parsed.", e);
 		}
-		if (profile.getProfileClass() != ICC_Profile.CLASS_OUTPUT) {
-			throw new IllegalArgumentException("PDF/X output intent ICC profile must be an output (prtr) profile.");
-		}
-		if (profile.getColorSpaceType() != ColorSpace.TYPE_CMYK || profile.getNumComponents() != 4
-				|| intent.colorComponents() != 4) {
-			throw new IllegalArgumentException("PDF/X output intent ICC profile must be CMYK (4 components).");
-		}
-		if (version.isPdfXOnPdf14() && profile.getMajorVersion() >= 4) {
-			// ICC v4 profiles need PDF 1.5; PDF/X-1a:2003 and PDF/X-3:2003 are PDF 1.4 based.
-			throw new IllegalArgumentException(version.pdfxVersion()
-					+ " output intent ICC profile must be ICC version 2, not " + profile.getMajorVersion() + ".");
+		final var problem = OutputIntent.checkProfile(profile, intent.colorComponents(), version);
+		if (problem != null) {
+			throw new IllegalArgumentException(switch (problem) {
+			case PROFILE_CLASS -> "PDF/X output intent ICC profile must be an output (prtr) profile.";
+			case COLOR_SPACE, COMPONENT_COUNT -> "PDF/X output intent ICC profile must be CMYK (4 components).";
+			case ICC_VERSION -> version.pdfxVersion() + " output intent ICC profile must be ICC version 2, not "
+					+ profile.getMajorVersion() + ".";
+			});
 		}
 	}
 

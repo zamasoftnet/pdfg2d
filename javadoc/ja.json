@@ -8679,6 +8679,41 @@
     "en": "Registry name of the ICC characterization registry.",
     "ja": "ICCの特性データのレジストリのレジストリ名です。"
   },
+  "net.zamasoft.pdfg2d.pdf.params.OutputIntent#checkProfile(ICC_Profile,int,PDFParams.Version)": {
+    "hash": "be2b8d882667edc7",
+    "en": "Checks an ICC profile as the {@code DestOutputProfile} of an output\nintent written to {@code version}. The writer refuses a PDF/X output\nintent with any problem; foliojet4 answers each one with its own error\n(PDF/X) or warning (other versions) before writing.\n<p>\nThe profile's getters read its header and may throw for a profile the\ncolor management module cannot read; the caller decides how to answer\nthat.\n</p>\n\n@param profile            the parsed profile\n@param declaredComponents the number of color components the output\n                          intent declares\n@param version            the PDF version the output intent is written to\n@return the first problem, or {@code null} if the profile is acceptable\n@since 1.3",
+    "ja": "ICCプロファイルを、{@code version}で書く出力インテントの{@code DestOutputProfile}として\n確かめます。書き出しは、問題のあるPDF/Xの出力インテントを断ります。foliojet4は\n書き出しの前に、問題ごとにそれぞれのエラー(PDF/X)または警告(ほかの版)で答えます。\n<p>\nプロファイルのゲッターはヘッダーを読むので、色管理モジュールが読めないプロファイルでは\n例外を投げることがあります。それにどう答えるかは呼び出し側が決めます。\n</p>\n\n@param profile            解析したプロファイル\n@param declaredComponents 出力インテントが宣言する色成分の数\n@param version            出力インテントを書くPDFの版\n@return 最初に見つかった問題、受け入れられるプロファイルなら{@code null}\n@since 1.3"
+  },
+  "net.zamasoft.pdfg2d.pdf.params.OutputIntent#isPrintableAscii(String)": {
+    "hash": "48a7f7abf644a2eb",
+    "en": "Whether a name is printable ASCII, as PDF/X requires of the output\ncondition identifier and the registry name (ICC registry names are all\nASCII; a RIP cannot match anything else).\n\n@param name the identifier or registry name\n@return {@code true} if every character is in U+0020 to U+007E\n@since 1.3",
+    "ja": "名前が印字可能なASCIIかどうかを返します。PDF/Xは出力条件の識別子とレジストリ名に\nこれを求めます(ICCレジストリの名前はすべてASCIIで、RIPはそれ以外を照合できません)。\n\n@param name 識別子またはレジストリ名\n@return すべての文字がU+0020〜U+007Eなら{@code true}\n@since 1.3"
+  },
+  "net.zamasoft.pdfg2d.pdf.params.OutputIntent.ProfileProblem": {
+    "hash": "b00efdb9e96b1a68",
+    "en": "What disqualifies an ICC profile as the {@code DestOutputProfile} of an\noutput intent, in the order {@link OutputIntent#checkProfile} tests them.\n\n@since 1.3",
+    "ja": "ICCプロファイルを出力インテントの{@code DestOutputProfile}として使えない理由です。\n{@link OutputIntent#checkProfile}が確かめる順に並びます。\n\n@since 1.3"
+  },
+  "net.zamasoft.pdfg2d.pdf.params.OutputIntent.ProfileProblem#COLOR_SPACE": {
+    "hash": "91dea7918e24746e",
+    "en": "PDF/X only: not a CMYK profile.",
+    "ja": "PDF/Xのみ: CMYKのプロファイルではありません。"
+  },
+  "net.zamasoft.pdfg2d.pdf.params.OutputIntent.ProfileProblem#COMPONENT_COUNT": {
+    "hash": "3742637ee1d66106",
+    "en": "Neither 1, 3 nor 4 components; for PDF/X, the profile or the\ndeclared count is not 4.",
+    "ja": "色成分が1・3・4のどれでもありません。PDF/Xでは、プロファイルまたは宣言した\n成分の数が4ではありません。"
+  },
+  "net.zamasoft.pdfg2d.pdf.params.OutputIntent.ProfileProblem#ICC_VERSION": {
+    "hash": "6fd4fb3c72e13341",
+    "en": "PDF/X-1a and PDF/X-3, which are based on PDF 1.4: an ICC version 4\nprofile (it needs PDF 1.5).",
+    "ja": "PDF 1.4に基づくPDF/X-1aとPDF/X-3で、ICCバージョン4のプロファイルです(PDF 1.5が要ります)。"
+  },
+  "net.zamasoft.pdfg2d.pdf.params.OutputIntent.ProfileProblem#PROFILE_CLASS": {
+    "hash": "22f7bfeb5ed49455",
+    "en": "Not an output (class {@code prtr}) profile.",
+    "ja": "出力(クラス{@code prtr})のプロファイルではありません。"
+  },
   "net.zamasoft.pdfg2d.pdf.params.PDFParams": {
     "hash": "18a98e4766defc1e",
     "en": "Parameters for generating PDF documents.\n\n@param fontSourceManager        Manager for font sources\n@param version                  PDF version to generate\n@param compression              Compression mode for content streams\n@param jpegImage                Handling mode for JPEG images\n@param imageCompression         Compression algorithm for images\n@param imageCompressionLossless Threshold size for lossless image compression\n@param platformEncoding         Encoding for text strings\n@param bookmarks                Whether to generate bookmarks\n@param encryption               Encryption settings\n@param colorMode                Color mode (e.g., RGB, CMYK, Gray)\n@param maxImageWidth            Maximum width for images (0 for no limit)\n@param maxImageHeight           Maximum height for images (0 for no limit)\n@param precision                Decimal precision for coordinates\n@param fileId                   File ID (16 bytes)\n@param metaInfo                 Metadata information\n@param viewerPreferences        Viewer preferences\n@param openAction               Action to perform when document opens\n@param linearized               Whether to produce a linearized (Fast Web View) file\n@param outputIntent             Output intent (characterized printing condition), or {@code null} for defaults\n@param tagged                   Tagged PDF configuration, or {@code null} for untagged output\n@param deflateLevel             Deflate compression level (-1 = zlib default, 0-9), trading\n                                output size against generation speed\n@param objectStreams            Whether to pack small dictionary objects into object streams\n                                and emit a cross-reference stream (PDF 1.5+)\n@param rgbProfile               ICC profile for RGB content; when set, RGB colors are emitted\n                                in an ICCBased color space instead of DeviceRGB\n@param renderingIntent          Default color rendering intent, or {@code null} to omit\n@param blurRasterDpi            Raster resolution for generated Gaussian-blur layers\n@param filterRasterDpi          Raster resolution for generated element-filter layers\n@param actualTextReplacement    Whether line-level {@code /ActualText} replacement is enabled;\n                                defaults to {@code false}\n@param imagePixelLimit          Maximum width x height of an image read from a stream, checked\n                                on the image header before decoding; negative for no limit",
