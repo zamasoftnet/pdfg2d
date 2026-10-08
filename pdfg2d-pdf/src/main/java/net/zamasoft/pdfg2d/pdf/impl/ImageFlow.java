@@ -9,6 +9,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorModel;
+import java.awt.image.DirectColorModel;
 import java.awt.image.IndexColorModel;
 import java.awt.image.Raster;
 import java.io.IOException;
@@ -228,6 +229,17 @@ class ImageFlow {
 			}
 		}
 		return type == null ? -1 : type.getColorModel().getNumColorComponents();
+	}
+
+	/**
+	 * Returns the color model when every pixel is one int sample of a DirectColorModel (TYPE_INT_RGB, TYPE_INT_ARGB,
+	 * TYPE_INT_ARGB_PRE ...), so that rows can be read as int arrays and converted with its int overloads; null
+	 * otherwise (2026-10-09). Subclasses are left out: they may override the Object overloads.
+	 */
+	private static DirectColorModel intPixels(final ColorModel cm, final Raster raster) {
+		return cm instanceof DirectColorModel dcm && cm.getClass() == DirectColorModel.class
+				&& raster.getTransferType() == DataBuffer.TYPE_INT
+				&& raster.getNumDataElements() == 1 && raster.getMinX() == 0 && raster.getMinY() == 0 ? dcm : null;
 	}
 
 	/**
@@ -1059,6 +1071,27 @@ class ImageFlow {
 											fastOut.write(Math.round(components[3] * 255));
 										}
 									}
+								} else if (intPixels(cm, raster) instanceof DirectColorModel dcm) {
+									// One int per pixel (blurred shadows and filter layers): read a row at a time and
+									// convert with the int overloads the Object ones delegate to, once per run of one
+									// pixel value. The bytes are the same (2026-10-09).
+									int[] row = null;
+									int last = 0, red = dcm.getRed(0), green = dcm.getGreen(0), blue = dcm.getBlue(0);
+									for (var y = 0; y < height; ++y) {
+										row = (int[]) raster.getDataElements(0, y, width, 1, row);
+										for (var x = 0; x < width; ++x) {
+											final int p = row[x];
+											if (p != last) {
+												last = p;
+												red = dcm.getRed(p);
+												green = dcm.getGreen(p);
+												blue = dcm.getBlue(p);
+											}
+											fastOut.write(red);
+											fastOut.write(green);
+											fastOut.write(blue);
+										}
+									}
 								} else {
 									for (var y = 0; y < height; ++y) {
 										for (var x = 0; x < width; ++x) {
@@ -1149,7 +1182,16 @@ class ImageFlow {
 
 							final Raster raster = image.getRaster();
 							Object pixel = raster.getDataElements(0, 0, null);
-							if (softMaskSupport) {
+							if (softMaskSupport && intPixels(cm, raster) instanceof DirectColorModel dcm) {
+								// One int per pixel: a row at a time, as for the color samples (2026-10-09)
+								int[] row = null;
+								for (int y = 0; y < height; ++y) {
+									row = (int[]) raster.getDataElements(0, y, width, 1, row);
+									for (int x = 0; x < width; ++x) {
+										out.write(dcm.getAlpha(row[x]) & 0xFF);
+									}
+								}
+							} else if (softMaskSupport) {
 								for (int y = 0; y < height; ++y) {
 									for (int x = 0; x < width; ++x) {
 										pixel = raster.getDataElements(x, y, pixel);
