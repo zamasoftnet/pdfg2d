@@ -128,14 +128,22 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 
 	public synchronized void addFontFace(FontFace face) throws IOException {
 		final List<FontSource> list = new ArrayList<FontSource>();
+		// A document's own fonts ({@link #outsidePolicy}) get only the embedded form (2026-10-08): the CID-identity
+		// form, which leaves the font out of the PDF, ranked above the embedded one under the cid-identity policy, and
+		// the reader does not have the document's font
+		final boolean cidIdentityForm = !this.outsidePolicy;
+		// Selections made before this face may have to take it (2026-10-08)
+		this.fontListCache = null;
 		if (face.local != null) {
 			try (final var executor = Executors.newVirtualThreadPerTaskExecutor()) {
 				final var embedded = executor.submit(
 						() -> FontLoader.readSystemFont(face, FontLoader.Type.EMBEDDED, face.local, null));
-				final var cidIdentity = executor.submit(
-						() -> FontLoader.readSystemFont(face, FontLoader.Type.CID_IDENTITY, face.local, null));
+				final var cidIdentity = cidIdentityForm ? executor.submit(
+						() -> FontLoader.readSystemFont(face, FontLoader.Type.CID_IDENTITY, face.local, null)) : null;
 				list.add(await(embedded));
-				list.add(await(cidIdentity));
+				if (cidIdentity != null) {
+					list.add(await(cidIdentity));
+				}
 			}
 		} else {
 			File file;
@@ -233,13 +241,15 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 						FontLoader.readTTF(sources, wface, FontLoader.Type.EMBEDDED, fontFile, wface.index, null);
 						return sources;
 					});
-					final var cidIdentity = executor.submit(() -> {
+					final var cidIdentity = cidIdentityForm ? executor.submit(() -> {
 						final var sources = new ArrayList<FontSource>();
 						FontLoader.readTTF(sources, wface, FontLoader.Type.CID_IDENTITY, fontFile, wface.index, null);
 						return sources;
-					});
+					}) : null;
 					list.addAll(await(embedded));
-					list.addAll(await(cidIdentity));
+					if (cidIdentity != null) {
+						list.addAll(await(cidIdentity));
+					}
 				}
 			}
 		}
@@ -312,6 +322,20 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 			}
 			throw new IOException("Failed to load font sources.", cause);
 		}
+	}
+
+	/**
+	 * Appends the candidates of one family of the style's list to {@code fontList}, in this manager's order
+	 * (2026-10-08). {@code FontManagerImpl} takes the families in order and, within each, the document's own faces
+	 * before the installed fonts.
+	 *
+	 * @param fontStyle the font style (its family list is not used)
+	 * @param family    the family
+	 * @param fontList  the list to append to
+	 */
+	public synchronized void lookupFamily(final FontStyle fontStyle, final FontFamily family,
+			final List<FontSource> fontList) {
+		this.lookup(fontStyle, new FontFamilyList(family), fontList, false);
 	}
 
 	public synchronized FontSource[] lookup(final FontStyle fontStyle) {

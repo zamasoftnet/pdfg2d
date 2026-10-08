@@ -6,9 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.net.URI;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
@@ -23,45 +24,49 @@ import net.zamasoft.zstream.resolver.protocol.stream.StreamSource;
  * by the cache that opened them remained until the process exited. In a persistent server, they
  * accumulated with each conversion.
  * </p>
+ *
+ * <p>
+ * The test looks at the files the manager made, not at the temporary directory (2026-10-08): other processes on the
+ * machine (the random sweep, the other test workers) make files with the same prefixes there at the same time, and a
+ * file of theirs that was still there after {@code close()} failed the test now and then.
+ * </p>
  */
 public class FontFaceTempFilesTest {
 	private static final File FONT = new File("src/test/resources/mulish/Mulish-VariableFont_wght.ttf");
 
-	private static final String[] PREFIXES = { "copper-font-face", "copper-vf-instance", "pdfg2d-font-",
-			"pdfg2d-woff2-" };
-
-	private static Set<String> tempFiles() {
-		final Set<String> names = new TreeSet<>();
-		final File[] files = new File(System.getProperty("java.io.tmpdir")).listFiles();
-		if (files != null) {
-			for (final File file : files) {
-				for (final String prefix : PREFIXES) {
-					if (file.getName().startsWith(prefix)) {
-						names.add(file.getName());
-					}
-				}
-			}
-		}
-		return names;
+	/** The copy of the fetched data and the variable font copies that the manager owns. */
+	@SuppressWarnings("unchecked")
+	private static List<File> ownedFiles(final PDFFontSourceManager manager) throws Exception {
+		final List<File> files = new ArrayList<>(manager.uriToFile.values());
+		final Field instances = PDFFontSourceManager.class.getDeclaredField("instanceFiles");
+		instances.setAccessible(true);
+		files.addAll((List<File>) instances.get(manager));
+		return files;
 	}
 
 	@Test
 	public void closingTheManagerRemovesTheFilesItMade() throws Exception {
-		final Set<String> before = tempFiles();
 		final PDFFontSourceManager manager = new PDFFontSourceManager(true);
 		try (final InputStream in = new FileInputStream(FONT)) {
 			final FontFace face = new FontFace();
 			face.src = new StreamSource(URI.create("http://example.com/mulish.ttf"), in, "font/ttf", FONT.length());
 			manager.addFontFace(face);
 		}
-		final Set<String> made = tempFiles();
-		made.removeAll(before);
+		final List<File> made = ownedFiles(manager);
 		// One copy of the fetched data, plus copies for the weights
+		assertEquals(1, manager.uriToFile.size(), made.toString());
 		assertTrue(made.size() > 1, made.toString());
+		for (final File file : made) {
+			assertTrue(file.isFile(), "not made: " + file);
+		}
 
 		manager.close();
-		final Set<String> left = tempFiles();
-		left.removeAll(before);
-		assertEquals(Set.of(), left);
+		final List<File> left = new ArrayList<>();
+		for (final File file : made) {
+			if (file.exists()) {
+				left.add(file);
+			}
+		}
+		assertEquals(List.of(), left);
 	}
 }

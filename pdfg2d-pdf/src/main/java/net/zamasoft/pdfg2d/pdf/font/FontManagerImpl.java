@@ -108,12 +108,22 @@ public class FontManagerImpl implements FontManager, Closeable {
 		if (this.localdb != null) {
 			this.localdb.close();
 		}
+		for (final PDFFontSourceManager cleared : this.clearedLocaldbs) {
+			cleared.close();
+		}
+		this.clearedLocaldbs.clear();
 	}
+
+	/**
+	 * Local font source managers of documents that have ended ({@link #clearFontFaces}). Their temporary font files
+	 * stay until {@link #close()}: the fonts are embedded when the output is finished.
+	 */
+	private final java.util.List<PDFFontSourceManager> clearedLocaldbs = new java.util.ArrayList<>();
 
 	/**
 	 * Registers a font face into the local font source manager.
 	 * The local font source manager is created on first use and takes priority
-	 * over the global one during font lookup.
+	 * over the global one within each family of a style's list (see {@link #getFontListMetrics}).
 	 *
 	 * @param face the font face to register
 	 * @throws IOException if an error occurs while loading the font face
@@ -123,11 +133,51 @@ public class FontManagerImpl implements FontManager, Closeable {
 			this.localdb = new PDFFontSourceManager(true, true);
 		}
 		this.localdb.addFontFace(face);
+		// A selection made before this face may have to take it (2026-10-08)
+		this.fontListMetricsCache.clear();
+	}
+
+	/**
+	 * Forgets the font faces registered so far (2026-10-08): the next document of the output declares its own.
+	 * Fonts already used stay in the font store and in the output.
+	 */
+	@Override
+	public void clearFontFaces() {
+		if (this.localdb != null) {
+			this.clearedLocaldbs.add(this.localdb);
+			this.localdb = null;
+			this.fontListMetricsCache.clear();
+		}
+	}
+
+	/**
+	 * The candidate fonts of a style in order (2026-10-08). The families of the style's list are taken in their
+	 * order, and within a family the document's own faces ({@code @font-face}) come before the installed fonts
+	 * (css-fonts-4 §5.2). Until then every document face came before every installed family, so
+	 * {@code font-family: Installed, Own} set Latin text in Own although Installed has the characters.
+	 */
+	private java.util.List<FontSource> candidates(final FontStyle fontStyle) {
+		final java.util.List<FontSource> list = new java.util.ArrayList<>();
+		if (this.localdb == null) {
+			java.util.Collections.addAll(list, this.globaldb.lookup(fontStyle));
+			return list;
+		}
+		if (!(this.globaldb instanceof final PDFFontSourceManager global)) {
+			java.util.Collections.addAll(list, this.localdb.lookup(fontStyle));
+			java.util.Collections.addAll(list, this.globaldb.lookup(fontStyle));
+			return list;
+		}
+		final net.zamasoft.pdfg2d.gc.font.FontFamilyList families = fontStyle.getFamily();
+		for (int i = 0; i < families.getLength(); ++i) {
+			this.localdb.lookupFamily(fontStyle, families.get(i), list);
+			global.lookupFamily(fontStyle, families.get(i), list);
+		}
+		return list;
 	}
 
 	/**
 	 * Returns the {@link FontListMetrics} for the given font style, building and caching it if necessary.
-	 * The list is assembled from locally registered fonts, globally registered fonts, a space font,
+	 * The list is assembled from the candidates of the style's families ({@link #candidates}), a space font,
 	 * and a missing-glyph fallback font, in that priority order.
 	 *
 	 * @param fontStyle the font style to look up
@@ -138,35 +188,17 @@ public class FontManagerImpl implements FontManager, Closeable {
 		if (flm != null) {
 			return flm;
 		}
-		int count = 2;
-		FontSource[] fonts1;
-		if (this.localdb != null) {
-			fonts1 = this.localdb.lookup(fontStyle);
-			count += fonts1.length;
-		} else {
-			fonts1 = null;
-		}
-		FontSource[] fonts2 = this.globaldb.lookup(fontStyle);
-		count += fonts2.length;
-		FontMetrics[] fms = new FontMetrics[count];
+		final java.util.List<FontSource> fonts = this.candidates(fontStyle);
+		FontMetrics[] fms = new FontMetrics[fonts.size() + 2];
 		int j = 0;
 
 		final java.util.List<FontSource> core = this.coreFontsLast ? new java.util.ArrayList<>() : null;
-		if (fonts1 != null) {
-			for (int i = 0; i < fonts1.length; ++i) {
-				if (core != null && isCoreFont(fonts1[i])) {
-					core.add(fonts1[i]);
-					continue;
-				}
-				fms[j++] = new FontMetricsImpl(this.fontStore, fonts1[i], fontStyle);
-			}
-		}
-		for (int i = 0; i < fonts2.length; ++i) {
-			if (core != null && isCoreFont(fonts2[i])) {
-				core.add(fonts2[i]);
+		for (final FontSource font : fonts) {
+			if (core != null && isCoreFont(font)) {
+				core.add(font);
 				continue;
 			}
-			fms[j++] = new FontMetricsImpl(this.fontStore, fonts2[i], fontStyle);
+			fms[j++] = new FontMetricsImpl(this.fontStore, font, fontStyle);
 		}
 		if (core != null) {
 			for (final FontSource source : core) {

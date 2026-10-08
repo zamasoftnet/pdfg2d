@@ -4184,6 +4184,11 @@
     "en": "Adds a font face.\n\n@param face the font face to add\n@throws IOException if an I/O error occurs",
     "ja": "フォントフェイスを追加します。\n\n@param face 追加するフォントフェイス\n@throws IOException 入出力エラーが発生した場合"
   },
+  "net.zamasoft.pdfg2d.gc.font.FontManager#clearFontFaces()": {
+    "hash": "0a8c21603a5345a9",
+    "en": "Forgets the font faces added so far for font selection, when the next document of an output begins\n(2026-10-08). A document's {@code @font-face} fonts belong to that document; text already drawn keeps its\nfonts.",
+    "ja": "出力の次の文書が始まるときに、それまでに追加したフォントフェースをフォントの選択から外します\n(2026-10-08)。文書の{@code @font-face}のフォントはその文書のものです。描画済みのテキストは自分のフォントのままです。"
+  },
   "net.zamasoft.pdfg2d.gc.font.FontManager#getFontListMetrics(FontStyle)": {
     "hash": "6a627d9c5f4b72a7",
     "en": "Returns the font list metrics for the specified font style.\n\n@param fontStyle the font style\n@return the font list metrics",
@@ -7010,9 +7015,19 @@
     "ja": "指定したフォントソースマネージャとフォントストアで、FontManagerImplを構築します。\n\n@param fontdb    フォントの検索に使うグローバルなフォントソースマネージャ\n@param fontStore 読み込んだフォントをキャッシュするフォントストア"
   },
   "net.zamasoft.pdfg2d.pdf.font.FontManagerImpl#addFontFace(FontFace)": {
-    "hash": "d7856408ef310942",
-    "en": "Registers a font face into the local font source manager.\nThe local font source manager is created on first use and takes priority\nover the global one during font lookup.\n\n@param face the font face to register\n@throws IOException if an error occurs while loading the font face",
-    "ja": "ローカルのフォントソースマネージャにフォントフェイスを登録します。\nローカルのフォントソースマネージャは初めて使うときに作成され、フォントの検索ではグローバルなものより優先されます。\n\n@param face 登録するフォントフェイス\n@throws IOException フォントフェイスの読み込み中にエラーが発生した場合"
+    "hash": "9c55458fc0847be8",
+    "en": "Registers a font face into the local font source manager.\nThe local font source manager is created on first use and takes priority\nover the global one within each family of a style's list (see {@link #getFontListMetrics}).\n\n@param face the font face to register\n@throws IOException if an error occurs while loading the font face",
+    "ja": "フォントフェースをローカルのフォントソースマネージャに登録します。\nローカルのフォントソースマネージャは最初の使用時に作成され、スタイルのリストの各ファミリの中で\nグローバルのものより優先されます({@link #getFontListMetrics}を参照)。\n\n@param face 登録するフォントフェース\n@throws IOException フォントフェースの読み込み中にエラーが発生した場合"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.FontManagerImpl#clearFontFaces()": {
+    "hash": "9498ea3e699ddaa6",
+    "en": "Forgets the font faces registered so far (2026-10-08): the next document of the output declares its own.\nFonts already used stay in the font store and in the output.",
+    "ja": "それまでに登録したフォントフェースを外します(2026-10-08)。出力の次の文書は自分のフォントフェースを宣言します。\n使用済みのフォントはフォントストアと出力に残ります。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.FontManagerImpl#clearedLocaldbs": {
+    "hash": "99195c5efeadbdee",
+    "en": "Local font source managers of documents that have ended ({@link #clearFontFaces}). Their temporary font files\nstay until {@link #close()}: the fonts are embedded when the output is finished.",
+    "ja": "終わった文書のローカルのフォントソースマネージャです({@link #clearFontFaces})。一時フォントファイルは\n{@link #close()}まで残ります。フォントは出力を終えるときに埋め込まれるためです。"
   },
   "net.zamasoft.pdfg2d.pdf.font.FontManagerImpl#close()": {
     "hash": "37503a2fb82ad18a",
@@ -7025,9 +7040,9 @@
     "ja": "グリフのアウトラインを持たないコアフォント(AFMだけのType 1フォント)を候補の最後に回すかどうかです(2026-10-04)。"
   },
   "net.zamasoft.pdfg2d.pdf.font.FontManagerImpl#getFontListMetrics(FontStyle)": {
-    "hash": "83f28c4844c875c2",
-    "en": "Returns the {@link FontListMetrics} for the given font style, building and caching it if necessary.\nThe list is assembled from locally registered fonts, globally registered fonts, a space font,\nand a missing-glyph fallback font, in that priority order.\n\n@param fontStyle the font style to look up\n@return the font list metrics for the given style",
-    "ja": "指定したフォントスタイルの{@link FontListMetrics}を返します。必要であれば構築してキャッシュします。\nリストは、ローカルに登録したフォント、グローバルに登録したフォント、空白用のフォント、グリフが無い場合の代替フォントから、この優先順で組み立てます。\n\n@param fontStyle 検索するフォントスタイル\n@return 指定したスタイルのフォントリストのメトリクス"
+    "hash": "bd502a151bbfe3c2",
+    "en": "Returns the {@link FontListMetrics} for the given font style, building and caching it if necessary.\nThe list is assembled from the candidates of the style's families ({@link #candidates}), a space font,\nand a missing-glyph fallback font, in that priority order.\n\n@param fontStyle the font style to look up\n@return the font list metrics for the given style",
+    "ja": "指定したフォントスタイルの{@link FontListMetrics}を返します。必要であれば構築してキャッシュします。\nリストは、スタイルのファミリの候補({@link #candidates})、空白用のフォント、グリフが無い場合の代替フォントから、\nこの優先順で組み立てます。\n\n@param fontStyle 検索するフォントスタイル\n@return 指定したスタイルのフォントリストのメトリクス"
   },
   "net.zamasoft.pdfg2d.pdf.font.FontManagerImpl#getFontStore()": {
     "hash": "545930e2448f57d7",
@@ -7203,6 +7218,11 @@
     "hash": "b7b04924ffbacaf3",
     "en": "Deletes font files created by this manager (fetched resources and variable font copies), closing opened fonts as well.",
     "ja": "この管理が作った書体ファイル(取得結果・可変フォントの写し)を、開いた書体ごと消します。"
+  },
+  "net.zamasoft.pdfg2d.pdf.font.PDFFontSourceManager#lookupFamily(FontStyle,FontFamily,List)": {
+    "hash": "ecbefafa66beba9b",
+    "en": "Appends the candidates of one family of the style's list to {@code fontList}, in this manager's order\n(2026-10-08). {@code FontManagerImpl} takes the families in order and, within each, the document's own faces\nbefore the installed fonts.\n\n@param fontStyle the font style (its family list is not used)\n@param family    the family\n@param fontList  the list to append to",
+    "ja": "スタイルのリストの1つのファミリの候補を、このマネージャの順で{@code fontList}に追加します\n(2026-10-08)。{@code FontManagerImpl}はファミリを順に取り、各ファミリの中では文書自身のフェースを\nインストール済みのフォントより先にします。\n\n@param fontStyle フォントスタイル(ファミリのリストは使いません)\n@param family    ファミリ\n@param fontList  追加先のリスト"
   },
   "net.zamasoft.pdfg2d.pdf.font.PDFFontSourceManager#outsidePolicy": {
     "hash": "1e5d1c4af7a1d34e",

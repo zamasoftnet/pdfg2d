@@ -21,6 +21,15 @@ public interface FontManager extends Serializable {
 	public void addFontFace(FontFace face) throws IOException;
 
 	/**
+	 * Forgets the font faces added so far for font selection, when the next document of an output begins
+	 * (2026-10-08). A document's {@code @font-face} fonts belong to that document; text already drawn keeps its
+	 * fonts.
+	 */
+	public default void clearFontFaces() {
+		// No font faces to forget
+	}
+
+	/**
 	 * Returns the font list metrics for the specified font style.
 	 * 
 	 * @param fontStyle the font style

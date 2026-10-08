@@ -194,4 +194,11 @@ public class ConfigurablePDFFontSourceManager extends PDFFontSourceManager {
 		this.poll();
 		return super.lookup(fontStyle);
 	}
+
+	@Override
+	public synchronized void lookupFamily(final FontStyle fontStyle, final net.zamasoft.pdfg2d.gc.font.FontFamily family,
+			final List<FontSource> fontList) {
+		this.poll();
+		super.lookupFamily(fontStyle, family, fontList);
+	}
 }
