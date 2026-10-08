@@ -120,7 +120,7 @@ public class FontManagerImpl implements FontManager, Closeable {
 	 */
 	public void addFontFace(FontFace face) throws IOException {
 		if (this.localdb == null) {
-			this.localdb = new PDFFontSourceManager(true);
+			this.localdb = new PDFFontSourceManager(true, true);
 		}
 		this.localdb.addFontFace(face);
 	}

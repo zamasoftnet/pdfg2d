@@ -86,8 +86,20 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 
 	protected final boolean strictMatchName;
 
+	/**
+	 * Whether the embedded forms of fonts the font policy does not select stay candidates, ranked after those it does
+	 * (2026-10-08). Set for the fonts a document loads itself ({@code @font-face}): the author asked for them by name,
+	 * and under the default policy (core and CID-keyed fonts only) they were dropped without a word.
+	 */
+	protected final boolean outsidePolicy;
+
 	public PDFFontSourceManager(boolean strictMatchName) {
+		this(strictMatchName, false);
+	}
+
+	public PDFFontSourceManager(final boolean strictMatchName, final boolean outsidePolicy) {
 		this.strictMatchName = strictMatchName;
+		this.outsidePolicy = outsidePolicy;
 	}
 
 	public PDFFontSourceManager() {
@@ -455,7 +467,11 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 						break;
 					}
 					if (order == 0) {
-						continue;
+						// Only the embedded form: readers do not have a document's own font installed
+						if (!this.outsidePolicy || type != Type.EMBEDDED) {
+							continue;
+						}
+						order = 1;
 					}
 				} else {
 					order = 1;
