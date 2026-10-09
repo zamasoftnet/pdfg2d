@@ -39,8 +39,149 @@ final class PDFTextRenderer {
 
 	private static final Logger LOG = Logger.getLogger(PDFTextRenderer.class.getName());
 
+	/** Text rendering mode 3: neither fill nor stroke (the text stays extractable). */
+	private static final int INVISIBLE_MODE = 3;
+
+	/** Text rendering mode 7: add the glyphs to the clip. */
+	private static final int CLIP_MODE = 7;
+
 	private PDFTextRenderer() {
 		// static use only
+	}
+
+	/**
+	 * Whether text would paint nothing because what it paints has alpha 0, in a PDF version that cannot express
+	 * the alpha: there the text would be painted opaque, so it is written invisible instead (2026-10-09; until then
+	 * {@code color: transparent} text came out black in PDF/A-1b, PDF/X-1a and PDF 1.3).
+	 */
+	private static boolean invisible(final PDFGC gc) {
+		if (gc.pdfVersion.allowsTransparency()) {
+			return false;
+		}
+		final boolean fills = gc.textMode != TextMode.STROKE;
+		final boolean strokes = gc.textMode != TextMode.FILL;
+		return (!fills || gc.fillAlpha <= 0) && (!strokes || gc.strokeAlpha <= 0);
+	}
+
+	/**
+	 * Whether the run is drawn as glyph outlines (paths) rather than shown as PDF text: fonts under the outline
+	 * policy, runs with color glyphs, and image fonts, when the font can draw itself.
+	 */
+	static boolean drawsAsOutlines(final Text text) {
+		final var font = ((FontMetricsImpl) text.getFontMetrics()).getFont();
+		if (!(font instanceof DrawableFont)) {
+			return false;
+		}
+		if (font instanceof ImageFont) {
+			return true;
+		}
+		final var fpl = text.getFontStyle().getPolicy();
+		LOOP: for (var i = 0; i < fpl.getLength(); ++i) {
+			switch (fpl.get(i)) {
+				case EMBEDDED:
+				case CID_IDENTITY:
+					break LOOP;
+				case OUTLINES:
+					return true;
+				default:
+					break;
+			}
+		}
+		// Color fonts (COLR/CPAL) are drawn as stacked filled outlines, so
+		// route a run that contains any color glyph through the outline path.
+		if (font instanceof net.zamasoft.pdfg2d.font.ColorGlyphFont cgf) {
+			final var glyphIds = text.getGlyphIds();
+			for (var i = 0; i < text.getGlyphCount(); ++i) {
+				if (cgf.isColorGlyph(glyphIds[i])) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Shows the runs in one text object in text rendering mode 7, which narrows the clip to their glyphs at
+	 * {@code ET}; for {@link PDFGC#clipToText}. One object holds them all because every {@code ET} intersects the
+	 * clip with its own glyphs. A text object takes no {@code cm}, so each run's placement goes into its text matrix,
+	 * together with the sideways rotation and the synthetic italic that {@link #drawText} writes. Synthetic bold is
+	 * not applied: the clip of a text rendering mode is the glyph fill without the stroke.
+	 *
+	 * <p>
+	 * The caller has saved the graphics state, so the clip ends with it. The text state that the graphics context
+	 * tracks (rendering mode and character spacing) is written back after the object.
+	 * </p>
+	 */
+	static void clipText(final PDFGC gc, final java.util.List<net.zamasoft.pdfg2d.gc.text.TextClip.Run> runs)
+			throws GraphicsException {
+		try {
+			final var out = gc.out;
+			out.writeOperator("BT");
+			out.writeInt(CLIP_MODE);
+			out.writeOperator("Tr");
+			double letterSpacing = gc.xletterSpacing;
+			for (final var run : runs) {
+				final var text = run.text();
+				final var metrics = (FontMetricsImpl) text.getFontMetrics();
+				final var font = metrics.getFont();
+				final var source = (PDFFontSource) metrics.getFontSource();
+				if (gc.requireEmbeddedFonts) {
+					final Type type = source.getType();
+					if (type != Type.EMBEDDED && type != Type.MISSING) {
+						throw new IllegalStateException("Only embedded fonts can be used in PDF/A, PDF/X or PDF/UA.");
+					}
+				}
+				final FontStyle fontStyle = text.getFontStyle();
+				final double size = fontStyle.getSize();
+				final AffineTransform placement = run.transform();
+				boolean verticalFont = false;
+				if (fontStyle.getDirection() == FontStyle.Direction.TB) {
+					if (source.getDirection() == FontStyle.Direction.TB) {
+						verticalFont = true;
+					} else {
+						// 90-degree rotated horizontal
+						placement.concatenate(FontUtils.createSidewaysTransform(source, size));
+					}
+				}
+				// Text space to PDF user space: the y-flip of the page, the placement, and the glyph space's y-up
+				final AffineTransform tm = new AffineTransform(1, 0, 0, -1, 0, out.getHeight());
+				tm.concatenate(placement);
+				tm.concatenate(new AffineTransform(1, 0, 0, -1, 0, 0));
+				if (fontStyle.getStyle() != Style.NORMAL && !source.isItalic() && fontStyle.getSynthesisStyle()) {
+					tm.concatenate(verticalFont ? new AffineTransform(1, -0.25, 0, 1, 0, 0)
+							: new AffineTransform(1, 0, 0.25, 1, 0, 0));
+				}
+				out.writeRealCoefficient(tm.getScaleX());
+				out.writeRealCoefficient(tm.getShearY());
+				out.writeRealCoefficient(tm.getShearX());
+				out.writeRealCoefficient(tm.getScaleY());
+				out.writeRealExact(tm.getTranslateX());
+				out.writeRealExact(tm.getTranslateY());
+				out.writeOperator("Tm");
+				final String name = ((PDFFont) font).getName();
+				out.useResource("Font", name);
+				out.writeName(name);
+				out.writeReal(size);
+				out.writeOperator("Tf");
+				// Use negative value for vertical writing (PDF 1.3 spec 8.7.1.1)
+				final double spacing = verticalFont ? -text.getLetterSpacing() : text.getLetterSpacing();
+				if (!out.equals(spacing, letterSpacing)) {
+					out.writeReal(spacing);
+					out.writeOperator("Tc");
+					letterSpacing = spacing;
+				}
+				font.drawTo(gc, text);
+			}
+			out.writeOperator("ET");
+			out.writeInt(gc.xtextMode.code);
+			out.writeOperator("Tr");
+			if (!out.equals(letterSpacing, gc.xletterSpacing)) {
+				out.writeReal(gc.xletterSpacing);
+				out.writeOperator("Tc");
+			}
+		} catch (final IOException e) {
+			throw new GraphicsException(e);
+		}
 	}
 
 	/**
@@ -54,59 +195,36 @@ final class PDFTextRenderer {
 	 */
 	static void drawText(final PDFGC gc, final Text text, final double x, final double y) throws GraphicsException {
 		final var font = ((FontMetricsImpl) text.getFontMetrics()).getFont();
-		final var fpl = text.getFontStyle().getPolicy();
-		boolean outline = false;
-		LOOP: for (var i = 0; i < fpl.getLength(); ++i) {
-			switch (fpl.get(i)) {
-				case EMBEDDED:
-				case CID_IDENTITY:
-					break LOOP;
-				case OUTLINES:
-					outline = true;
-					break LOOP;
-				default:
-					break;
-			}
-		}
-		// Color fonts (COLR/CPAL) are drawn as stacked filled outlines, so
-		// route a run that contains any color glyph through the outline path.
-		boolean colorGlyphs = false;
-		if (font instanceof net.zamasoft.pdfg2d.font.ColorGlyphFont cgf) {
-			final var glyphIds = text.getGlyphIds();
-			for (var i = 0; i < text.getGlyphCount(); ++i) {
-				if (cgf.isColorGlyph(glyphIds[i])) {
-					colorGlyphs = true;
-					break;
-				}
-			}
-		}
-		if (outline || colorGlyphs || font instanceof ImageFont) {
-			if (font instanceof DrawableFont df) {
-				if (font instanceof ShapedFont sf) {
-					final var glyphCount = text.getGlyphCount();
-					final var glyphIds = text.getGlyphIds();
-					boolean hasShape = false;
-					for (var i = 0; i < glyphCount; ++i) {
-						final var gid = glyphIds[i];
-						final var shape = sf.getShapeByGID(gid);
-						if (shape != null && !shape.getPathIterator(null).isDone()) {
-							hasShape = true;
-							break;
-						}
-					}
-					if (!hasShape) {
-						// No characters to draw
-						return;
-					}
-				}
-				try (final var gcState = gc.begin()) {
-					gc.transform(AffineTransform.getTranslateInstance(x, y));
-					FontUtils.drawText(gc, df, text);
-				}
+		final boolean invisible = invisible(gc);
+		if (drawsAsOutlines(text)) {
+			if (invisible) {
+				// Paths have no invisible mode and nothing to extract: leave them out
 				return;
 			}
+			final DrawableFont df = (DrawableFont) font;
+			if (font instanceof ShapedFont sf) {
+				final var glyphCount = text.getGlyphCount();
+				final var glyphIds = text.getGlyphIds();
+				boolean hasShape = false;
+				for (var i = 0; i < glyphCount; ++i) {
+					final var gid = glyphIds[i];
+					final var shape = sf.getShapeByGID(gid);
+					if (shape != null && !shape.getPathIterator(null).isDone()) {
+						hasShape = true;
+						break;
+					}
+				}
+				if (!hasShape) {
+					// No characters to draw
+					return;
+				}
+			}
+			try (final var gcState = gc.begin()) {
+				gc.transform(AffineTransform.getTranslateInstance(x, y));
+				FontUtils.drawText(gc, df, text);
+			}
+			return;
 		}
-
 		assert text.getCharCount() > 0;
 		try {
 			gc.applyStates();
@@ -142,7 +260,7 @@ final class PDFTextRenderer {
 			Paint xstrokePaint = null;
 			float xstrokeAlpha = 1;
 			final var weight = fontStyle.getWeight();
-			if (gc.textMode == TextMode.FILL && weight.w >= 500 && source.getWeight().w < 500
+			if (!invisible && gc.textMode == TextMode.FILL && weight.w >= 500 && source.getWeight().w < 500
 					&& fontStyle.getSynthesisWeight()) {
 				// Simulate bold manually
 				enlargement = switch (weight) {
@@ -208,6 +326,12 @@ final class PDFTextRenderer {
 
 			// Begin text
 			gc.out.writeOperator("BT");
+			if (invisible) {
+				// Text that should not show but stay extractable (alpha 0 where transparency is not allowed),
+				// inside the text object like the bold simulation below
+				gc.out.writeInt(INVISIBLE_MODE);
+				gc.out.writeOperator("Tr");
+			}
 			if (enlargement > 0) {
 				// The rendering mode is written inside the text object:
 				// written outside BT..ET some rasterizers (PDFBox) do not
@@ -267,6 +391,10 @@ final class PDFTextRenderer {
 			// Draw
 			font.drawTo(gc, text);
 
+			if (invisible) {
+				gc.out.writeInt(gc.xtextMode.code);
+				gc.out.writeOperator("Tr");
+			}
 			if (enlargement > 0) {
 				// End bold simulation (inside the text object, see above).
 				// The text mode shadow (xtextMode) still says FILL, so

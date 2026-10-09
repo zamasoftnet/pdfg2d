@@ -419,6 +419,18 @@ public class PDFGC implements GC, Closeable {
 	/** True when the target profile forbids non-embedded fonts (PDF/A, PDF/X, PDF/UA). */
 	final boolean requireEmbeddedFonts;
 
+	/** True when the document is tagged. */
+	private final boolean tagged;
+
+	/**
+	 * Text that {@link #clipToText} showed as a clip on an untagged page, identity-keyed (2026-10-09). The clip
+	 * text is the copy that text extraction finds, so {@link #drawText} leaves out the same text when it paints
+	 * nothing (the usual {@code color: transparent} of {@code background-clip: text}): drawn as well, it came out
+	 * twice in MuPDF, pdfminer, pypdf and pdfplumber.
+	 */
+	private final java.util.Set<Text> clipShown = java.util.Collections
+			.newSetFromMap(new java.util.IdentityHashMap<>());
+
 	@SuppressWarnings("unchecked")
 	PDFGC(final PDFGraphicsOutput out, final Map<Object, String> resourceCache) {
 		this.out = out;
@@ -437,6 +449,7 @@ public class PDFGC implements GC, Closeable {
 		this.pdfVersion = params.version();
 		this.requireEmbeddedFonts = this.pdfVersion.isPdfA() || this.pdfVersion.isPdfX()
 				|| (params.tagged() != null && params.tagged().pdfua());
+		this.tagged = params.tagged() != null;
 		this.stack.add(new GraphicsState(this));
 	}
 
@@ -1267,6 +1280,52 @@ public class PDFGC implements GC, Closeable {
 		this.clip = clip;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>
+	 * Text that PDF shows as text is shown in one text object in text rendering mode 7, which clips with the
+	 * glyphs as the viewer draws them, also for fonts that are not embedded. Runs drawn as outlines (the outline
+	 * policy, color glyphs) clip with a path instead, and the painter runs a second time inside that clip. In tagged
+	 * PDF the clip text is an artifact. In untagged PDF it is the copy of the text that extraction finds, and
+	 * {@link #drawText} leaves out the same text when it paints nothing.
+	 * </p>
+	 */
+	@Override
+	public void clipToText(final net.zamasoft.pdfg2d.gc.text.TextClip clip, final Painter painter)
+			throws GraphicsException {
+		final List<net.zamasoft.pdfg2d.gc.text.TextClip.Run> shown = new ArrayList<>();
+		final List<net.zamasoft.pdfg2d.gc.text.TextClip.Run> outlined = new ArrayList<>();
+		for (final var run : clip.getRuns()) {
+			(PDFTextRenderer.drawsAsOutlines(run.text()) ? outlined : shown).add(run);
+		}
+		if (!shown.isEmpty()) {
+			try (final State state = this.begin()) {
+				try {
+					this.gsave();
+				} catch (IOException e) {
+					throw new GraphicsException(e);
+				}
+				try (final State artifact = this.beginArtifactScope()) {
+					PDFTextRenderer.clipText(this, shown);
+				}
+				if (!this.tagged) {
+					for (final var run : shown) {
+						this.clipShown.add(run.text());
+					}
+				}
+				painter.paint(this);
+			}
+		}
+		if (!outlined.isEmpty()) {
+			final Shape outline = net.zamasoft.pdfg2d.gc.text.TextClip.outline(outlined, this.getFontManager());
+			try (final State state = this.begin()) {
+				this.clip(outline);
+				painter.paint(this);
+			}
+		}
+	}
+
 	@Override
 	public void fill(final Shape shape) throws GraphicsException {
 		try {
@@ -1451,6 +1510,10 @@ public class PDFGC implements GC, Closeable {
 		if (text.getGlyphCount() <= 0) {
 			return;
 		}
+		if (!this.clipShown.isEmpty() && this.clipShown.contains(text) && this.paintsNothing()) {
+			// The clip of clipToText already shows this text
+			return;
+		}
 
 		final int textMcid;
 		try {
@@ -1467,6 +1530,12 @@ public class PDFGC implements GC, Closeable {
 				throw new GraphicsException(e);
 			}
 		}
+	}
+
+	/** Whether text drawn now would paint nothing: what the rendering mode paints has alpha 0. */
+	private boolean paintsNothing() {
+		return (this.textMode == TextMode.STROKE || this.fillAlpha <= 0)
+				&& (this.textMode == TextMode.FILL || this.strokeAlpha <= 0);
 	}
 
 	private void drawTextContent(final Text text, final double x, final double y) throws GraphicsException {

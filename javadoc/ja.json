@@ -3534,6 +3534,11 @@
     "en": "Intersects the current clip with the given shape.\n\n@param shape the clip shape\n@throws GraphicsException if a graphics error occurs",
     "ja": "現在のクリップと指定された形の共通部分を、新しいクリップにします。\n\n@param shape クリップの形\n@throws GraphicsException グラフィックのエラーが発生した場合"
   },
+  "net.zamasoft.pdfg2d.gc.GC#clipToText(TextClip,Painter)": {
+    "hash": "33cb0a009c2b7fea",
+    "en": "Runs {@code painter} with the current clip narrowed to the glyphs of {@code clip} (CSS\n{@code background-clip: text}); the narrowed clip ends when the call returns. Nothing is painted when the\nclip has no runs.\n\n<p>\nThe painter may run more than once, each time inside part of the glyphs, when the backend clips different\nkinds of glyphs in different ways. The parts overlap only where glyphs overlap one another.\n</p>\n\n<p>\nThe default clips with {@link TextClip#outline}, the glyph outlines that Java2D and SVG output fill for the\nsame text. PDF shows text in text rendering mode 7 instead, so that fonts without local outlines (fonts that\nare not embedded) clip as well.\n</p>\n\n@param clip    the text to clip with\n@param painter what to paint inside the clip\n@throws GraphicsException if a graphics error occurs\n@since 1.3",
+    "ja": "クリップを{@code clip}の字の形に狭めて{@code painter}を実行します(CSSの{@code background-clip: text})。狭めたクリップは呼び出しから戻ると終わります。{@code clip}に字の並びが無ければ、何も塗りません。\n\n<p>\n出力先が種類の違う字を別々の方法で切り抜くときは、painterが字の一部ずつを切り抜きにして複数回実行されることがあります。その部分どうしが重なるのは、字どうしが重なる所だけです。\n</p>\n\n<p>\n既定の実装は{@link TextClip#outline}で切り抜きます。Java2DとSVGの出力が同じ字を塗るときの字の輪郭です。PDFは代わりに字の描画モード7で字を描き、手元に輪郭の無い書体(埋め込まない書体)でも切り抜けるようにします。\n</p>\n\n@param clip    切り抜きに使う字\n@param painter 切り抜きの中に塗るもの\n@throws GraphicsException グラフィックのエラーが発生した場合\n@since 1.3"
+  },
   "net.zamasoft.pdfg2d.gc.GC#createFilterGroup(double,double)": {
     "hash": "aa7d0ce346e48ccc",
     "en": "Creates the group used to capture an element that may later receive\nelement-wide filter effects.\n\n<p>\nBackends that need deferred replay may override this independently of\n{@link #createGroupImage(double, double)}. The default keeps the ordinary\ngroup implementation, preserving existing vector/group semantics.\n</p>\n\n@param width  the width of the captured group\n@param height the height of the captured group\n@return a group graphics context suitable for later\n        {@link #drawGroupEffects(Image, GroupEffects)}\n@throws GraphicsException if a graphics error occurs",
@@ -3789,6 +3794,16 @@
     "en": "Represents the line join style.",
     "ja": "線の結合部の形を表します。"
   },
+  "net.zamasoft.pdfg2d.gc.GC.Painter": {
+    "hash": "aa651c6d82c109cf",
+    "en": "Paints inside a clip, for {@link #clipToText(TextClip, Painter)}.\n\n@since 1.3",
+    "ja": "{@link #clipToText(TextClip, Painter)}のために、切り抜きの中に塗ります。\n\n@since 1.3"
+  },
+  "net.zamasoft.pdfg2d.gc.GC.Painter#paint(GC)": {
+    "hash": "ad01f5daa8af3243",
+    "en": "Paints on the graphics context, inside the clip.\n\n@param gc the graphics context\n@throws GraphicsException if a graphics error occurs",
+    "ja": "切り抜きの中で、グラフィックコンテキストに塗ります。\n\n@param gc グラフィックコンテキスト\n@throws GraphicsException グラフィックのエラーが発生した場合"
+  },
   "net.zamasoft.pdfg2d.gc.GC.State": {
     "hash": "8b0ee84e616034cc",
     "en": "A graphics state saved by {@link #begin()}. Closing it restores the\nsaved state; closing it more than once has no effect.",
@@ -3918,6 +3933,11 @@
     "hash": "1ccff02bd959be59",
     "en": "Opens a semantic text-replacement scope during replay.",
     "ja": "再生時に、意味上のテキスト置換の範囲を開きます。"
+  },
+  "net.zamasoft.pdfg2d.gc.RecorderGC.ClipText": {
+    "hash": "9373b9d62e0a3965",
+    "en": "Painting clipped to text (2026-10-09): the commands the painter recorded, replayed through\n{@link GC#clipToText} so that the replay target clips the way it does when drawn directly.",
+    "ja": "字の形に切り抜いて塗る操作です(2026-10-09)。painterが記録した操作を持ち、{@link GC#clipToText}を通して再生するので、再生先は直接描いたときと同じ方法で切り抜きます。"
   },
   "net.zamasoft.pdfg2d.gc.RecorderGC.DrawImageEffects": {
     "hash": "76b9248be9c35b4e",
@@ -5183,6 +5203,46 @@
     "hash": "9d4501eaa9be998f",
     "en": "Returns the per-glyph extra advance adjustments as a read-only view,\nor {@code null} if no adjustments have been applied.\nReplaces raw array exposure ({@code getXAdvances(boolean)}) (2026-08-01).\nRestricts writes to meaningful operations on {@link TextImpl}\n({@code addXAdvance}/{@code resetXAdvances}).\n\n@return the per-glyph x-advance view, or {@code null}",
     "ja": "グリフごとの追加の送り幅の調整を、読み取り専用のビューで返します。調整が何も適用されていなければ{@code null}を返します。\n生の配列の公開({@code getXAdvances(boolean)})を置き換えたものです(2026-08-01)。\n書き込みは、{@link TextImpl}の意味のある操作({@code addXAdvance}/{@code resetXAdvances})に限ります。\n\n@return グリフごとのx方向の送り幅のビュー、または{@code null}"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextClip": {
+    "hash": "d1485e6a03d39d33",
+    "en": "Text that clips painting to the shape of its glyphs (CSS {@code background-clip: text}), for\n{@link GC#clipToText(TextClip, GC.Painter)}.\n\n<p>\nThe clip is a list of text runs. Each run is placed by a transform from the run's own space, where\n{@link GC#drawText(Text, double, double)} would draw it at (0, 0), to the user space of the graphics context that\nreceives the clip. The runs keep the text itself rather than glyph outlines, so a backend can clip with glyphs it\ncannot outline locally: PDF shows them with a text rendering mode that adds them to the clip.\n</p>\n\n@author MIYABE Tatsuhiko\n@since 1.3",
+    "ja": "塗りを字の形に切り抜く字です(CSSの{@code background-clip: text})。{@link GC#clipToText(TextClip, GC.Painter)}に渡します。\n\n<p>\n切り抜きは字の並び(run)のリストです。それぞれの並びは、その並び自身の空間({@link GC#drawText(Text, double, double)}が(0, 0)に描く空間)から、切り抜きを受け取るグラフィックコンテキストのユーザー空間への変換で置かれます。並びは字の輪郭ではなく字そのものを持つので、出力先は手元で輪郭を作れない字でも切り抜けます。PDFは、字を切り抜きに足す字の描画モードで字を描きます。\n</p>\n\n@author MIYABE Tatsuhiko\n@since 1.3"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextClip#add(Text,AffineTransform)": {
+    "hash": "c47fee3bb102015b",
+    "en": "Adds a text run. Text without glyphs is ignored.\n\n@param text      the text\n@param transform the transform from the run's space to the user space of the receiving graphics context",
+    "ja": "字の並びを足します。グリフの無い字は無視します。\n\n@param text      字\n@param transform 並びの空間から、切り抜きを受け取るグラフィックコンテキストのユーザー空間への変換"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextClip#getRuns()": {
+    "hash": "67a48cd77487b448",
+    "en": "Returns the runs in the order they were added.\n\n@return an unmodifiable view of the runs",
+    "ja": "足した順に、字の並びを返します。\n\n@return 字の並びの変更できないビュー"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextClip#isEmpty()": {
+    "hash": "a20c1a15981e4959",
+    "en": "Returns whether the clip has no runs, so that nothing would be painted inside it.\n\n@return true if there are no runs",
+    "ja": "切り抜きに字の並びが無く、中に何も塗られないかどうかを返します。\n\n@return 字の並びが無ければtrue"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextClip#outline(List,FontManager)": {
+    "hash": "d9b1c1fd341cb98b",
+    "en": "Returns the union of the glyph outlines of the given runs. The outlines are the ones that each font's\n{@link net.zamasoft.pdfg2d.font.Font#drawTo} fills on a graphics context other than PDF, the same outlines\nthat Java2D and SVG output paint for the text. Glyphs drawn as images (emoji images) have no outline and are\nleft out.\n\n@param runs the runs\n@param fm   the font manager\n@return the outlines in the user space of the receiving graphics context\n@throws GraphicsException if a font cannot draw its glyphs",
+    "ja": "指定された字の並びの、字の輪郭の和を返します。輪郭は、それぞれの書体の{@link net.zamasoft.pdfg2d.font.Font#drawTo}がPDF以外のグラフィックコンテキストに塗るもので、Java2DとSVGの出力がその字に塗る輪郭と同じです。画像として描く字(絵文字の画像)には輪郭が無いので、入りません。\n\n@param runs 字の並び\n@param fm   フォントマネージャ\n@return 切り抜きを受け取るグラフィックコンテキストのユーザー空間での輪郭\n@throws GraphicsException 書体が字を描けない場合"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextClip.Run": {
+    "hash": "49eb561317ae9eb5",
+    "en": "One text run of a clip.\n\n@param text      the text\n@param transform the transform from the run's space (its origin at (0, 0)) to the user space of the\n                 receiving graphics context",
+    "ja": "切り抜きの、1つの字の並びです。\n\n@param text      字\n@param transform 並びの空間(原点が(0, 0))から、切り抜きを受け取るグラフィックコンテキストのユーザー空間への変換"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextClip.Run#Run(Text,AffineTransform)": {
+    "hash": "f6a07ebcb5cf78c8",
+    "en": "Creates a run, copying the transform.\n\n@param text      the text\n@param transform the transform that places the text",
+    "ja": "変換を写して、字の並びを作ります。\n\n@param text      字\n@param transform 字を置く変換"
+  },
+  "net.zamasoft.pdfg2d.gc.text.TextClip.Run#transform()": {
+    "hash": "9f637f33e6bfa6b8",
+    "en": "Returns a copy of the transform that places the text.\n\n@return the transform",
+    "ja": "字を置く変換の写しを返します。\n\n@return 変換"
   },
   "net.zamasoft.pdfg2d.gc.text.TextControl": {
     "hash": "e0dcfe3b93251b16",
@@ -8153,6 +8213,11 @@
     "hash": "55c270065ce2e82a",
     "en": "{@inheritDoc}\n\n<p>\nLine-level replacement is opt-in through\n{@link PDFParams#withActualTextReplacement(boolean)}. It is disabled by\ndefault because measurements show that PDFium (Chrome and Edge) extracts\nbidirectional text correctly from visual glyphs but incorrectly with the\nline-level replacement span, while MuPDF is not improved. Enable it only\nfor Acrobat-centric text extraction workflows.\n</p>\n\n<p>\nWhen enabled, PDF 1.5 and later use one {@code /Span} marked-content\nsequence carrying {@code /ActualText}. The replacement state is independent\nof tagged content, artifacts and optional-content layers, so those\nmarked-content sequences remain properly nested inside or outside it.\nDisabled replacement, nested calls and target versions earlier than PDF 1.5\nreturn a no-op state.\n</p>",
     "ja": "{@inheritDoc}\n\n<p>\n行単位の置き換えは、\n{@link PDFParams#withActualTextReplacement(boolean)}で有効にした場合だけ行います。\n既定で無効なのは、計測の結果、PDFium(ChromeとEdge)は視覚順のグリフからは\n双方向テキストを正しく抽出するのに、行単位の置き換えのスパンがあると誤って抽出し、\nMuPDFでは改善しないことが分かったためです。Acrobatを中心とした\nテキスト抽出のワークフローでだけ有効にしてください。\n</p>\n\n<p>\n有効な場合、PDF 1.5以降では{@code /ActualText}を持つ{@code /Span}の\nマーク付きコンテンツシーケンスを1つ使います。置き換えの状態は、タグ付きの内容、\nアーティファクト、オプショナルコンテンツのレイヤーとは独立しているため、\nそれらのマーク付きコンテンツシーケンスは、その内側または外側で正しく入れ子になったままです。\n置き換えが無効な場合、入れ子の呼び出し、PDF 1.5より前の対象バージョンでは、\n何もしない状態を返します。\n</p>"
+  },
+  "net.zamasoft.pdfg2d.pdf.gc.PDFGC#clipToText(net.zamasoft.pdfg2d.gc.text.TextClip,Painter)": {
+    "hash": "e75cae72e38504cc",
+    "en": "{@inheritDoc}\n\n<p>\nText that PDF shows as text is shown in one text object in text rendering mode 7, which clips with the\nglyphs as the viewer draws them, also for fonts that are not embedded. Runs drawn as outlines (the outline\npolicy, color glyphs) clip with a path instead, and the painter runs a second time inside that clip. In tagged\nPDF the clip text is an artifact. In untagged PDF it is the copy of the text that extraction finds, and\n{@link #drawText} leaves out the same text when it paints nothing.\n</p>",
+    "ja": "{@inheritDoc}\n\n<p>\nPDFが字として描く字は、1つのテキストオブジェクトの中に字の描画モード7で描きます。閲覧側が描く字の形で切り抜くので、埋め込まない書体でも切り抜けます。輪郭で描く字(輪郭のポリシー、カラーのグリフ)はパスで切り抜き、painterをその切り抜きの中でもう一度実行します。タグ付きPDFでは、切り抜きの字はArtifactです。タグの無いPDFでは、切り抜きの字が抜き出される字の写しになり、{@link #drawText}は何も塗らない同じ字を描きません。\n</p>"
   },
   "net.zamasoft.pdfg2d.pdf.gc.PDFGC#createFilterGroup(double,double)": {
     "hash": "3b1b50b6a8f7731a",

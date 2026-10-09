@@ -8,6 +8,7 @@ import net.zamasoft.pdfg2d.gc.image.GroupImageGC;
 import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.text.Text;
+import net.zamasoft.pdfg2d.gc.text.TextClip;
 
 /**
  * Represents a graphics context.
@@ -427,6 +428,54 @@ public interface GC {
 	 * @throws GraphicsException if a graphics error occurs
 	 */
 	public void clip(final Shape shape) throws GraphicsException;
+
+	/**
+	 * Paints inside a clip, for {@link #clipToText(TextClip, Painter)}.
+	 *
+	 * @since 1.3
+	 */
+	@FunctionalInterface
+	public interface Painter {
+		/**
+		 * Paints on the graphics context, inside the clip.
+		 *
+		 * @param gc the graphics context
+		 * @throws GraphicsException if a graphics error occurs
+		 */
+		public void paint(GC gc) throws GraphicsException;
+	}
+
+	/**
+	 * Runs {@code painter} with the current clip narrowed to the glyphs of {@code clip} (CSS
+	 * {@code background-clip: text}); the narrowed clip ends when the call returns. Nothing is painted when the
+	 * clip has no runs.
+	 *
+	 * <p>
+	 * The painter may run more than once, each time inside part of the glyphs, when the backend clips different
+	 * kinds of glyphs in different ways. The parts overlap only where glyphs overlap one another.
+	 * </p>
+	 *
+	 * <p>
+	 * The default clips with {@link TextClip#outline}, the glyph outlines that Java2D and SVG output fill for the
+	 * same text. PDF shows text in text rendering mode 7 instead, so that fonts without local outlines (fonts that
+	 * are not embedded) clip as well.
+	 * </p>
+	 *
+	 * @param clip    the text to clip with
+	 * @param painter what to paint inside the clip
+	 * @throws GraphicsException if a graphics error occurs
+	 * @since 1.3
+	 */
+	public default void clipToText(final TextClip clip, final Painter painter) throws GraphicsException {
+		if (clip.isEmpty()) {
+			return;
+		}
+		final Shape outline = TextClip.outline(clip.getRuns(), this.getFontManager());
+		try (final State state = this.begin()) {
+			this.clip(outline);
+			painter.paint(this);
+		}
+	}
 
 	/**
 	 * Draws the outline of the given shape.

@@ -13,6 +13,7 @@ import net.zamasoft.pdfg2d.gc.image.GroupImageGC;
 import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.paint.Paint;
 import net.zamasoft.pdfg2d.gc.text.Text;
+import net.zamasoft.pdfg2d.gc.text.TextClip;
 
 /**
  * A graphics context that records all graphics operations.
@@ -25,7 +26,7 @@ public class RecorderGC extends NoOpGC {
 			Begin, End, BeginTextReplacement, EndTextReplacement,
 			SetLineWidth, SetLinePattern, SetLineCap, SetLineJoin,
 			SetTextMode, SetStrokePaint, SetFillPaint, SetStrokeAlpha, SetFillAlpha, SetBlendMode,
-			Transform, Clip, ResetState, DrawImage, DrawImageEffects, Fill, FillBlurred, Draw, FillDraw, DrawText {
+			Transform, Clip, ClipText, ResetState, DrawImage, DrawImageEffects, Fill, FillBlurred, Draw, FillDraw, DrawText {
 	}
 
 	public record Begin() implements Command {
@@ -79,6 +80,13 @@ public class RecorderGC extends NoOpGC {
 	public record Clip(Shape shape) implements Command {
 	}
 
+	/**
+	 * Painting clipped to text (2026-10-09): the commands the painter recorded, replayed through
+	 * {@link GC#clipToText} so that the replay target clips the way it does when drawn directly.
+	 */
+	public record ClipText(TextClip clip, List<Command> commands) implements Command {
+	}
+
 	public record ResetState() implements Command {
 	}
 
@@ -106,6 +114,9 @@ public class RecorderGC extends NoOpGC {
 	}
 
 	protected final List<Command> contents = new ArrayList<>();
+
+	/** Where commands are recorded: {@link #contents}, or the commands of a {@link ClipText} being recorded. */
+	private List<Command> target = this.contents;
 
 	/** What {@link #supports(Capability)} answers while recording. */
 	private final java.util.function.Predicate<Capability> capabilities;
@@ -163,14 +174,14 @@ public class RecorderGC extends NoOpGC {
 	@Override
 	public State begin() {
 		final var state = super.begin();
-		this.contents.add(new Begin());
+		this.target.add(new Begin());
 		return state;
 	}
 
 	@Override
 	protected void restoreState() {
 		super.restoreState();
-		this.contents.add(new End());
+		this.target.add(new End());
 	}
 
 	/**
@@ -184,7 +195,7 @@ public class RecorderGC extends NoOpGC {
 		}
 		final String replacement = java.util.Objects.requireNonNull(logicalText, "logicalText");
 		this.inTextReplacement = true;
-		this.contents.add(new BeginTextReplacement(replacement));
+		this.target.add(new BeginTextReplacement(replacement));
 		return new State() {
 			private boolean closed;
 
@@ -194,7 +205,7 @@ public class RecorderGC extends NoOpGC {
 					return;
 				}
 				this.closed = true;
-				RecorderGC.this.contents.add(new EndTextReplacement());
+				RecorderGC.this.target.add(new EndTextReplacement());
 				RecorderGC.this.inTextReplacement = false;
 			}
 		};
@@ -203,120 +214,136 @@ public class RecorderGC extends NoOpGC {
 	@Override
 	public void setLineWidth(final double lineWidth) {
 		super.setLineWidth(lineWidth);
-		this.contents.add(new SetLineWidth(lineWidth));
+		this.target.add(new SetLineWidth(lineWidth));
 	}
 
 	@Override
 	public void setLinePattern(final double[] linePattern) {
 		final double[] statePattern = linePattern == null ? null : linePattern.clone();
 		super.setLinePattern(statePattern);
-		this.contents.add(new SetLinePattern(statePattern == null ? null : statePattern.clone()));
+		this.target.add(new SetLinePattern(statePattern == null ? null : statePattern.clone()));
 	}
 
 	@Override
 	public void setLineJoin(final LineJoin lineJoin) {
 		super.setLineJoin(lineJoin);
-		this.contents.add(new SetLineJoin(lineJoin));
+		this.target.add(new SetLineJoin(lineJoin));
 	}
 
 	@Override
 	public void setLineCap(final LineCap lineCap) {
 		super.setLineCap(lineCap);
-		this.contents.add(new SetLineCap(lineCap));
+		this.target.add(new SetLineCap(lineCap));
 	}
 
 	@Override
 	public void setStrokePaint(final Paint paint) throws GraphicsException {
 		super.setStrokePaint(paint);
-		this.contents.add(new SetStrokePaint(paint));
+		this.target.add(new SetStrokePaint(paint));
 	}
 
 	@Override
 	public void setFillPaint(final Paint paint) throws GraphicsException {
 		super.setFillPaint(paint);
-		this.contents.add(new SetFillPaint(paint));
+		this.target.add(new SetFillPaint(paint));
 	}
 
 	@Override
 	public void setStrokeAlpha(final float alpha) {
 		super.setStrokeAlpha(alpha);
-		this.contents.add(new SetStrokeAlpha(alpha));
+		this.target.add(new SetStrokeAlpha(alpha));
 	}
 
 	@Override
 	public void setFillAlpha(final float alpha) {
 		super.setFillAlpha(alpha);
-		this.contents.add(new SetFillAlpha(alpha));
+		this.target.add(new SetFillAlpha(alpha));
 	}
 
 	@Override
 	public void setBlendMode(final net.zamasoft.pdfg2d.gc.paint.BlendMode mode) {
 		super.setBlendMode(mode);
-		this.contents.add(new SetBlendMode(this.blendMode));
+		this.target.add(new SetBlendMode(this.blendMode));
 	}
 
 	@Override
 	public void setTextMode(final TextMode textMode) {
 		super.setTextMode(textMode);
-		this.contents.add(new SetTextMode(textMode));
+		this.target.add(new SetTextMode(textMode));
 	}
 
 	@Override
 	public void transform(final AffineTransform at) {
 		super.transform(at);
-		this.contents.add(new Transform(new AffineTransform(at)));
+		this.target.add(new Transform(new AffineTransform(at)));
 	}
 
 	@Override
 	public void clip(final Shape clip) {
 		super.clip(clip);
-		this.contents.add(new Clip(snapshot(clip)));
+		this.target.add(new Clip(snapshot(clip)));
+	}
+
+	@Override
+	public void clipToText(final TextClip clip, final Painter painter) throws GraphicsException {
+		if (clip.isEmpty()) {
+			return;
+		}
+		final List<Command> outer = this.target;
+		final List<Command> commands = new ArrayList<>();
+		this.target = commands;
+		try (final State state = this.begin()) {
+			painter.paint(this);
+		} finally {
+			this.target = outer;
+		}
+		this.target.add(new ClipText(clip, List.copyOf(commands)));
 	}
 
 	@Override
 	public void resetState() {
 		super.resetState();
-		this.contents.add(new ResetState());
+		this.target.add(new ResetState());
 	}
 
 	@Override
 	public void drawImage(final Image image) throws GraphicsException {
 		super.drawImage(image);
 		this.growImageBounds(image, null);
-		this.contents.add(new DrawImage(image));
+		this.target.add(new DrawImage(image));
 	}
 
 	@Override
 	public void drawImage(final Image image, final GroupEffects effects) throws GraphicsException {
 		this.growImageBounds(image, effects);
-		this.contents.add(new DrawImageEffects(image, snapshot(effects)));
+		this.target.add(new DrawImageEffects(image, snapshot(effects)));
 	}
 
 	@Override
 	public void fill(final Shape shape) {
 		super.fill(shape);
 		this.growShapeBounds(shape, 0);
-		this.contents.add(new Fill(snapshot(shape)));
+		this.target.add(new Fill(snapshot(shape)));
 	}
 
 	@Override
 	public void fillBlurred(final Shape shape, final double sigma) {
 		this.growShapeBounds(shape, finitePositive(sigma) ? 3 * sigma : 0);
-		this.contents.add(new FillBlurred(snapshot(shape), sigma));
+		this.target.add(new FillBlurred(snapshot(shape), sigma));
 	}
 
 	@Override
 	public void draw(final Shape shape) {
 		super.draw(shape);
 		this.growShapeBounds(shape, Math.abs(this.lineWidth) / 2);
-		this.contents.add(new Draw(snapshot(shape)));
+		this.target.add(new Draw(snapshot(shape)));
 	}
 
 	@Override
 	public void fillDraw(final Shape shape) {
 		super.fillDraw(shape);
 		this.growShapeBounds(shape, Math.abs(this.lineWidth) / 2);
-		this.contents.add(new FillDraw(snapshot(shape)));
+		this.target.add(new FillDraw(snapshot(shape)));
 	}
 
 	@Override
@@ -331,7 +358,7 @@ public class RecorderGC extends NoOpGC {
 			this.growTransformedBounds(new Rectangle2D.Double(x - squareRadius, y - squareRadius,
 					2 * squareRadius, 2 * squareRadius));
 		}
-		this.contents.add(new DrawText(text, x, y));
+		this.target.add(new DrawText(text, x, y));
 	}
 
 	private void growShapeBounds(final Shape shape, final double padding) {
@@ -613,11 +640,15 @@ public class RecorderGC extends NoOpGC {
 		 * @param gc the graphics context
 		 */
 		public void drawTo(final GC gc) {
+			replay(this.commands, gc);
+		}
+
+		private static void replay(final List<Command> commands, final GC gc) {
 			// Balanced Begin/End records are guaranteed by construction: an
 			// End is only recorded when a State handle is closed.
 			final var states = new ArrayDeque<GC.State>();
 			final var replacements = new ArrayDeque<GC.State>();
-			for (final var cmd : this.commands) {
+			for (final var cmd : commands) {
 				switch (cmd) {
 					case Begin() -> states.push(gc.begin());
 					case End() -> states.pop().close();
@@ -636,6 +667,7 @@ public class RecorderGC extends NoOpGC {
 					case SetBlendMode(net.zamasoft.pdfg2d.gc.paint.BlendMode mode) -> gc.setBlendMode(mode);
 					case Transform(AffineTransform at) -> gc.transform(new AffineTransform(at));
 					case Clip(Shape shape) -> gc.clip(shape);
+					case ClipText(TextClip clip, List<Command> painted) -> gc.clipToText(clip, g -> replay(painted, g));
 					case ResetState() -> gc.resetState();
 					case DrawImage(Image image) -> gc.drawImage(materialize(image, gc));
 					case DrawImageEffects(Image image, GroupEffects effects) ->
