@@ -1,6 +1,8 @@
 package net.zamasoft.pdfg2d.pdf.font.type2;
 
 import java.awt.Shape;
+import java.awt.geom.Area;
+import java.awt.geom.Path2D;
 import java.awt.geom.PathIterator;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -117,6 +119,104 @@ public class CFFGenerator {
 	}
 
 	/**
+	 * Returns the outline with its overlapping contours merged. TrueType glyphs may overlap (Andika draws the stem
+	 * and the bar of "t" as two contours), while CFF outlines are expected not to: some rasterizers left the overlap
+	 * white (Acrobat at small zoom, print RIPs, Chrome showing a paged SVG small; 2026-10-29).
+	 *
+	 * <p>
+	 * Only an outline in which two contours of the same orientation have intersecting bounds is merged, by the
+	 * nonzero rule CFF fills with. {@link Area} gives its outer contours counter-clockwise in the y-up space of CFF,
+	 * as CFF expects. Other outlines, holes inside a contour among them, are returned as they are.
+	 * </p>
+	 *
+	 * @param shape a glyph outline in Java2D coordinates
+	 * @return the outline without overlapping contours
+	 */
+	static Shape withoutOverlaps(final Shape shape) {
+		if (!mayOverlap(shape)) {
+			return shape;
+		}
+		final Path2D.Double path = new Path2D.Double(Path2D.WIND_NON_ZERO);
+		path.append(shape, false);
+		return new Area(path);
+	}
+
+	/**
+	 * Whether two contours of the same orientation have intersecting bounds. The bounds take the control points
+	 * (they hold the curve); the orientation is the sign of the exact area of the segments, as the polygon of the
+	 * points can have the other sign for a contour with deep curves.
+	 */
+	private static boolean mayOverlap(final Shape shape) {
+		final List<double[]> contours = new ArrayList<>();
+		// minX, minY, maxX, maxY, the signed area
+		double[] c = null;
+		double px = 0, py = 0, sx = 0, sy = 0;
+		final double[] cord = new double[6];
+		for (final PathIterator i = shape.getPathIterator(null); !i.isDone(); i.next()) {
+			final int type = i.currentSegment(cord);
+			if (type == PathIterator.SEG_CLOSE) {
+				continue;
+			}
+			if (type == PathIterator.SEG_MOVETO) {
+				if (c != null) {
+					c[4] += cross(px, py, sx, sy) / 2;
+					contours.add(c);
+				}
+				c = new double[] { cord[0], cord[1], cord[0], cord[1], 0 };
+				px = sx = cord[0];
+				py = sy = cord[1];
+				continue;
+			}
+			final int points = type == PathIterator.SEG_QUADTO ? 2 : type == PathIterator.SEG_CUBICTO ? 3 : 1;
+			for (int k = 0; k < points; ++k) {
+				c[0] = Math.min(c[0], cord[k * 2]);
+				c[1] = Math.min(c[1], cord[k * 2 + 1]);
+				c[2] = Math.max(c[2], cord[k * 2]);
+				c[3] = Math.max(c[3], cord[k * 2 + 1]);
+			}
+			// The area between the segment and the origin (Green's theorem on the Bezier forms)
+			final double x1 = cord[0], y1 = cord[1], x2 = cord[2], y2 = cord[3], x3 = cord[4], y3 = cord[5];
+			switch (type) {
+				case PathIterator.SEG_QUADTO:
+					c[4] += (2 * cross(px, py, x1, y1) + 2 * cross(x1, y1, x2, y2) + cross(px, py, x2, y2)) / 6;
+					px = x2;
+					py = y2;
+					break;
+				case PathIterator.SEG_CUBICTO:
+					c[4] += (6 * cross(px, py, x1, y1) + 3 * cross(px, py, x2, y2) + cross(px, py, x3, y3)
+							+ 3 * cross(x1, y1, x2, y2) + 3 * cross(x1, y1, x3, y3) + 6 * cross(x2, y2, x3, y3)) / 20;
+					px = x3;
+					py = y3;
+					break;
+				default:
+					c[4] += cross(px, py, x1, y1) / 2;
+					px = x1;
+					py = y1;
+					break;
+			}
+		}
+		if (c != null) {
+			c[4] += cross(px, py, sx, sy) / 2;
+			contours.add(c);
+		}
+		for (int a = 0; a < contours.size(); ++a) {
+			final double[] ca = contours.get(a);
+			for (int b = a + 1; b < contours.size(); ++b) {
+				final double[] cb = contours.get(b);
+				if (Math.signum(ca[4]) == Math.signum(cb[4]) && ca[0] < cb[2] && cb[0] < ca[2] && ca[1] < cb[3]
+						&& cb[1] < ca[3]) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	private static double cross(final double ax, final double ay, final double bx, final double by) {
+		return ax * by - bx * ay;
+	}
+
+	/**
 	 * Writes the complete CFF binary data to the given output stream.
 	 *
 	 * @param out the output stream to receive the CFF data
@@ -192,9 +292,14 @@ public class CFFGenerator {
 				padding1 += 5 - cout2.writeInteger(offset + cout1.getOffset());
 				cout2.writeOperator(CFFOutputStream.CHARSETS);
 
-				cout1.writeCard8((byte) 2); // format=2
-				cout1.writeCard16(1);
-				cout1.writeCard16(this.font.getCharCount() - 1);
+				// GIDs 1 to count - 1; nLeft does not count the first one (it named one glyph too many)
+				if (this.font.getGlyphCount() > 1) {
+					cout1.writeCard8((byte) 2); // format=2
+					cout1.writeCard16(1);
+					cout1.writeCard16(this.font.getGlyphCount() - 2);
+				} else {
+					cout1.writeCard8((byte) 0); // format=0, .notdef alone
+				}
 
 				// CharStrings INDEX
 				padding1 += 5 - cout2.writeInteger(offset + cout1.getOffset());
@@ -243,7 +348,7 @@ public class CFFGenerator {
 							tout3.writeShort((short) (width - defaultWidth));
 						}
 
-						final PathIterator j = shape.getPathIterator(null);
+						final PathIterator j = withoutOverlaps(shape).getPathIterator(null);
 						double cx = 0, cy = 0;
 						boolean closed = true;
 						final double[] cord = new double[6];
@@ -370,9 +475,9 @@ public class CFFGenerator {
 									tout3.writeShort(dyb);
 									tout3.writeShort(dxc);
 									tout3.writeShort(dyc);
+									// cx and cy stay the rounded point written; setting them to the exact end made the
+									// following relative points drift (2026-10-29)
 									tout3.writeOperator(Type2OutputStream.RRCURVETO);
-									cx = xc;
-									cy = yc;
 								}
 									break;
 
