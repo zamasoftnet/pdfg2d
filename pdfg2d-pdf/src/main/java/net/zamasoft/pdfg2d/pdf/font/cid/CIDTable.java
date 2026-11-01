@@ -36,8 +36,9 @@ public class CIDTable implements Serializable {
 	 * CID table cache. Changed WeakReference to SoftReference because every GC cleared the cache
 	 * and repeated expensive CID table parsing (2026-08-01).
 	 * Retains entries until heap pressure and collects them before OutOfMemoryError.
+	 * Read for every character by every conversion, so reading takes no lock (2026-10-31).
 	 */
-	transient protected SoftReference<IntMap> toCID = null;
+	transient protected volatile SoftReference<IntMap> toCID = null;
 
 	transient protected int missingCID = 0;
 
@@ -54,7 +55,13 @@ public class CIDTable implements Serializable {
 		this.javaEncoding = javaEncoding;
 	}
 
-	private synchronized IntMap getToCid() {
+	private IntMap getToCid() {
+		final SoftReference<IntMap> ref = this.toCID;
+		final IntMap toCid = ref == null ? null : ref.get();
+		return toCid != null ? toCid : this.loadToCid();
+	}
+
+	private synchronized IntMap loadToCid() {
 		IntMap toCid = null;
 		if (this.toCID != null) {
 			toCid = this.toCID.get();

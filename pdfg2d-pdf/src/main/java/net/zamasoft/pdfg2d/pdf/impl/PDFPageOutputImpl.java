@@ -24,7 +24,7 @@ import net.zamasoft.pdfg2d.pdf.params.PDFParams;
  * @since 1.0
  */
 class PDFPageOutputImpl extends PDFPageOutput {
-	private final PDFFragmentOutputImpl pageFlow;
+	private PDFFragmentOutputImpl pageFlow;
 
 	/** Current page object. */
 	private final ObjectRef pageRef;
@@ -40,10 +40,10 @@ class PDFPageOutputImpl extends PDFPageOutput {
 	}
 
 	/** Parameters flow for current page. */
-	private final PDFFragmentOutputImpl paramsFlow;
+	private PDFFragmentOutputImpl paramsFlow;
 
 	/** Annotations flow for current page. */
-	private final PDFFragmentOutputImpl annotsFlow;
+	private PDFFragmentOutputImpl annotsFlow;
 
 	/** Does current page have annotations? */
 	private boolean hasAnnots = false;
@@ -833,5 +833,9 @@ class PDFPageOutputImpl extends PDFPageOutput {
 		this.annotsFlow.close();
 		this.pageFlow.endObject();
 		this.pageFlow.close();
+		// The writer keeps the closed page for its references, up to the end of the document: not its streams and
+		// their buffers (some 18KB a page)
+		this.out = null;
+		this.pageFlow = this.paramsFlow = this.annotsFlow = null;
 	}
 }

@@ -1,6 +1,5 @@
 package net.zamasoft.pdfg2d.pdf.font.type1;
 
-import java.lang.ref.WeakReference;
 import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.logging.Level;
@@ -27,7 +26,14 @@ public class LetterType1FontSource extends AbstractType1FontSource {
 
 	private final Encoding pdfEncoding;
 
-	transient private WeakReference<Object[]> charToGid$GidToGi = null;
+	private record Tables(IntList charToGid, GlyphInfo[] gidToGi) {
+	}
+
+	/**
+	 * Read for every glyph by every conversion, so reading takes no lock. Threads that race build equal tables. It
+	 * used to be a synchronized WeakReference: 16 concurrent conversions ran 1.4 times as fast as one (2026-10-31).
+	 */
+	transient private volatile Tables tables = null;
 
 	public LetterType1FontSource(GlyphMap unicodeEncoding, Encoding pdfEncoding, AFMFontInfo fontInfo) {
 		super(fontInfo);
@@ -38,14 +44,16 @@ public class LetterType1FontSource extends AbstractType1FontSource {
 		}
 	}
 
-	private synchronized Object[] getPair() {
-		Object[] pair = null;
-		if (this.charToGid$GidToGi != null) {
-			pair = this.charToGid$GidToGi.get();
-			if (pair != null) {
-				return pair;
-			}
+	private Tables getTables() {
+		Tables tables = this.tables;
+		if (tables == null) {
+			tables = this.buildTables();
+			this.tables = tables;
 		}
+		return tables;
+	}
+
+	private Tables buildTables() {
 		if (LOG.isLoggable(Level.FINE)) {
 			LOG.fine("build GlyphInfo: " + this.getFontName());
 		}
@@ -117,17 +125,15 @@ public class LetterType1FontSource extends AbstractType1FontSource {
 			gidToGi[gid] = new GlyphInfo(aci.advance, sgidToLigature == null ? null : sgidToLigature.toArray(),
 					sgidToKerning == null ? null : sgidToKerning.toArray());
 		}
-		pair = new Object[] { charToGid, gidToGi };
-		this.charToGid$GidToGi = new WeakReference<Object[]>(pair);
-		return pair;
+		return new Tables(charToGid, gidToGi);
 	}
 
-	protected synchronized GlyphInfo[] getGidToGi() {
-		return (GlyphInfo[]) this.getPair()[1];
+	protected GlyphInfo[] getGidToGi() {
+		return this.getTables().gidToGi();
 	}
 
-	protected synchronized IntList getCidToGid() {
-		return (IntList) this.getPair()[0];
+	protected IntList getCidToGid() {
+		return this.getTables().charToGid();
 	}
 
 	int toGID(int c) {

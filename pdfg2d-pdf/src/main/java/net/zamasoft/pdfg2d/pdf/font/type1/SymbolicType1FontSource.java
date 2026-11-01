@@ -3,7 +3,6 @@ package net.zamasoft.pdfg2d.pdf.font.type1;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.ref.WeakReference;
 import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.logging.Level;
@@ -27,9 +26,10 @@ public class SymbolicType1FontSource extends AbstractType1FontSource {
 
 	private final Source toUnicodeFile;
 
-	transient private WeakReference<IntList> charToGid = null;
+	/** Read for every glyph, so reading takes no lock. */
+	transient private volatile IntList charToGid = null;
 
-	transient private WeakReference<GlyphInfo[]> gidToGi = null;
+	transient private volatile GlyphInfo[] gidToGi = null;
 
 	public SymbolicType1FontSource(AFMFontInfo fontInfo, Source toUnicodeFile) throws IOException {
 		super(fontInfo);
@@ -39,13 +39,10 @@ public class SymbolicType1FontSource extends AbstractType1FontSource {
 		}
 	}
 
-	protected synchronized GlyphInfo[] getGidToGi() {
-		GlyphInfo[] gidToGi = null;
-		if (this.gidToGi != null) {
-			gidToGi = (GlyphInfo[]) this.gidToGi.get();
-			if (gidToGi != null) {
-				return gidToGi;
-			}
+	protected GlyphInfo[] getGidToGi() {
+		GlyphInfo[] gidToGi = this.gidToGi;
+		if (gidToGi != null) {
+			return gidToGi;
 		}
 		if (LOG.isLoggable(Level.FINE)) {
 			LOG.fine("build gidToGi: " + this.getFontName());
@@ -95,19 +92,20 @@ public class SymbolicType1FontSource extends AbstractType1FontSource {
 			gidToGi[aci.gid] = new GlyphInfo(aci.advance, sgidToLigature == null ? null : sgidToLigature.toArray(),
 					sgidToKerning == null ? null : sgidToKerning.toArray());
 		}
-		this.gidToGi = new WeakReference<GlyphInfo[]>(gidToGi);
+		this.gidToGi = gidToGi;
 		return gidToGi;
 	}
 
-	protected synchronized IntList getCidToGid() {
-		IntList charToGid = null;
-		synchronized (this) {
-			if (this.charToGid != null) {
-				charToGid = (IntList) this.charToGid.get();
-				if (charToGid != null) {
-					return charToGid;
-				}
-			}
+	protected IntList getCidToGid() {
+		final IntList charToGid = this.charToGid;
+		return charToGid != null ? charToGid : this.loadCidToGid();
+	}
+
+	/** One reader at a time: opening an HTTP source again closes the stream of the reader before it. */
+	private synchronized IntList loadCidToGid() {
+		IntList charToGid = this.charToGid;
+		if (charToGid != null) {
+			return charToGid;
 		}
 		if (LOG.isLoggable(Level.FINE)) {
 			LOG.fine("build charToGid: " + this.getFontName());
@@ -133,7 +131,7 @@ public class SymbolicType1FontSource extends AbstractType1FontSource {
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
-		this.charToGid = new WeakReference<IntList>(charToGid);
+		this.charToGid = charToGid;
 		return charToGid;
 	}
 
