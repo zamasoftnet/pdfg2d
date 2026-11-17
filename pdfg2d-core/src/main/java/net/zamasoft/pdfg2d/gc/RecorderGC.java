@@ -23,7 +23,7 @@ import net.zamasoft.pdfg2d.gc.text.TextClip;
  */
 public class RecorderGC extends NoOpGC {
 	public sealed interface Command permits
-			Begin, End, BeginTextReplacement, EndTextReplacement,
+			Begin, End, BeginTextReplacement, EndTextReplacement, BeginTextRole, EndTextRole,
 			SetLineWidth, SetLinePattern, SetLineCap, SetLineJoin,
 			SetTextMode, SetStrokePaint, SetFillPaint, SetStrokeAlpha, SetFillAlpha, SetBlendMode,
 			Transform, Clip, ClipText, ResetState, DrawImage, DrawImageEffects, Fill, FillBlurred, Draw, FillDraw, DrawText {
@@ -41,6 +41,22 @@ public class RecorderGC extends NoOpGC {
 
 	/** Closes the current semantic text-replacement scope during replay. */
 	public record EndTextReplacement() implements Command {
+	}
+
+	/**
+	 * Opens a text role scope during replay ({@link GC#beginTextRole}).
+	 *
+	 * @since 1.3
+	 */
+	public record BeginTextRole(net.zamasoft.pdfg2d.gc.text.TextRole role) implements Command {
+	}
+
+	/**
+	 * Closes the innermost text role scope during replay.
+	 *
+	 * @since 1.3
+	 */
+	public record EndTextRole() implements Command {
 	}
 
 	public record SetLineWidth(double width) implements Command {
@@ -207,6 +223,26 @@ public class RecorderGC extends NoOpGC {
 				this.closed = true;
 				RecorderGC.this.target.add(new EndTextReplacement());
 				RecorderGC.this.inTextReplacement = false;
+			}
+		};
+	}
+
+	/**
+	 * Records one text role scope for later replay. Unlike text replacement, role scopes nest.
+	 */
+	@Override
+	public State beginTextRole(final net.zamasoft.pdfg2d.gc.text.TextRole role) {
+		this.target.add(new BeginTextRole(java.util.Objects.requireNonNull(role, "role")));
+		return new State() {
+			private boolean closed;
+
+			@Override
+			public void close() {
+				if (this.closed) {
+					return;
+				}
+				this.closed = true;
+				RecorderGC.this.target.add(new EndTextRole());
 			}
 		};
 	}
@@ -648,6 +684,7 @@ public class RecorderGC extends NoOpGC {
 			// End is only recorded when a State handle is closed.
 			final var states = new ArrayDeque<GC.State>();
 			final var replacements = new ArrayDeque<GC.State>();
+			final var roles = new ArrayDeque<GC.State>();
 			for (final var cmd : commands) {
 				switch (cmd) {
 					case Begin() -> states.push(gc.begin());
@@ -655,6 +692,8 @@ public class RecorderGC extends NoOpGC {
 					case BeginTextReplacement(String logicalText) ->
 						replacements.push(gc.beginTextReplacement(logicalText));
 					case EndTextReplacement() -> replacements.pop().close();
+					case BeginTextRole(net.zamasoft.pdfg2d.gc.text.TextRole role) -> roles.push(gc.beginTextRole(role));
+					case EndTextRole() -> roles.pop().close();
 					case SetLineWidth(double width) -> gc.setLineWidth(width);
 					case SetLinePattern(double[] pattern) -> gc.setLinePattern(pattern == null ? null : pattern.clone());
 					case SetLineCap(LineCap lineCap) -> gc.setLineCap(lineCap);

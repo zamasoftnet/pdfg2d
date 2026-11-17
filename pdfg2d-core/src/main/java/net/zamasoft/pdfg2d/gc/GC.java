@@ -172,6 +172,26 @@ public interface GC {
 	}
 
 	/**
+	 * Opens a text role scope: the text drawn until the returned handle is closed is, to a reader, what
+	 * {@code role} says (ruby, an emphasis mark, a margin box, a footnote). Drawing is unchanged; back-ends that
+	 * expose text to reading aids record the role with the text. Scopes nest, and the innermost role that names a
+	 * kind of text wins (see {@link net.zamasoft.pdfg2d.gc.text.TextRole}).
+	 *
+	 * <p>
+	 * Always close the returned state, preferably with try-with-resources. The default implementation does nothing
+	 * and returns {@link #NO_OP_STATE}, preserving output for back-ends that do not expose text roles.
+	 * </p>
+	 *
+	 * @param role the role of the enclosed text
+	 * @return a handle that closes the scope; never {@code null}
+	 * @throws GraphicsException if a graphics error occurs
+	 * @since 1.3
+	 */
+	public default State beginTextRole(final net.zamasoft.pdfg2d.gc.text.TextRole role) throws GraphicsException {
+		return NO_OP_STATE;
+	}
+
+	/**
 	 * Resets the current graphics state to the initial state.
 	 *
 	 * @throws GraphicsException if a graphics error occurs

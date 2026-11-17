@@ -17,6 +17,7 @@ import net.zamasoft.pdfg2d.gc.image.Image;
 import net.zamasoft.pdfg2d.gc.text.GlyphAdvances;
 import net.zamasoft.pdfg2d.gc.text.GlyphHandler;
 import net.zamasoft.pdfg2d.gc.text.Text;
+import net.zamasoft.pdfg2d.gc.text.TextRole;
 
 /** Tests deferred replay invariants used by filter capture groups. */
 public class RecorderReplayTest {
@@ -77,6 +78,27 @@ public class RecorderReplayTest {
 		}
 	}
 
+	/**
+	 * Text role scopes (ruby, emphasis marks, margin boxes, footnotes) replay in the order they were recorded and
+	 * nest around the text they hold, so a held Paged SVG page keeps the run kinds.
+	 */
+	@Test
+	public void testTextRolesReplayNestedAroundTheirText() {
+		final var recorder = new RecorderGC(null);
+		try (final var unit = recorder.beginTextRole(TextRole.RUBY)) {
+			try (final var annotation = recorder.beginTextRole(TextRole.RUBY_TEXT)) {
+				recorder.drawText(new BoundsText(4, 3, 1), 0, 0);
+			}
+			try (final var base = recorder.beginTextRole(TextRole.RUBY_BASE)) {
+				recorder.drawText(new BoundsText(8, 6, 2), 0, 10);
+			}
+		}
+		final var target = new RoleGC();
+		recorder.getPage().drawTo(target);
+		assertEquals(java.util.List.of("+RUBY", "+RUBY_TEXT", "text", "-RUBY_TEXT", "+RUBY_BASE", "text",
+				"-RUBY_BASE", "-RUBY"), target.events);
+	}
+
 	@Test
 	public void testContentBoundsTrackTransformRestoreAndText() {
 		final var group = new RecorderGC.RecorderGroupImageGC(null, 1000, 1000, true);
@@ -102,6 +124,25 @@ public class RecorderReplayTest {
 		@Override
 		public void fill(final Shape shape) {
 			this.filled = shape;
+		}
+	}
+
+	private static final class RoleGC extends NoOpGC {
+		final java.util.List<String> events = new java.util.ArrayList<>();
+
+		RoleGC() {
+			super(null);
+		}
+
+		@Override
+		public State beginTextRole(final TextRole role) {
+			this.events.add("+" + role);
+			return () -> this.events.add("-" + role);
+		}
+
+		@Override
+		public void drawText(final Text text, final double x, final double y) {
+			this.events.add("text");
 		}
 	}
 
