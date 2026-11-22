@@ -217,7 +217,7 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 			}
 		} else {
 			File file;
-			if (face.src.isFile()) {
+			if (face.src.isFile() && isResourceItself(face.src)) {
 				file = face.src.getFile();
 			} else {
 				file = this.uriToFile.get(face.src.getURI());
@@ -370,6 +370,25 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				}
 				m.add(name);
 			}
+		}
+	}
+
+	/**
+	 * Whether the file behind a file-backed source is the resource itself: a {@code file:} URI that names that file.
+	 * Any other file is temporary storage of a resource received from elsewhere (an upload, for one), which its owner
+	 * deletes when it is done with it. The parsed-font cache is keyed by path and keeps the font open, so the font is
+	 * not opened from such a file: it is copied like a fetched resource, and the copy is released in {@link #close()}.
+	 */
+	private static boolean isResourceItself(final net.zamasoft.zstream.resolver.Source src) {
+		final URI uri = src.getURI();
+		if (uri == null || !"file".equalsIgnoreCase(uri.getScheme())) {
+			return false;
+		}
+		try {
+			return new File(uri).getAbsoluteFile().equals(src.getFile().getAbsoluteFile());
+		} catch (final IllegalArgumentException e) {
+			// Not a file: URI that java.io.File takes (an authority, a query, no path)
+			return false;
 		}
 	}
 

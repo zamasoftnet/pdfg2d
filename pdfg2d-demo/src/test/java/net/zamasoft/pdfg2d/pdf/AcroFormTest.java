@@ -108,6 +108,83 @@ public class AcroFormTest {
 		}
 	}
 
+	/**
+	 * Radio groups of the same name on different pages are one field with the
+	 * widgets of both pages: each page used to get its own field of that name,
+	 * with its own selection.
+	 */
+	@Test
+	public void testRadioGroupAcrossPagesIsSingleField() throws Exception {
+		final var file = TestOutputFiles.outputFile(getClass(), "acroform_radio_pages.pdf");
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder,
+					PDFParams.createDefault().withCompression(PDFParams.Compression.NONE));
+			final var first = pdf.nextPage(400, 400);
+			try (final var gc = new PDFGC(first)) {
+				first.addRadioGroup(new net.zamasoft.pdfg2d.pdf.form.RadioGroup("answer", null, "yes", false, false,
+						List.of(new net.zamasoft.pdfg2d.pdf.form.RadioGroup.Button(
+								new Rectangle2D.Double(50, 50, 14, 14), "yes"))));
+			}
+			final var second = pdf.nextPage(400, 400);
+			try (final var gc = new PDFGC(second)) {
+				second.addRadioGroup(new net.zamasoft.pdfg2d.pdf.form.RadioGroup("answer", null, null, false, false,
+						List.of(new net.zamasoft.pdfg2d.pdf.form.RadioGroup.Button(
+								new Rectangle2D.Double(50, 50, 14, 14), "no"))));
+			}
+			pdf.close();
+			builder.close();
+		}
+
+		try (final var doc = Loader.loadPDF(file)) {
+			final var form = doc.getDocumentCatalog().getAcroForm();
+			assertNotNull(form);
+			assertEquals(1, form.getFields().size(), "The groups of one name are one field");
+			final var radio = (org.apache.pdfbox.pdmodel.interactive.form.PDRadioButton) form.getField("answer");
+			assertNotNull(radio);
+			assertEquals(2, radio.getWidgets().size(), "The field must have the widgets of both pages");
+			assertEquals("yes", radio.getValue(), "The button selected on the first page stays selected");
+			assertEquals(java.util.Set.of("yes", "no"), radio.getOnValues());
+			assertEquals(1, doc.getPage(0).getAnnotations().size(), "One widget on the first page");
+			assertEquals(1, doc.getPage(1).getAnnotations().size(), "One widget on the second page");
+		}
+	}
+
+	/**
+	 * An option with an export value is written as the pair of the export
+	 * value and the display string, and the field's value is the export value.
+	 */
+	@Test
+	public void testChoiceExportValues() throws Exception {
+		final var file = TestOutputFiles.outputFile(getClass(), "acroform_choice_export.pdf");
+		try (final var out = new FileOutputStream(file)) {
+			final var builder = new StreamFragmentedOutput(out);
+			final var pdf = new PDFWriterImpl(builder,
+					PDFParams.createDefault().withCompression(PDFParams.Compression.NONE));
+			final var page = pdf.nextPage(400, 400);
+			try (final var gc = new PDFGC(page)) {
+				page.addFormField(new ChoiceField("country", new Rectangle2D.Double(50, 50, 120, 20),
+						List.of("United Kingdom", "Japan"), "gb", true, null, 12, false, false,
+						List.of("gb", "jp")));
+			}
+			pdf.close();
+			builder.close();
+		}
+
+		try (final var doc = Loader.loadPDF(file)) {
+			final var country = (PDComboBox) doc.getDocumentCatalog().getAcroForm().getField("country");
+			assertNotNull(country);
+			assertEquals(List.of("United Kingdom", "Japan"), country.getOptionsDisplayValues());
+			assertEquals(List.of("gb", "jp"), country.getOptionsExportValues());
+			assertEquals(List.of("gb"), country.getValue());
+		}
+
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new ChoiceField("x", new Rectangle2D.Double(10, 10, 100, 20), List.of("a", "b"), null, true,
+						null, 12, false, false, List.of("a")),
+				"Each option needs its export value");
+	}
+
 	@Test
 	public void testFormsRejectedInPdfX() throws Exception {
 		final var file = TestOutputFiles.outputFile(getClass(), "acroform_pdfx.pdf");

@@ -173,12 +173,12 @@ public class Encryption {
 				mainFlow.writeName(this.cfm.name);
 				mainFlow.lineBreak();
 
+				// Always written, 40 bits too: readers do not agree on a default for a V 4 crypt filter, and a file
+				// without it could not be opened with its own password (PDFBox, MuPDF).
 				length = v4Params.getLength();
-				if (length != 40) {
-					mainFlow.writeName("Length");
-					mainFlow.writeInt(length);
-					mainFlow.lineBreak();
-				}
+				mainFlow.writeName("Length");
+				mainFlow.writeInt(length);
+				mainFlow.lineBreak();
 
 				mainFlow.endHash();
 				mainFlow.endHash();
@@ -193,11 +193,9 @@ public class Encryption {
 
 				// Write key length at the top level too. ISO 32000 defines it only for V 2/3, but PDFBox and others derive keys from
 				// top-level /Length (default 40); omitting it prevented opening even with an empty password (2026-10-05).
-				if (length != 40) {
-					mainFlow.writeName("Length");
-					mainFlow.writeInt(length);
-					mainFlow.lineBreak();
-				}
+				mainFlow.writeName("Length");
+				mainFlow.writeInt(length);
+				mainFlow.lineBreak();
 			}
 				break;
 
@@ -228,10 +226,12 @@ public class Encryption {
 		this.md5.update(truncate32(ownerPass));
 		{
 			if (r.r >= Permissions.Type.R3.r) {
-				// Revision 3+ requires 50 MD5 hash iterations
+				// Revision 3+ requires 50 MD5 hash iterations, each over the first n bytes of the previous digest,
+				// n being the key length (ISO 32000-1 algorithms 2 and 3). Hashing all 16 bytes gives the same key
+				// only for 128 bits: files with shorter keys could not be opened with their own password.
 				for (int i = 0; i < 50; ++i) {
 					byte[] key = this.md5.digest();
-					this.md5.update(key);
+					this.md5.update(key, 0, this.length);
 				}
 			}
 			byte[] key = this.md5.digest();
@@ -265,10 +265,10 @@ public class Encryption {
 		}
 		this.md5.update(fileid[0]);
 		if (r.r >= Permissions.Type.R3.r) {
-			// Revision 3+ requires 50 MD5 hash iterations
+			// Revision 3+ requires 50 MD5 hash iterations over the first n bytes (see the owner key above)
 			for (int i = 0; i < 50; ++i) {
 				byte[] key = this.md5.digest();
-				this.md5.update(key);
+				this.md5.update(key, 0, this.length);
 			}
 		}
 		this.key = this.md5.digest();

@@ -66,6 +66,17 @@ abstract class NameTreeFlow {
 	}
 
 	/**
+	 * Returns whether an entry has been added under the given name. Adding
+	 * another entry under the same name would replace it.
+	 *
+	 * @param name the string key
+	 * @return {@code true} if the name is taken
+	 */
+	public boolean containsEntry(final String name) {
+		return this.nameToEntry != null && this.nameToEntry.containsKey(name);
+	}
+
+	/**
 	 * Serializes all accumulated entries into the PDF output and closes the
 	 * underlying fragment.
 	 * <p>

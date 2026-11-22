@@ -6655,9 +6655,9 @@
     "ja": "文書のフラグメント(名前付きのリンク先)を追加します。\n\n@param id       文書内で一意な名前\n@param location 位置\n@throws IOException 入出力エラーが発生した場合"
   },
   "net.zamasoft.pdfg2d.pdf.PDFPageOutput#addRadioGroup(net.zamasoft.pdfg2d.pdf.form.RadioGroup)": {
-    "hash": "ac39044147807b21",
-    "en": "Adds a group of mutually-exclusive radio buttons as a single AcroForm\nfield with multiple widget kids. No-op if the implementation does not\nsupport forms.\n\n@param group the radio group\n@throws java.io.IOException if an I/O error occurs",
-    "ja": "互いに排他的なラジオボタンのグループを、複数のウィジェットを子に持つ1つのAcroFormのフィールドとして追加します。実装がフォームに対応していない場合は何もしません。\n\n@param group ラジオグループ\n@throws java.io.IOException 入出力エラーが発生した場合"
+    "hash": "e3ac763ecb1f3096",
+    "en": "Adds a group of mutually-exclusive radio buttons as a single AcroForm\nfield with multiple widget kids. No-op if the implementation does not\nsupport forms.\n<p>\nGroups added under the same name, on this page or on other pages of the\ndocument, are one field: the buttons of a later group join the field of\nthe first, whose tooltip and flags apply. The first selected value given\nis the field's value.\n</p>\n\n@param group the radio group\n@throws java.io.IOException if an I/O error occurs",
+    "ja": "互いに排他的なラジオボタンのグループを、複数のウィジェットを子に持つ1つのAcroFormのフィールドとして追加します。実装がフォームに対応していない場合は何もしません。\n<p>\n同じ名前で追加したグループは、このページのものも文書のほかのページのものも\n1つのフィールドになります。後から追加したグループのボタンは最初のグループの\nフィールドに加わり、ツールチップとフラグは最初のグループのものを使います。\n最初に指定された選択値がフィールドの値になります。\n</p>\n\n@param group ラジオグループ\n@throws java.io.IOException 入出力エラーが発生した場合"
   },
   "net.zamasoft.pdfg2d.pdf.PDFPageOutput#beginStructContent(StructureRef)": {
     "hash": "0a36dea7d95034b5",
@@ -6755,9 +6755,9 @@
     "ja": "ページの幅の最小値です。"
   },
   "net.zamasoft.pdfg2d.pdf.PDFWriter#addAttachment(String,Attachment)": {
-    "hash": "26ba9fc7a65b4397",
-    "en": "Adds an attachment file.\n\n@param name       The attachment name\n@param attachment The attachment metadata\n@return Output stream to write the attachment content\n@throws IOException If an I/O error occurs",
-    "ja": "添付ファイルを追加します。\n\n@param name       添付ファイルの名前\n@param attachment 添付ファイルのメタデータ\n@return 添付ファイルの内容を書き出す出力ストリーム\n@throws IOException 入出力エラーが発生した場合"
+    "hash": "30a8ac4287749fa7",
+    "en": "Adds an attachment file.\n<p>\nThe file is registered in the {@code EmbeddedFiles} name tree under its\nname (under its description when the name is {@code null}). A name that\nis already taken is numbered, so that every attachment stays reachable;\nthe description may be shared by several attachments.\n</p>\n\n@param name       The attachment name\n@param attachment The attachment metadata\n@return Output stream to write the attachment content\n@throws IOException If an I/O error occurs",
+    "ja": "添付ファイルを追加します。\n<p>\nファイルは{@code EmbeddedFiles}の名前ツリーに、その名前で登録します(名前が\n{@code null}のときは説明で登録します)。すでに使われている名前には番号を付けるので、\nどの添付ファイルにも到達できます。説明は複数の添付ファイルで同じでも構いません。\n</p>\n\n@param name       添付ファイルの名前\n@param attachment 添付ファイルのメタデータ\n@return 添付ファイルの内容を書き出す出力ストリーム\n@throws IOException 入出力エラーが発生した場合"
   },
   "net.zamasoft.pdfg2d.pdf.PDFWriter#addGeneratedImage(BufferedImage)": {
     "hash": "b690df8f89a21690",
@@ -8115,9 +8115,14 @@
     "ja": "チェックボックスのフィールド({@code /FT /Btn})です。ラジオボタンは、フィールド名を\n共有し、選択肢ごとに異なる{@link #onValue()}を持つチェックボックスです。\n\n@param name     フィールド名(ラジオボタンの選択肢の間で共有)\n@param rect     ウィジェットの矩形(左上原点)\n@param onValue  チェックしたときのエクスポート値(「on」の外観状態)\n@param checked  初期状態でチェックされているかどうか\n@param radio    ラジオボタン(名前で相互に排他)かどうか\n@param tooltip  アクセシブルなツールチップ、またはnull\n@param readOnly フィールドが読み取り専用かどうか\n@param required フィールドが必須かどうか\n@author MIYABE Tatsuhiko\n@since 1.3"
   },
   "net.zamasoft.pdfg2d.pdf.form.ChoiceField": {
-    "hash": "9ee04c51e9aa0dfe",
-    "en": "A list-box or drop-down (combo) choice field ({@code /FT /Ch}), reflecting\nan HTML {@code <select>}.\n\n@param name     the field name\n@param rect     the widget rectangle (top-left origin)\n@param options  the option display strings\n@param selected the initially selected option, or null\n@param combo    whether a drop-down ({@code true}) or list box\n@param tooltip  the accessible tooltip, or null\n@param fontSize the field font size in points (0 = auto)\n@param readOnly whether the field is read-only\n@param required whether the field is required\n@author MIYABE Tatsuhiko\n@since 1.3",
-    "ja": "リストボックスまたはドロップダウン(コンボ)の選択フィールド({@code /FT /Ch})で、\nHTMLの{@code <select>}に対応します。\n\n@param name     フィールド名\n@param rect     ウィジェットの矩形(左上原点)\n@param options  選択肢の表示文字列\n@param selected 初期状態で選択されている選択肢、またはnull\n@param combo    ドロップダウン({@code true})かリストボックスか\n@param tooltip  アクセシブルなツールチップ、またはnull\n@param fontSize ポイント単位のフィールドのフォントサイズ(0は自動)\n@param readOnly フィールドが読み取り専用かどうか\n@param required フィールドが必須かどうか\n@author MIYABE Tatsuhiko\n@since 1.3"
+    "hash": "b9a30b9bd7074246",
+    "en": "A list-box or drop-down (combo) choice field ({@code /FT /Ch}), reflecting\nan HTML {@code <select>}.\n<p>\nAn option has a display string and an export value, like the text and the\n{@code value} attribute of an HTML {@code <option>}. When\n{@link #exportValues()} is {@code null} the display strings are also the\nexport values.\n</p>\n\n@param name         the field name\n@param rect         the widget rectangle (top-left origin)\n@param options      the option display strings\n@param selected     the export value of the initially selected option (its\n                    display string when there are no export values), or\n                    null\n@param combo        whether a drop-down ({@code true}) or list box\n@param tooltip      the accessible tooltip, or null\n@param fontSize     the field font size in points (0 = auto)\n@param readOnly     whether the field is read-only\n@param required     whether the field is required\n@param exportValues the option export values, one for each of\n                    {@code options} in the same order, or null when the\n                    display strings are the export values\n@author MIYABE Tatsuhiko\n@since 1.3",
+    "ja": "リストボックスまたはドロップダウン(コンボ)の選択フィールド({@code /FT /Ch})で、\nHTMLの{@code <select>}に対応します。\n<p>\n選択肢には表示文字列とエクスポート値があり、HTMLの{@code <option>}のテキストと\n{@code value}属性に当たります。{@link #exportValues()}が{@code null}のときは、\n表示文字列がそのままエクスポート値になります。\n</p>\n\n@param name         フィールド名\n@param rect         ウィジェットの矩形(左上原点)\n@param options      選択肢の表示文字列\n@param selected     初期状態で選択されている選択肢のエクスポート値\n                    (エクスポート値が無いときは表示文字列)、またはnull\n@param combo        ドロップダウン({@code true})かリストボックスか\n@param tooltip      アクセシブルなツールチップ、またはnull\n@param fontSize     ポイント単位のフィールドのフォントサイズ(0は自動)\n@param readOnly     フィールドが読み取り専用かどうか\n@param required     フィールドが必須かどうか\n@param exportValues 選択肢のエクスポート値。{@code options}と同じ順に1つずつ。\n                    表示文字列がエクスポート値のときはnull\n@author MIYABE Tatsuhiko\n@since 1.3"
+  },
+  "net.zamasoft.pdfg2d.pdf.form.ChoiceField#ChoiceField(String,Rectangle2D,List,String,boolean,String,double,boolean,boolean)": {
+    "hash": "2e655ae77dc1743a",
+    "en": "Creates a choice field whose option display strings are also its export\nvalues.\n\n@param name     the field name\n@param rect     the widget rectangle (top-left origin)\n@param options  the option display strings\n@param selected the initially selected option, or null\n@param combo    whether a drop-down ({@code true}) or list box\n@param tooltip  the accessible tooltip, or null\n@param fontSize the field font size in points (0 = auto)\n@param readOnly whether the field is read-only\n@param required whether the field is required",
+    "ja": "選択肢の表示文字列がそのままエクスポート値になる選択フィールドを作成します。\n\n@param name     フィールド名\n@param rect     ウィジェットの矩形(左上原点)\n@param options  選択肢の表示文字列\n@param selected 初期状態で選択されている選択肢、またはnull\n@param combo    ドロップダウン({@code true})かリストボックスか\n@param tooltip  アクセシブルなツールチップ、またはnull\n@param fontSize ポイント単位のフィールドのフォントサイズ(0は自動)\n@param readOnly フィールドが読み取り専用かどうか\n@param required フィールドが必須かどうか"
   },
   "net.zamasoft.pdfg2d.pdf.form.FormField": {
     "hash": "95f06a2243fe8bea",

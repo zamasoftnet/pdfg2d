@@ -112,7 +112,13 @@ public interface PDFWriter extends Closeable {
 
 	/**
 	 * Adds an attachment file.
-	 * 
+	 * <p>
+	 * The file is registered in the {@code EmbeddedFiles} name tree under its
+	 * name (under its description when the name is {@code null}). A name that
+	 * is already taken is numbered, so that every attachment stays reachable;
+	 * the description may be shared by several attachments.
+	 * </p>
+	 *
 	 * @param name       The attachment name
 	 * @param attachment The attachment metadata
 	 * @return Output stream to write the attachment content

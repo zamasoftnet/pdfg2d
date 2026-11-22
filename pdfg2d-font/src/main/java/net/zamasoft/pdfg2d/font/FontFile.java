@@ -110,17 +110,53 @@ public class FontFile implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Largest sfnt that a WOFF or WOFF2 file may unpack to. Web fonts stay far below it; the limit only keeps a
+	 * crafted font from filling the temporary directory or the heap.
+	 */
+	static final int MAX_SFNT_SIZE = 64 * 1024 * 1024;
+
+	/**
+	 * Largest plausible ratio between the unpacked sfnt and the WOFF or WOFF2 file it comes from. Font data
+	 * compresses by a factor of a few; beyond a hundred the declared sizes are not those of the data.
+	 */
+	static final int MAX_EXPANSION = 100;
+
 	private File extractWoff(final RandomAccessFile raf, final File originalFile) throws IOException {
 		final File tempFile = File.createTempFile("pdfg2d-font-", ".dat");
+		boolean extracted = false;
+		try {
+			writeWoffAsSfnt(raf, originalFile, tempFile);
+			extracted = true;
+		} finally {
+			if (!extracted) {
+				// A font that cannot be unpacked must not leave its partial copy behind.
+				tempFile.delete();
+			}
+		}
+		tempFile.deleteOnExit();
+		return tempFile;
+	}
+
+	private static void writeWoffAsSfnt(final RandomAccessFile raf, final File originalFile, final File tempFile)
+			throws IOException {
 		try (final DataOutputStream out = new DataOutputStream(
 				new BufferedOutputStream(new FileOutputStream(tempFile)))) {
+			final long fileLength = raf.length();
 			raf.seek(4); // Skip signature
 			final int version = raf.readInt();
 			raf.skipBytes(4); // length
-			final short numTables = raf.readShort();
+			final int numTables = raf.readUnsignedShort();
 			raf.skipBytes(2); // reserved
-			raf.skipBytes(4); // totalSfntSize
-			raf.skipBytes(22); // majorVersion to metaOrigLength
+			final long totalSfntSize = raf.readInt() & 0xFFFFFFFFL;
+
+			// The table directory is stored as it is, so a font has no more tables than its own length has room for.
+			if (44L + 20L * numTables > fileLength) {
+				throw new IOException("Truncated WOFF table directory: " + originalFile);
+			}
+			// The lengths in the directory decide how much is written below. They are bounded by the size the
+			// header declares for the whole sfnt, by a fixed limit, and by what the file could plausibly unpack to.
+			final long sizeLimit = Math.min(totalSfntSize, Math.min(MAX_SFNT_SIZE, fileLength * MAX_EXPANSION));
 
 			// Write SFNT header
 			out.writeInt(version);
@@ -141,23 +177,32 @@ public class FontFile implements AutoCloseable {
 			// We need to read all directory entries first because we write them
 			// sequentially
 			// to the output file BEFORE writing data.
-			final int[] inOffsets = new int[numTables];
-			final int[] compLens = new int[numTables];
+			final long[] inOffsets = new long[numTables];
+			final long[] compLens = new long[numTables];
 			final int[] origLens = new int[numTables];
 			final int[] outOffsets = new int[numTables];
 
 			for (int i = 0; i < numTables; i++) {
 				raf.seek(44 + i * 20); // TableDirectory entries start at 44
 				raf.readFully(tagBuff);
-				raf.skipBytes(4); // offset
-				raf.skipBytes(4); // compLen
-				final int origLen = raf.readInt();
+				final long inOffset = raf.readInt() & 0xFFFFFFFFL;
+				final long compLen = raf.readInt() & 0xFFFFFFFFL;
+				final long origLength = raf.readInt() & 0xFFFFFFFFL;
 				final int origChecksum = raf.readInt();
 
-				// Read positions for later data reading
-				raf.seek(44 + i * 20 + 4);
-				inOffsets[i] = raf.readInt();
-				compLens[i] = raf.readInt();
+				// Each table, and all of them together with the header and the directory, must fit in the limit.
+				if (outOffset + ((origLength + 3) & ~3L) > sizeLimit) {
+					throw new IOException("WOFF table sizes exceed the size of the font: " + originalFile);
+				}
+				// The data of a table lies inside the file.
+				if (inOffset + compLen > fileLength) {
+					throw new IOException("Truncated WOFF table data: " + originalFile);
+				}
+				final int origLen = (int) origLength;
+
+				// Keep positions for later data reading
+				inOffsets[i] = inOffset;
+				compLens[i] = compLen;
 				origLens[i] = origLen;
 
 				// Write Directory Entry in SFNT format
@@ -215,7 +260,7 @@ public class FontFile implements AutoCloseable {
 
 			for (int i = 0; i < numTables; i++) {
 				raf.seek(inOffsets[i]);
-				final int compLen = compLens[i];
+				final long compLen = compLens[i];
 				final int origLen = origLens[i];
 				int remainder = origLen;
 
@@ -232,9 +277,10 @@ public class FontFile implements AutoCloseable {
 					}
 				}
 
-				while (remainder > 0) {
-					out.writeByte(0);
-					remainder--;
+				// A table that ends before its declared length is a broken font. Filling the rest with zeros
+				// would let a font of a few bytes write as much as its directory claims.
+				if (remainder > 0) {
+					throw new IOException("Truncated WOFF table data: " + originalFile);
 				}
 
 				// Padding to the next 4-byte boundary.
@@ -243,8 +289,6 @@ public class FontFile implements AutoCloseable {
 				}
 			}
 		}
-		tempFile.deleteOnExit();
-		return tempFile;
 	}
 
 	/**

@@ -60,13 +60,11 @@ public class PDFAttachmentTest {
 
             final Map<String, PDComplexFileSpecification> embeddedFiles = names.getEmbeddedFiles().getNames();
             assertNotNull(embeddedFiles, "EmbeddedFiles map should not be null");
-            assertTrue(embeddedFiles.containsKey("Test Text File"), "Should contain key 'Test Text File'"); // Key is
-                                                                                                            // description
-                                                                                                            // usually
-                                                                                                            // if
-                                                                                                            // provided
+            // The key is the file name; the description is the filespec's /Desc
+            assertTrue(embeddedFiles.containsKey("test.txt"), "Should contain key 'test.txt': " + embeddedFiles.keySet());
 
-            final var spec = embeddedFiles.get("Test Text File");
+            final var spec = embeddedFiles.get("test.txt");
+            assertEquals("Test Text File", spec.getFileDescription());
             final var embeddedFile = spec.getEmbeddedFile();
             assertNotNull(embeddedFile, "Embedded file stream should exist");
 
@@ -74,5 +72,49 @@ public class PDFAttachmentTest {
             final var extracted = new String(embeddedFile.toByteArray(), StandardCharsets.UTF_8);
             assertEquals("This is a test attachment.", extracted);
         }
+    }
+
+    /**
+     * Attachments that share a description, and even a file name, all stay in the name tree. The description was
+     * the key of the name tree, so the second attachment replaced the first.
+     */
+    @Test
+    public void testSameDescriptionAndSameNameKeepEveryFile() throws Exception {
+        final var file = TestOutputFiles.outputFile(getClass(), "attachment_same_description.pdf");
+        final var params = PDFParams.createDefault().withVersion(PDFParams.Version.V_1_4);
+        try (final var out = new FileOutputStream(file)) {
+            final var builder = new StreamFragmentedOutput(out);
+            final var pdf = new PDFWriterImpl(builder, params);
+            try (final var page = pdf.nextPage(595, 842)) {
+                // page content
+            }
+            final String[][] attachments = { { "a.txt", "FIRST" }, { "b.txt", "SECOND" }, { "a.txt", "THIRD" } };
+            for (final var attachment : attachments) {
+                try (var attachOut = pdf.addAttachment(attachment[0], new Attachment("Supporting", "text/plain"))) {
+                    attachOut.write(attachment[1].getBytes(StandardCharsets.UTF_8));
+                }
+            }
+            pdf.close();
+            builder.close();
+        }
+
+        try (final var doc = Loader.loadPDF(file)) {
+            final Map<String, PDComplexFileSpecification> embeddedFiles = doc.getDocumentCatalog().getNames()
+                    .getEmbeddedFiles().getNames();
+            assertEquals(3, embeddedFiles.size(), "every attachment must be reachable: " + embeddedFiles.keySet());
+            assertEquals("FIRST", content(embeddedFiles.get("a.txt")));
+            assertEquals("SECOND", content(embeddedFiles.get("b.txt")));
+            assertEquals("THIRD", content(embeddedFiles.get("a (2).txt")));
+            for (final var spec : embeddedFiles.values()) {
+                assertEquals("Supporting", spec.getFileDescription());
+            }
+            // The file keeps the name it was given; only the key is numbered
+            assertEquals("a.txt", embeddedFiles.get("a (2).txt").getFile());
+        }
+    }
+
+    private static String content(final PDComplexFileSpecification spec) throws java.io.IOException {
+        assertNotNull(spec, "the attachment must be in the name tree");
+        return new String(spec.getEmbeddedFile().toByteArray(), StandardCharsets.UTF_8);
     }
 }

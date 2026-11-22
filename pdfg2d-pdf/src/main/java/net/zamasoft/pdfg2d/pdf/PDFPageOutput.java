@@ -197,6 +197,12 @@ public abstract class PDFPageOutput extends PDFGraphicsOutput {
 	 * Adds a group of mutually-exclusive radio buttons as a single AcroForm
 	 * field with multiple widget kids. No-op if the implementation does not
 	 * support forms.
+	 * <p>
+	 * Groups added under the same name, on this page or on other pages of the
+	 * document, are one field: the buttons of a later group join the field of
+	 * the first, whose tooltip and flags apply. The first selected value given
+	 * is the field's value.
+	 * </p>
 	 *
 	 * @param group the radio group
 	 * @throws java.io.IOException if an I/O error occurs

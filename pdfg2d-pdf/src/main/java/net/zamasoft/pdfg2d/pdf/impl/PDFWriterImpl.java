@@ -217,6 +217,55 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 	}
 
 	/**
+	 * A radio button field of the document. Its buttons may lie on several
+	 * pages, so the field object is written when the document closes, with the
+	 * widgets of all the pages as its kids.
+	 */
+	static final class RadioField {
+		/** The field object. */
+		final ObjectRef ref;
+
+		/** The group as first added: its name, tooltip and flags are the field's. */
+		final net.zamasoft.pdfg2d.pdf.form.RadioGroup group;
+
+		/** The on-value of the selected button, the first one given, or {@code null}. */
+		String selectedValue;
+
+		/** The button widgets in the order they were added. */
+		final List<ObjectRef> kids = new ArrayList<>();
+
+		RadioField(final ObjectRef ref, final net.zamasoft.pdfg2d.pdf.form.RadioGroup group) {
+			this.ref = ref;
+			this.group = group;
+		}
+	}
+
+	/** Radio button fields by name, in the order they were first added. */
+	private Map<String, RadioField> radioFields = null;
+
+	/**
+	 * Returns the radio button field with the group's name, creating it and
+	 * registering it with the AcroForm when the name is new. Groups of the same
+	 * name, on the same page or on different pages, are one field: two fields
+	 * of one name would each keep their own selection.
+	 *
+	 * @param group a radio group being added to a page
+	 * @return the document's field for the group's name
+	 */
+	RadioField radioField(final net.zamasoft.pdfg2d.pdf.form.RadioGroup group) {
+		if (this.radioFields == null) {
+			this.radioFields = new java.util.LinkedHashMap<>();
+		}
+		var field = this.radioFields.get(group.name());
+		if (field == null) {
+			field = new RadioField(this.xref.nextObjectRef(), group);
+			this.radioFields.put(group.name(), field);
+			this.addAcroFormField(field.ref, false);
+		}
+		return field;
+	}
+
+	/**
 	 * Returns the shared Helvetica font reference for form fields, allocating
 	 * and writing the standard Type1 font dictionary on first use.
 	 */
@@ -364,6 +413,12 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 				}
 				if (v4Params.getCFM() == V4EncryptionParams.CFM.AESV2 && pdfVersion.v < PDFParams.Version.V_1_6.v) {
 					throw new IllegalArgumentException("AESV2 encryption requires PDF 1.6 or later.");
+				}
+				if (v4Params.getCFM() == V4EncryptionParams.CFM.AESV2 && v4Params.getLength() != 128) {
+					// AESV2 is AES-128; the 40 to 128 bit range is RC4's (CFM V2). Any other length
+					// used to fail in the cipher while the first encrypted object was written.
+					throw new IllegalArgumentException(
+							"AESV2 encryption uses a 128-bit key: " + v4Params.getLength());
 				}
 			}
 			if (encType == EncryptionParams.Type.V5 && pdfVersion.v < PDFParams.Version.V_1_7.v) {
@@ -613,6 +668,13 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 							&& (att.description() != null || pdfVersion.isPdfA())) {
 						flow.writeName("UF");
 						flow.writeUTF16(att.description() != null ? att.description() : spec.name());
+						flow.lineBreak();
+					}
+
+					if (att.description() != null) {
+						// The description under its own key: the name tree is keyed by the file name
+						flow.writeName("Desc");
+						flow.writeUTF16(att.description());
 						flow.lineBreak();
 					}
 
@@ -1886,12 +1948,16 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 					"File attachments are not allowed in " + this.params.version() + ".");
 		}
 
-		var desc = attachment.description();
-		var name = filename;
-		if (desc == null) {
-			desc = name;
-		} else if (name == null) {
-			name = desc;
+		// The file name; an attachment given only a description is named by it
+		final var name = (filename != null) ? filename : attachment.description();
+		// The key in the name tree identifies the file, so it has to be unique: it used to be the
+		// description, and of two attachments with the same description only the last was reachable.
+		// It is the file name, numbered before the extension when two attachments share that as well
+		var key = name;
+		for (int i = 2; this.embeddedFiles.containsEntry(key); ++i) {
+			final int dot = name.lastIndexOf('.');
+			key = (dot <= 0) ? name + " (" + i + ")"
+					: name.substring(0, dot) + " (" + i + ")" + name.substring(dot);
 		}
 
 		final var fileRef = this.xref.nextObjectRef();
@@ -1913,7 +1979,7 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 		}
 
 		final var filespec = new Filespec(attachment, name, fileRef);
-		this.embeddedFiles.addEntry(desc, filespec);
+		this.embeddedFiles.addEntry(key, filespec);
 
 		final var paramsFlow = objectsFlow.forkFragment();
 		try {
@@ -2229,6 +2295,15 @@ public class PDFWriterImpl implements PDFWriter, FontStore {
 					this.catalogFlow.writeName("Lang");
 					this.catalogFlow.writeString(lang);
 					this.catalogFlow.lineBreak();
+				}
+			}
+
+			// Radio button fields: only now are the widgets of all their pages known
+			if (this.radioFields != null) {
+				final var radioSink = this.objectSink();
+				for (final var field : this.radioFields.values()) {
+					PDFPageOutputImpl.writeRadioField(radioSink.startObject(field.ref), field);
+					radioSink.endObject();
 				}
 			}
 

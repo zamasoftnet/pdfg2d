@@ -413,8 +413,15 @@ class PDFPageOutputImpl extends PDFPageOutput {
 			this.hasAnnots = true;
 		}
 		final var structure = writer.structure;
-		final var parentRef = writer.xref.nextObjectRef();
-		final var kidRefs = new java.util.ArrayList<ObjectRef>(group.buttons().size());
+		// One field per name for the document: a group of the same name added before, on this page or
+		// on an earlier one, gets these buttons as further kids (a second field of the same name would
+		// keep its own selection). The writer writes the field object when the document closes.
+		final var field = writer.radioField(group);
+		if (field.selectedValue == null) {
+			// The first selection stays: the widgets written so far already carry their state
+			field.selectedValue = group.selectedValue();
+		}
+		final var parentRef = field.ref;
 
 		for (final var button : group.buttons()) {
 			final var rect = button.rect();
@@ -433,12 +440,12 @@ class PDFPageOutputImpl extends PDFPageOutput {
 					+ fmt(i) + " " + fmt(i) + " " + fmt(w - 2 * i) + " " + fmt(h - 2 * i) + " re f Q");
 
 			final var kidRef = writer.xref.nextObjectRef();
-			kidRefs.add(kidRef);
+			field.kids.add(kidRef);
 			this.annotRefs.add(kidRef);
 			this.annotsFlow.writeObjectRef(kidRef);
 			final var structParent = (structure != null) ? structure.associateAnnotation(this, kidRef) : -1;
 
-			final boolean selected = on.equals(group.selectedValue());
+			final boolean selected = on.equals(field.selectedValue);
 			try (final var flow = writer.objectsFlow.forkFragment()) {
 				flow.startObject(kidRef);
 				flow.startHash();
@@ -481,36 +488,43 @@ class PDFPageOutputImpl extends PDFPageOutput {
 				flow.endObject();
 			}
 		}
+	}
 
-		writer.addAcroFormField(parentRef, false);
-		try (final var flow = writer.objectsFlow.forkFragment()) {
-			flow.startObject(parentRef);
-			flow.startHash();
-			flow.writeName("FT");
-			flow.writeName("Btn");
-			flow.writeName("Ff");
-			flow.writeInt(FF_RADIO | (group.readOnly() ? FF_READONLY : 0) | (group.required() ? FF_REQUIRED : 0));
+	/**
+	 * Writes the dictionary of a radio button field ({@code /FT /Btn} with the
+	 * {@code Radio} flag) whose {@code /Kids} are the button widgets added on
+	 * the pages. Called when the document closes.
+	 *
+	 * @param flow  the output of the field object's body
+	 * @param field the field with all its widgets
+	 * @throws IOException if an I/O error occurs
+	 */
+	static void writeRadioField(final PDFOutput flow, final PDFWriterImpl.RadioField field) throws IOException {
+		final var group = field.group;
+		flow.startHash();
+		flow.writeName("FT");
+		flow.writeName("Btn");
+		flow.writeName("Ff");
+		flow.writeInt(FF_RADIO | (group.readOnly() ? FF_READONLY : 0) | (group.required() ? FF_REQUIRED : 0));
+		flow.lineBreak();
+		flow.writeName("T");
+		flow.writeText(group.name());
+		flow.lineBreak();
+		if (group.tooltip() != null) {
+			flow.writeName("TU");
+			flow.writeUTF16(group.tooltip());
 			flow.lineBreak();
-			flow.writeName("T");
-			flow.writeText(group.name());
-			flow.lineBreak();
-			if (group.tooltip() != null) {
-				flow.writeName("TU");
-				flow.writeUTF16(group.tooltip());
-				flow.lineBreak();
-			}
-			flow.writeName("V");
-			flow.writeName(group.selectedValue() != null ? group.selectedValue() : "Off");
-			flow.writeName("Kids");
-			flow.startArray();
-			for (final var kidRef : kidRefs) {
-				flow.writeObjectRef(kidRef);
-			}
-			flow.endArray();
-			flow.lineBreak();
-			flow.endHash();
-			flow.endObject();
 		}
+		flow.writeName("V");
+		flow.writeName(field.selectedValue != null ? field.selectedValue : "Off");
+		flow.writeName("Kids");
+		flow.startArray();
+		for (final var kidRef : field.kids) {
+			flow.writeObjectRef(kidRef);
+		}
+		flow.endArray();
+		flow.lineBreak();
+		flow.endHash();
 	}
 
 	private static String fmt(final double v) {
@@ -583,8 +597,19 @@ class PDFPageOutputImpl extends PDFPageOutput {
 				flow.writeText("/Helv " + fmt(ch.fontSize()) + " Tf 0 g");
 				flow.writeName("Opt");
 				flow.startArray();
-				for (final var opt : ch.options()) {
-					flow.writeUTF16(opt);
+				// An option is its display string, or the pair [export value, display string] when the
+				// field has export values that differ from what is displayed. /V is the export value.
+				final var exports = ch.exportValues();
+				final boolean pairs = exports != null && !exports.equals(ch.options());
+				for (int i = 0; i < ch.options().size(); ++i) {
+					if (pairs) {
+						flow.startArray();
+						flow.writeUTF16(exports.get(i));
+						flow.writeUTF16(ch.options().get(i));
+						flow.endArray();
+					} else {
+						flow.writeUTF16(ch.options().get(i));
+					}
 				}
 				flow.endArray();
 				flow.lineBreak();

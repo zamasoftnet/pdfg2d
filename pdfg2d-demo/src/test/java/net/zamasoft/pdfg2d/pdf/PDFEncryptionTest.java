@@ -118,6 +118,24 @@ public class PDFEncryptionTest {
     }
 
     /**
+     * AESV2 is AES-128: any other key length is rejected when the writer is created. The 40 to 128 bit range
+     * is RC4's, and a shorter key used to fail in the cipher while the first encrypted object was written.
+     */
+    @Test
+    public void testAESV2RejectsOtherKeyLengths() {
+        final var encParams = new V4EncryptionParams();
+        encParams.setUserPassword("user");
+        encParams.setLength(40);
+        encParams.setCFM(CFM.AESV2);
+        final var params = PDFParams.createDefault().withVersion(PDFParams.Version.V_1_6).withEncryption(encParams);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new net.zamasoft.pdfg2d.pdf.impl.PDFWriterImpl(
+                        new net.zamasoft.zstream.io.impl.StreamFragmentedOutput(new java.io.ByteArrayOutputStream()),
+                        params),
+                "AESV2 with a 40-bit key must be rejected");
+    }
+
+    /**
      * V4 RC4 (CFM V2) also writes the key length to the top-level /Length. When only the crypt filter had it,
      * PDFBox read the top-level value and tried a 40-bit key, failing even with an empty password
      * (2026-10-05, I/O property boundary-value tests).
@@ -141,6 +159,34 @@ public class PDFEncryptionTest {
             assertTrue(doc.getEncryption().getLength() == 128, "the key length must be written at the top level");
             final var text = new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
             assertTrue(text.contains("Encryption V4 RC4 Test"), text);
+        }
+    }
+
+    /**
+     * V 2 files of every key length open and read. The 50 MD5 rounds of revision 3 and 4 hashed the whole
+     * digest instead of its first key-length bytes, which only gives the right key for 128 bits: files with
+     * shorter keys could not be opened (PDFBox and MuPDF both refused the password). Shorter keys under a
+     * V 4 crypt filter are not checked here: MuPDF opens them, PDFBox decrypts them wrongly.
+     */
+    @Test
+    public void testRC4KeyLengthsBelow128Open() throws IOException {
+        for (final int bits : new int[] { 40, 64, 96, 128 }) {
+            final var v2 = new V2EncryptionParams();
+            v2.setLength(bits);
+            assertOpens("v2-" + bits, PDFParams.createDefault().withVersion(PDFParams.Version.V_1_4).withEncryption(v2));
+        }
+    }
+
+    private void assertOpens(final String name, final PDFParams params) throws IOException {
+        final var file = TestOutputFiles.outputFile(getClass(), "encryption_rc4_" + name + ".pdf");
+        try (final var g2d = new PDFGraphics2D(file, 595, 842, params)) {
+            g2d.setPaint(Color.BLACK);
+            g2d.drawString("RC4 key length test", 100, 100);
+        }
+        try (final var doc = Loader.loadPDF(file)) {
+            assertTrue(doc.isEncrypted(), name);
+            final var text = new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+            assertTrue(text.contains("RC4 key length test"), name + ": " + text);
         }
     }
 

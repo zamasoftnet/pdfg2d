@@ -62,8 +62,15 @@ final class Woff2Decoder {
 	 * @return temporary file containing the reconstructed sfnt
 	 */
 	static File extract(final RandomAccessFile raf, final File file) throws IOException {
+		// The file and everything unpacked from it are held in memory, so both are bounded.
+		final long fileLength = raf.length();
+		if (fileLength > FontFile.MAX_SFNT_SIZE) {
+			throw new IOException("WOFF2 file is too large: " + file);
+		}
+		// What the tables may add up to: a fixed limit, and what the file could plausibly unpack to.
+		final long sizeLimit = Math.min(FontFile.MAX_SFNT_SIZE, fileLength * FontFile.MAX_EXPANSION);
 		raf.seek(0);
-		final byte[] all = new byte[(int) raf.length()];
+		final byte[] all = new byte[(int) fileLength];
 		raf.readFully(all);
 		final Reader r = new Reader(all, 0);
 		if (r.u32() != 0x774F4632L) { // 'wOF2'
@@ -87,6 +94,7 @@ final class Woff2Decoder {
 		r.u32(); // privLength
 
 		final List<Entry> entries = new ArrayList<>(numTables);
+		long unpackedSize = 0;
 		for (int i = 0; i < numTables; ++i) {
 			final Entry e = new Entry();
 			final int flags = r.u8();
@@ -100,11 +108,18 @@ final class Woff2Decoder {
 				}
 				e.tag = KNOWN_TAGS[index];
 			}
-			e.origLength = (int) r.base128();
+			final long origLength = r.base128();
 			// For glyf/loca, 3 means "no transform"; for other tables, 0 means "no transform".
 			final boolean transformed = ("glyf".equals(e.tag) || "loca".equals(e.tag)) ? e.transform != 3
 					: e.transform != 0;
-			e.transformLength = transformed ? (int) r.base128() : e.origLength;
+			final long transformLength = transformed ? r.base128() : origLength;
+			// These lengths size the buffers below, so they are checked before anything is allocated.
+			unpackedSize += transformLength;
+			if (origLength > sizeLimit || unpackedSize > sizeLimit) {
+				throw new IOException("WOFF2 table sizes exceed the size of the font: " + file);
+			}
+			e.origLength = (int) origLength;
+			e.transformLength = (int) transformLength;
 			entries.add(e);
 		}
 
@@ -115,7 +130,8 @@ final class Woff2Decoder {
 		// Cap at the actual length only when the file is shorter.
 		final int bodyStart = r.pos();
 		final int available = all.length - bodyStart;
-		final byte[] plain = brotli(all, bodyStart, Math.min((int) totalCompressedSize, available), file);
+		final byte[] plain = brotli(all, bodyStart, (int) Math.min(totalCompressedSize, available),
+				(int) unpackedSize, file);
 		int off = 0;
 		for (final Entry e : entries) {
 			if (off + e.transformLength > plain.length) {
@@ -139,20 +155,35 @@ final class Woff2Decoder {
 		return writeSfnt(flavor, entries);
 	}
 
-	/** Decompresses with Brotli. */
-	private static byte[] brotli(final byte[] src, final int off, final int len, final File file) throws IOException {
-		final ByteArrayOutputStream out = new ByteArrayOutputStream(Math.max(len * 4, 1024));
+	/**
+	 * Decompresses with Brotli.
+	 *
+	 * <p>
+	 * The stream holds the tables one after another, so its length is the sum of the table lengths in the
+	 * directory ({@code size}, already checked against the limits). Decompression stops there: a stream that
+	 * expands without end never takes more memory than the directory accounts for.
+	 * </p>
+	 */
+	private static byte[] brotli(final byte[] src, final int off, final int len, final int size, final File file)
+			throws IOException {
+		final byte[] out = new byte[size];
+		int filled = 0;
 		try (InputStream in = new org.brotli.dec.BrotliInputStream(
 				new java.io.ByteArrayInputStream(src, off, len))) {
-			final byte[] buff = new byte[8192];
-			int n;
-			while ((n = in.read(buff)) > 0) {
-				out.write(buff, 0, n);
+			while (filled < size) {
+				final int n = in.read(out, filled, size - filled);
+				if (n <= 0) {
+					break;
+				}
+				filled += n;
 			}
 		} catch (final IOException e) {
 			throw new IOException("Cannot decompress WOFF2 (Brotli): " + file, e);
 		}
-		return out.toByteArray();
+		if (filled < size) {
+			throw new IOException("Truncated WOFF2 data: " + file);
+		}
+		return out;
 	}
 
 	/**
@@ -285,6 +316,10 @@ final class Woff2Decoder {
 		int total = 0;
 		for (int i = 0; i < nContours; ++i) {
 			total += nPoints.u255();
+			// The point count sizes the arrays below. A glyph numbers its points with 16 bits.
+			if (total > 0x10000) {
+				throw new IOException("Too many points in a WOFF2 glyph");
+			}
 			endPts[i] = total - 1;
 		}
 		final int[] x = new int[total];
@@ -462,6 +497,7 @@ final class Woff2Decoder {
 		sorted.sort((a, b) -> a.tag.compareTo(b.tag));
 		final int numTables = sorted.size();
 		final File temp = File.createTempFile("pdfg2d-woff2-", ".dat");
+		boolean written = false;
 		try (OutputStream fos = new java.io.BufferedOutputStream(new FileOutputStream(temp));
 				DataOutputStream out = new DataOutputStream(fos)) {
 			out.writeInt((int) flavor);
@@ -482,6 +518,13 @@ final class Woff2Decoder {
 				for (int pad = (4 - (e.data.length & 3)) & 3; pad > 0; --pad) {
 					out.writeByte(0);
 				}
+			}
+			out.flush();
+			written = true;
+		} finally {
+			if (!written) {
+				// A font that cannot be written out must not leave its partial copy behind.
+				temp.delete();
 			}
 		}
 		temp.deleteOnExit();
