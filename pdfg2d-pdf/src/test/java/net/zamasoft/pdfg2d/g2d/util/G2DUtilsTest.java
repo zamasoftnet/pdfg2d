@@ -53,4 +53,48 @@ public class G2DUtilsTest {
 		assertEquals(awt.getGreen(), back.getGreen());
 		assertEquals(awt.getBlue(), back.getBlue());
 	}
+
+	private static final net.zamasoft.pdfg2d.gc.paint.Color RED = net.zamasoft.pdfg2d.gc.paint.RGBColor.create(1, 0, 0);
+	private static final net.zamasoft.pdfg2d.gc.paint.Color BLUE = net.zamasoft.pdfg2d.gc.paint.RGBColor.create(0, 0, 1);
+
+	/**
+	 * Gradients AWT refuses (2026-11-25): stops at the same position (a hard color change) and a gradient of no length
+	 * or radius made the conversion fail when an element with a filter was rasterized (web.dev, stripe.com).
+	 */
+	@Test
+	public void testHardStopsBecomeIncreasingFractions() {
+		final var linear = G2DUtils.toAwtPaint(new net.zamasoft.pdfg2d.gc.paint.LinearGradient(0, 0, 10, 0,
+				new double[] { 0, 0.1, 0.1, 1 }, new net.zamasoft.pdfg2d.gc.paint.Color[] { RED, RED, BLUE, BLUE },
+				new java.awt.geom.AffineTransform(), null));
+		assertInstanceOf(java.awt.LinearGradientPaint.class, linear);
+		final float[] f = ((java.awt.LinearGradientPaint) linear).getFractions();
+		for (int i = 1; i < f.length; ++i) {
+			org.junit.jupiter.api.Assertions.assertTrue(f[i] > f[i - 1], java.util.Arrays.toString(f));
+		}
+		assertEquals(0.1f, f[2], 1e-6);
+		final var radial = G2DUtils.toAwtPaint(new net.zamasoft.pdfg2d.gc.paint.RadialGradient(0, 0, 10, 0, 0,
+				new double[] { 0, 1, 1 }, new net.zamasoft.pdfg2d.gc.paint.Color[] { RED, BLUE, RED },
+				new java.awt.geom.AffineTransform(), null));
+		assertInstanceOf(java.awt.RadialGradientPaint.class, radial);
+		final float[] g = ((java.awt.RadialGradientPaint) radial).getFractions();
+		assertEquals(1f, g[2]);
+		org.junit.jupiter.api.Assertions.assertTrue(g[0] < g[1] && g[1] < g[2], java.util.Arrays.toString(g));
+	}
+
+	@Test
+	public void testGradientOfNoLengthIsItsLastColor() {
+		final var linear = G2DUtils.toAwtPaint(new net.zamasoft.pdfg2d.gc.paint.LinearGradient(5, 5, 5, 5,
+				new double[] { 0, 1 }, new net.zamasoft.pdfg2d.gc.paint.Color[] { RED, BLUE },
+				new java.awt.geom.AffineTransform(), null));
+		assertEquals(java.awt.Color.BLUE, linear);
+		final var radial = G2DUtils.toAwtPaint(new net.zamasoft.pdfg2d.gc.paint.RadialGradient(5, 5, 0, 5, 5,
+				new double[] { 0, 1 }, new net.zamasoft.pdfg2d.gc.paint.Color[] { RED, BLUE },
+				new java.awt.geom.AffineTransform(), null));
+		assertEquals(java.awt.Color.BLUE, radial);
+		// a radius that is 0 as a float
+		final var tiny = G2DUtils.toAwtPaint(new net.zamasoft.pdfg2d.gc.paint.RadialGradient(5, 5, 1e-50, 5, 5,
+				new double[] { 0, 1 }, new net.zamasoft.pdfg2d.gc.paint.Color[] { RED, BLUE },
+				new java.awt.geom.AffineTransform(), null));
+		assertEquals(java.awt.Color.BLUE, tiny);
+	}
 }

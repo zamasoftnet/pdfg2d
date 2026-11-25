@@ -134,12 +134,13 @@ public final class G2DUtils {
 	 * @return AWT Paint
 	 */
 	public static java.awt.Paint toAwtPaint(LinearGradient gradient) {
-		double[] fs = gradient.fractions();
-		float[] fractions = new float[fs.length];
-		for (int i = 0; i < fs.length; ++i) {
-			fractions[i] = (float) fs[i];
-		}
 		Color[] cs = gradient.colors();
+		if (cs.length < 2 || gradient.fractions().length != cs.length
+				|| gradient.x1() == gradient.x2() && gradient.y1() == gradient.y2()) {
+			// AWT refuses a gradient of no length (SVG 1.1 §13.2.2: the last stop's color fills the area)
+			return lastColor(cs);
+		}
+		float[] fractions = awtFractions(gradient.fractions());
 		java.awt.Color[] colors = new java.awt.Color[cs.length];
 		for (int i = 0; i < cs.length; ++i) {
 			colors[i] = toAwtColor(cs[i]);
@@ -183,12 +184,13 @@ public final class G2DUtils {
 	 * @return AWT Paint
 	 */
 	public static java.awt.Paint toAwtPaint(RadialGradient gradient) {
-		double[] fs = gradient.fractions();
-		float[] fractions = new float[fs.length];
-		for (int i = 0; i < fs.length; ++i) {
-			fractions[i] = (float) fs[i];
-		}
 		Color[] cs = gradient.colors();
+		if (cs.length < 2 || gradient.fractions().length != cs.length || !((float) gradient.radius() > 0)) {
+			// AWT refuses a radius of 0, also one that is 0 as the float it takes (SVG 1.1 §13.2.3: the last stop's
+			// color fills the area)
+			return lastColor(cs);
+		}
+		float[] fractions = awtFractions(gradient.fractions());
 		java.awt.Color[] colors = new java.awt.Color[cs.length];
 		for (int i = 0; i < cs.length; ++i) {
 			colors[i] = toAwtColor(cs[i]);
@@ -202,9 +204,39 @@ public final class G2DUtils {
 				gradient.transform() != null ? gradient.transform() : new AffineTransform());
 	}
 
+	/** The last color of a gradient as a solid AWT paint (transparent when there is none). */
+	private static java.awt.Paint lastColor(final Color[] colors) {
+		return colors.length == 0 ? new java.awt.Color(0, 0, 0, 0) : toAwtColor(colors[colors.length - 1]);
+	}
+
+	/**
+	 * Gradient stop positions as AWT accepts them: in [0, 1] and strictly increasing (2026-11-25). Two stops at the
+	 * same position, a hard color change (CSS {@code red 50%, blue 50%}, SVG stops with the same offset), made
+	 * {@code MultipleGradientPaint} throw and the conversion fail when an element with a filter was rasterized
+	 * (web.dev). Each such stop moves past the one before it by the smallest float step, and stops pushed past 1 come
+	 * back below it.
+	 */
+	static float[] awtFractions(final double[] fs) {
+		final float[] f = new float[fs.length];
+		for (int i = 0; i < fs.length; ++i) {
+			float v = Double.isNaN(fs[i]) ? 0f : (float) Math.max(0, Math.min(1, fs[i]));
+			if (i > 0 && v <= f[i - 1]) {
+				v = Math.nextUp(f[i - 1]);
+			}
+			f[i] = v;
+		}
+		if (f.length > 0 && f[f.length - 1] > 1f) {
+			f[f.length - 1] = 1f;
+			for (int i = f.length - 2; i >= 0 && f[i] >= f[i + 1]; --i) {
+				f[i] = Math.nextDown(f[i + 1]);
+			}
+		}
+		return f;
+	}
+
 	/**
 	 * Converts AWT Color to internal Color.
-	 * 
+	 *
 	 * @param color AWT Color
 	 * @return Internal Color
 	 */
