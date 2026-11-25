@@ -76,6 +76,19 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	 */
 	protected GC.State gcState;
 
+	/**
+	 * The children made by {@link #create()} from this Graphics2D's root (or from its children) whose GC state is still
+	 * open, newest first; one deque shared by the root and every child (2026-11-26). The GC restores only the newest
+	 * state, so a child Batik never disposes must be closed before the states under it: {@link #dispose()} closes the
+	 * newer children first, and the root's closes all that remain. Until then the AWT finalizer disposed them, on the
+	 * finalizer thread while the drawing thread used the same GC: a sheet of SVG images failed now and then with a
+	 * null transform or a broken state stack, and the same document gave different PDFs.
+	 */
+	private java.util.ArrayDeque<BridgeGraphics2D> openChildren = new java.util.ArrayDeque<>();
+
+	/** True for a Graphics2D made by a constructor, false for one made by {@link #create()}. */
+	private boolean root = true;
+
 	protected final GraphicsConfiguration config;
 
 	protected static final AffineTransform DEFAULT_TRANSFORM = new AffineTransform();
@@ -586,7 +599,9 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 			// Save the GC state so dispose() can restore child state changes (especially the clip)
 			// (see the comment on the gcState field).
 			g.baseTransform = new AffineTransform(this.transform);
+			g.root = false;
 			g.gcState = this.gc.begin();
+			this.openChildren.push(g);
 			return g;
 		} catch (CloneNotSupportedException e) {
 			throw new RuntimeException(e);
@@ -718,14 +733,33 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	}
 
 	public void dispose() {
-		if (this.gcState != null) {
-			// Restore the GC state saved by create() (revert clip and transform).
-			this.gcState.close();
-			this.gcState = null;
+		if (this.root || this.openChildren.contains(this)) {
+			// Children made after this one and never disposed hold the newer GC states: close them first, then this
+			// one's (the root closes every child left open)
+			while (!this.openChildren.isEmpty()) {
+				final BridgeGraphics2D child = this.openChildren.pop();
+				// Restore the GC state saved by create() (revert clip and transform).
+				child.gcState.close();
+				child.gcState = null;
+				if (child == this) {
+					break;
+				}
+			}
 		}
 		if (this.gc != null) {
 			this.gc = null;
 		}
+	}
+
+	/**
+	 * Does nothing: {@link java.awt.Graphics#finalize()} disposes, which closed GC states on the finalizer thread
+	 * (see {@link #openChildren}). A child that is never disposed is closed by the dispose of an earlier child or of
+	 * the root, on the drawing thread.
+	 */
+	@Override
+	@SuppressWarnings({ "deprecation", "removal" })
+	public void finalize() {
+		// nothing
 	}
 
 	protected Object clone() throws CloneNotSupportedException {

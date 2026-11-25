@@ -119,12 +119,17 @@ class PDFTransparencyRable extends GraphicsNodeRable8Bit {
 				final Graphics2D g2d2 = new BridgeGraphics2D(gc2, g2d.getDeviceConfiguration());
 				final var gn = getGraphicsNode();
 
-				if (getUsePrimitivePaint()) {
-					gn.primitivePaint(g2d2);
-				} else {
-					gn.paint(g2d2);
+				try {
+					if (getUsePrimitivePaint()) {
+						gn.primitivePaint(g2d2);
+					} else {
+						gn.paint(g2d2);
+					}
+				} finally {
+					// closes the GC states of the children Batik left open, before gcState closes its own
+					// (BridgeGraphics2D no longer closes them from the finalizer, 2026-11-26)
+					g2d2.dispose();
 				}
-
 			}
 			gc.drawImage(groupImage);
 		}

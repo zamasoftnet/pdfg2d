@@ -1,6 +1,10 @@
 package net.zamasoft.pdfg2d.svg;
 
 import java.awt.Graphics2D;
+import java.awt.image.ImagingOpException;
+import java.awt.image.RasterFormatException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.apache.batik.gvt.GraphicsNode;
 
@@ -77,10 +81,22 @@ public record SVGImage(GraphicsNode node, double width, double height, Intrinsic
 	public void drawTo(final GC gc) throws GraphicsException {
 		try (final var gcState = gc.begin()) {
 			final Graphics2D g2d = new SVGBridgeGraphics2D(gc);
-			this.node.paint(g2d);
-			g2d.dispose();
+			try {
+				this.node.paint(g2d);
+			} catch (final ImagingOpException | RasterFormatException e) {
+				// A raster operation AWT cannot do (Batik's filters) leaves the rest of this image unpainted instead of
+				// failing the document (2026-11-26: Inkscape's feConvolveMatrix icon, "Unable to convolve src image"
+				// from ConvolveOp). Only AWT's raster failures: a failure of the GC itself (the PDF/A nesting limit)
+				// may leave its state inconsistent, so it still fails the document
+				LOG.log(Level.WARNING, "SVG painting failed", e);
+			} finally {
+				// closes the GC states of the Graphics2D children Batik left open (also when painting failed)
+				g2d.dispose();
+			}
 		}
 	}
+
+	private static final Logger LOG = Logger.getLogger(SVGImage.class.getName());
 
 	/**
 	 * Returns alternative text for this image.
