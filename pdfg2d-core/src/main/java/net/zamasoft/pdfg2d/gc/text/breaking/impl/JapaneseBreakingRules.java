@@ -37,17 +37,56 @@ public class JapaneseBreakingRules implements TextBreakingRules {
 			"#$%&*+-/0123456789=@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\^_abcdefghijklmnopqrstuvwxyz|~");
 
 	/**
-	 * Half-width alphanumeric characters.
+	 * Half-width alphanumeric characters, and the characters that make words in scripts written with spaces between
+	 * words ({@link #isWordCharacter(char)}).
 	 */
 	private static final CharacterSet LATIN_OR_DIGIT = c -> {
 		if (c > 0xFF) {
-			return false;
+			return isWordCharacter(c);
 		}
 		if (c > 0x7F) {
 			return true;
 		}
 		return ASCII.contains(c);
 	};
+
+	/**
+	 * Whether a character above U+00FF is a letter, mark or digit of a script written with spaces between words, so
+	 * that a line does not break inside the word (2026-11-25, a test with real web documents, copperpdf4
+	 * docs/history/2026-11-25-realweb-test.md). Until then only Latin-1 counted: every character above it required
+	 * nothing after it, and words in Latin Extended (Polish, Czech, Vietnamese), Greek, Cyrillic, Armenian, Hebrew,
+	 * Arabic or an Indic script broke between any two letters, without a hyphen, even where the word fitted on the next
+	 * line. Han, kana and hangul, the full-width forms, and the scripts written without spaces (Thai, Lao, Khmer,
+	 * Myanmar) are not listed and keep breaking between characters.
+	 *
+	 * @param c a character above U+00FF
+	 * @return {@code true} if the character belongs to a word
+	 */
+	static boolean isWordCharacter(final char c) {
+		switch (Character.getType(c)) {
+			case Character.UPPERCASE_LETTER, Character.LOWERCASE_LETTER, Character.TITLECASE_LETTER,
+					Character.MODIFIER_LETTER, Character.OTHER_LETTER, Character.NON_SPACING_MARK,
+					Character.COMBINING_SPACING_MARK, Character.ENCLOSING_MARK, Character.DECIMAL_DIGIT_NUMBER,
+					Character.LETTER_NUMBER:
+				break;
+			default:
+				return false;
+		}
+		final UnicodeBlock block = UnicodeBlock.of(c);
+		if (block == UnicodeBlock.HALFWIDTH_AND_FULLWIDTH_FORMS || block == UnicodeBlock.HIRAGANA
+				|| block == UnicodeBlock.KATAKANA) {
+			return false;
+		}
+		return switch (Character.UnicodeScript.of(c)) {
+			case LATIN, GREEK, CYRILLIC, ARMENIAN, HEBREW, ARABIC, SYRIAC, THAANA, NKO, SAMARITAN, MANDAIC,
+					DEVANAGARI, BENGALI, GURMUKHI, GUJARATI, ORIYA, TAMIL, TELUGU, KANNADA, MALAYALAM, SINHALA,
+					GEORGIAN, ETHIOPIC, CHEROKEE, CANADIAN_ABORIGINAL, COPTIC, GLAGOLITIC, TIFINAGH, RUNIC, OGHAM,
+					// combining diacritics written with those letters (the kana voicing marks are excluded above)
+					INHERITED ->
+				true;
+			default -> false;
+		};
+	}
 
 	/**
 	 * Prohibited characters at the start of a line (SPEC JIS-X4051 8.1.1 + custom).
