@@ -53,6 +53,18 @@ public class TransformedImage extends WrappedImage {
 		return this.image.getAltString();
 	}
 
+	/** The wrapped image in the viewport under a scale (a transform of other kinds gives null). */
+	@Override
+	public Image viewport(final double width, final double height) {
+		final double sx = this.at.getScaleX(), sy = this.at.getScaleY();
+		if (this.at.getShearX() != 0 || this.at.getShearY() != 0 || this.at.getTranslateX() != 0
+				|| this.at.getTranslateY() != 0 || !(sx > 0) || !(sy > 0)) {
+			return null;
+		}
+		final Image inner = this.image.viewport(width / sx, height / sy);
+		return inner == null ? null : new TransformedImage(inner, this.at);
+	}
+
 	@Override
 	public double getWidth() {
 		if (cachedWidth != null) {

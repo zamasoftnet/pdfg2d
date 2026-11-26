@@ -61,4 +61,18 @@ public interface Image {
 	 * @return the alternative string
 	 */
 	public String getAltString();
+
+	/**
+	 * Returns this image laid out anew in a viewport of the given size, in this image's units, or null when it is only
+	 * scaled to a size (2026-11-26). An SVG with a viewBox fits its viewBox into the viewport by its
+	 * preserveAspectRatio, as browsers draw an SVG in a box of another ratio: a 32 x 32 icon in a 20 x 200 box stays
+	 * round. A raster image is stretched.
+	 *
+	 * @param width  the viewport's width
+	 * @param height the viewport's height
+	 * @return the image of that size, or null
+	 */
+	public default Image viewport(final double width, final double height) {
+		return null;
+	}
 }

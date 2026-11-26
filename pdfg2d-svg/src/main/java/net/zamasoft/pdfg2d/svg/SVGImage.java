@@ -25,14 +25,102 @@ import net.zamasoft.pdfg2d.gc.image.Image;
  * @param node   the GVT graphics node containing the SVG content
  * @param width  the width in user units
  * @param height the height in user units
+ * @param viewBox the root's viewBox and preserveAspectRatio, or null (then {@link #viewport} gives null)
  * @author MIYABE Tatsuhiko
  * @since 1.0
  */
-public record SVGImage(GraphicsNode node, double width, double height, Intrinsic intrinsic) implements Image {
+public record SVGImage(GraphicsNode node, double width, double height, Intrinsic intrinsic, ViewBox viewBox)
+		implements Image {
 
 	/** Constructs an image with intrinsic dimensions (for compatibility with previous behavior). */
 	public SVGImage(GraphicsNode node, double width, double height) {
 		this(node, width, height, Intrinsic.SIZE);
+	}
+
+	/** Constructs an image without a viewBox: it is only scaled to another size. */
+	public SVGImage(GraphicsNode node, double width, double height, Intrinsic intrinsic) {
+		this(node, width, height, intrinsic, null);
+	}
+
+	/**
+	 * The root's viewBox and preserveAspectRatio, with which {@link #viewport} lays the image out anew (2026-11-26).
+	 *
+	 * @param x      the viewBox's x
+	 * @param y      the viewBox's y
+	 * @param width  the viewBox's width
+	 * @param height the viewBox's height
+	 * @param align  the alignment, a {@code SVGPreserveAspectRatio.SVG_PRESERVEASPECTRATIO_*} constant
+	 * @param meet   true for meet, false for slice
+	 */
+	public record ViewBox(double x, double y, double width, double height, short align, boolean meet) {
+		AffineTransform fit(final double viewportWidth, final double viewportHeight) {
+			return org.apache.batik.bridge.ViewBox.getPreserveAspectRatioTransform(
+					new float[] { (float) this.x, (float) this.y, (float) this.width, (float) this.height }, this.align,
+					this.meet, (float) viewportWidth, (float) viewportHeight);
+		}
+	}
+
+	/**
+	 * The image laid out in a viewport of another size (2026-11-26): its viewBox fits the viewport by its
+	 * preserveAspectRatio, as browsers do. A box of another ratio than the image's stretched the drawing: an icon's
+	 * circle in a tall box became a tall ellipse (BBC Sport's search icon). Null without a viewBox, or with
+	 * preserveAspectRatio="none", which stretch.
+	 */
+	@Override
+	public Image viewport(final double width, final double height) {
+		if (this.viewBox == null || this.viewBox.align() == org.w3c.dom.svg.SVGPreserveAspectRatio.SVG_PRESERVEASPECTRATIO_NONE
+				|| this.viewBox.align() == org.w3c.dom.svg.SVGPreserveAspectRatio.SVG_PRESERVEASPECTRATIO_UNKNOWN
+				|| !(this.viewBox.width() > 0) || !(this.viewBox.height() > 0) || !(width > 0) || !(height > 0)
+				|| !(this.width > 0) || !(this.height > 0)) {
+			return null;
+		}
+		try {
+			final AffineTransform at = this.viewBox.fit(width, height);
+			at.concatenate(this.viewBox.fit(this.width, this.height).createInverse());
+			return new Fitted(this, width, height, at);
+		} catch (final java.awt.geom.NoninvertibleTransformException e) {
+			return null;
+		}
+	}
+
+	/** An SVG image in a viewport of its own size ({@link SVGImage#viewport}). */
+	private record Fitted(SVGImage image, double width, double height, AffineTransform at) implements Image {
+		@Override
+		public Intrinsic getIntrinsic() {
+			return this.image.getIntrinsic();
+		}
+
+		@Override
+		public double getWidth() {
+			return this.width;
+		}
+
+		@Override
+		public double getHeight() {
+			return this.height;
+		}
+
+		@Override
+		public void drawTo(final GC gc) throws GraphicsException {
+			try (final var gcState = gc.begin()) {
+				if (!this.image.viewBox().meet()) {
+					// slice overflows the viewport, which clips it
+					gc.clip(new Rectangle2D.Double(0, 0, this.width, this.height));
+				}
+				gc.transform(this.at);
+				this.image.drawTo(gc);
+			}
+		}
+
+		@Override
+		public String getAltString() {
+			return this.image.getAltString();
+		}
+
+		@Override
+		public Image viewport(final double width, final double height) {
+			return this.image.viewport(width, height);
+		}
 	}
 
 	@Override
