@@ -1,6 +1,7 @@
 package net.zamasoft.pdfg2d.svg;
 
 import java.awt.Graphics2D;
+import java.awt.geom.AffineTransform;
 import java.io.IOException;
 
 import org.apache.batik.gvt.GraphicsNode;
@@ -116,7 +117,16 @@ class PDFTransparencyRable extends GraphicsNodeRable8Bit {
 			final var gc2 = new PDFGC(groupImage);
 			try (final var gcState = gc2.begin()) {
 
-				final Graphics2D g2d2 = new BridgeGraphics2D(gc2, g2d.getDeviceConfiguration());
+				final BridgeGraphics2D g2d2 = new BridgeGraphics2D(gc2, g2d.getDeviceConfiguration());
+				// the group draws with the hints in force (antialiasing, as SVGImage sets it, 2026-11-26)
+				g2d2.setRenderingHints(g2d.getRenderingHints());
+				// The group is drawn in the space g2d draws in now: its device pixels per unit are what g2d's transform
+				// (device scale included) gives, so that a filter inside rasterizes as finely (2026-11-26)
+				final AffineTransform device = g2d.getTransform();
+				final double scale = SVGImage.maxScale(device);
+				if (scale > 0 && Double.isFinite(scale)) {
+					g2d2.setDeviceScale(scale);
+				}
 				final var gn = getGraphicsNode();
 
 				try {

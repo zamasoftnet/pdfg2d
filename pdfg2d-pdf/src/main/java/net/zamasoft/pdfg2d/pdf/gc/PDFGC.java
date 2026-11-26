@@ -1269,6 +1269,12 @@ public class PDFGC implements GC, Closeable {
 		return this.actualTransform == null ? null : new AffineTransform(this.actualTransform);
 	}
 
+	/** The filter resolution of the PDF ({@code output.pdf.filter-resolution}, 300 dpi by default; 2026-11-26). */
+	@Override
+	public double getRasterResolution() {
+		return this.getPdfWriter().getParams().filterRasterDpi();
+	}
+
 	@Override
 	public void clip(final Shape clip) throws GraphicsException {
 		try {

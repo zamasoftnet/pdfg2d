@@ -436,10 +436,21 @@ public interface GC {
 
 	/**
 	 * Returns the current transform.
-	 * 
+	 *
 	 * @return the current transform
 	 */
 	public AffineTransform getTransform();
+
+	/**
+	 * The resolution, in dots per inch of 72-unit inches of the space {@link #getTransform()} maps to, at which what
+	 * cannot stay vector (an SVG filter or mask) is rasterized (2026-11-26). The default, 72, is one dot per unit of
+	 * that space; a PDF returns its filter resolution ({@code PDFParams.filterRasterDpi}).
+	 *
+	 * @return dots per inch
+	 */
+	public default double getRasterResolution() {
+		return 72;
+	}
 
 	/**
 	 * Intersects the current clip with the given shape.

@@ -210,8 +210,13 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 		this.hints.putAll(hints);
 	}
 
+	/**
+	 * A copy, as Graphics2D's contract has it (2026-11-26). Batik saves the hints with this before it adds a node's
+	 * own (shape-rendering, text-rendering) and puts the saved ones back after the node; with the live map the saved
+	 * ones took the node's in too, so a node's crispEdges stayed on its later siblings (codex).
+	 */
 	public RenderingHints getRenderingHints() {
-		return this.hints;
+		return (RenderingHints) this.hints.clone();
 	}
 
 	public void transform(final AffineTransform at) {
@@ -219,13 +224,43 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 		this.gc.transform(at);
 	}
 
+	/**
+	 * Device pixels per unit of this Graphics2D's own space (2026-11-26; 1 by default). Batik rasterizes a filter, a
+	 * mask and the like at the resolution {@link #getTransform()} reports; it was this space itself, so an SVG drawn at
+	 * 1.86pt a unit had its filtered text at 39 dpi. {@link #getTransform()} reports the transform scaled by it and
+	 * {@link #setTransform(AffineTransform)} takes it back off, so what is drawn keeps its place and size.
+	 */
+	protected double deviceScale = 1;
+
+	/** Sets {@link #deviceScale} (before anything is drawn). */
+	public void setDeviceScale(final double deviceScale) {
+		if (!(deviceScale > 0) || !Double.isFinite(deviceScale)) {
+			throw new IllegalArgumentException("device scale " + deviceScale);
+		}
+		this.deviceScale = deviceScale;
+	}
+
+	public double getDeviceScale() {
+		return this.deviceScale;
+	}
+
 	public void setTransform(final AffineTransform at) {
-		this.transform = new AffineTransform(at);
+		if (this.deviceScale == 1) {
+			this.transform = new AffineTransform(at);
+		} else {
+			this.transform = AffineTransform.getScaleInstance(1 / this.deviceScale, 1 / this.deviceScale);
+			this.transform.concatenate(at);
+		}
 		this.restoreState();
 	}
 
 	public AffineTransform getTransform() {
-		return new AffineTransform(this.transform);
+		if (this.deviceScale == 1) {
+			return new AffineTransform(this.transform);
+		}
+		final AffineTransform device = AffineTransform.getScaleInstance(this.deviceScale, this.deviceScale);
+		device.concatenate(this.transform);
+		return device;
 	}
 
 	public void setPaint(final java.awt.Paint paint) {
@@ -322,7 +357,21 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 	}
 
 	public void setClip(final Shape clip) {
-		this.clip = (clip != null) ? this.transform.createTransformedShape(clip) : null;
+		int reported = -1;
+		if (clip != null && this.reportedClips != null) {
+			for (int i = 0; i < REPORTED; ++i) {
+				if (this.reportedClips[i] == clip) {
+					reported = i;
+					break;
+				}
+			}
+		}
+		if (reported >= 0) {
+			// a clip getClip() reported, put back: the clip it stood for, without the raster bounds
+			this.clip = this.reportedFor[reported];
+		} else {
+			this.clip = (clip != null) ? this.transform.createTransformedShape(clip) : null;
+		}
 		this.restoreState();
 	}
 
@@ -330,9 +379,57 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 		this.setClip(new Rectangle(x, y, width, height));
 	}
 
+	/**
+	 * Where rasterizing is of use, in the coordinates {@link #clip} is kept in (2026-11-26), or null for anywhere. It is
+	 * no clip of the drawing: {@link #getClip()} reports it, intersected with the clip, and Batik rasterizes a filter, a
+	 * mask or a clip path only where that area meets it. With {@link #deviceScale} a filter region much larger than the
+	 * image (userSpaceOnUse, overflow: visible) would otherwise be rasterized whole at the fine scale (codex: 625M
+	 * pixels).
+	 */
+	protected Shape rasterBounds = null;
+
+	/** Sets {@link #rasterBounds}, given in the current user space. */
+	public void setRasterBounds(final Shape bounds) {
+		this.rasterBounds = bounds == null ? null : this.transform.createTransformedShape(bounds);
+	}
+
+	/**
+	 * The last shapes {@link #getClip()} reported with {@link #rasterBounds} in them, and the clips they stood for (a
+	 * ring, nested saves included): Batik saves the clip with getClip() and puts it back with setClip(), and that must
+	 * not turn the raster bounds into a clip of the drawing.
+	 */
+	private Shape[] reportedClips = null, reportedFor = null;
+
+	private int reportedNext = 0;
+
+	private static final int REPORTED = 32;
+
 	public Shape getClip() {
+		Shape clip = this.clip;
+		if (this.rasterBounds != null) {
+			if (clip == null) {
+				clip = this.rasterBounds;
+			} else {
+				final Area area = new Area(clip);
+				area.intersect(new Area(this.rasterBounds));
+				clip = area;
+			}
+		}
 		try {
-			return transform.createInverse().createTransformedShape(this.clip);
+			Shape reported = transform.createInverse().createTransformedShape(clip);
+			if (this.rasterBounds != null) {
+				// a GeneralPath: Batik's TextNode sets any other clip again as one (a JDK 1.2 work-around), which would
+				// make the raster bounds a clip of the drawing
+				reported = new GeneralPath(reported);
+				if (this.reportedClips == null) {
+					this.reportedClips = new Shape[REPORTED];
+					this.reportedFor = new Shape[REPORTED];
+				}
+				this.reportedClips[this.reportedNext] = reported;
+				this.reportedFor[this.reportedNext] = this.clip;
+				this.reportedNext = (this.reportedNext + 1) % REPORTED;
+			}
+			return reported;
 		} catch (NoninvertibleTransformException e) {
 			return null;
 		}
@@ -766,6 +863,8 @@ public class BridgeGraphics2D extends Graphics2D implements Cloneable {
 		BridgeGraphics2D clone = (BridgeGraphics2D) super.clone();
 		clone.transform = new AffineTransform(clone.transform);
 		clone.baseTransform = new AffineTransform(clone.baseTransform);
+		// a child's hints are its own (a hint set on it does not reach the parent)
+		clone.hints = (RenderingHints) clone.hints.clone();
 		// Do not copy the GC state handle (the original instance is responsible for closing it).
 		clone.gcState = null;
 		return clone;
