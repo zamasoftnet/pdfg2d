@@ -34,7 +34,6 @@ public class SystemCIDIdentityFontSource extends SystemCIDFontSource {
 		return Type.CID_IDENTITY;
 	}
 
-	private final char[] chara = new char[1];
 
 	private IntList getCharToGid() {
 		IntList charToGid = null;
@@ -72,8 +71,8 @@ public class SystemCIDIdentityFontSource extends SystemCIDFontSource {
 		int gid;
 		IntList charToGid = this.getCharToGid();
 		if (charToGid.get(c) == 0) {
-			this.chara[0] = (char) c;
-			GlyphVector gv = this.awtFont.createGlyphVector(this.getFontRenderContext(), this.chara);
+			// The code point, not (char) c: outside the BMP the glyph of another character was taken (2026-11-26)
+			GlyphVector gv = this.awtFont.createGlyphVector(this.getFontRenderContext(), Character.toChars(c));
 			gid = gv.getGlyphCode(0);
 			if (gid < 0 || gid > 0xFFFF) {
 				LOG.warning("Characters with GID exceeding 16 bits cannot be used: " + c + " (gid=" + gid + ")");

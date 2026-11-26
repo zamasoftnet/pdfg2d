@@ -424,7 +424,36 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 	 */
 	public synchronized void lookupFamily(final FontStyle fontStyle, final FontFamily family,
 			final List<FontSource> fontList) {
-		this.lookup(fontStyle, new FontFamilyList(family), fontList, false);
+		this.lookup(fontStyle, new FontFamilyList(family), fontList, false, true);
+	}
+
+	/**
+	 * Appends the horizontal sources of one family that upright vertical text did not take ({@link #lookupFamily}
+	 * takes only vertical ones for it), not already in {@code fontList} (2026-11-26). They go after every family's
+	 * vertical sources, for the characters none of those has: their CJK stands upright and their Latin turns, as in
+	 * mixed text, where every such character was a missing glyph. Installed fonts read through Java
+	 * ({@code <all-system-fonts>}, embedded or cid-identity) have no vertical source, so Yu Mincho or Meiryo under
+	 * {@code output.pdf.fonts.policy=embedded} lost all text of {@code text-orientation: upright}.
+	 *
+	 * @param fontStyle the font style (its family list is not used)
+	 * @param family    the family
+	 * @param fontList  the list to append to
+	 */
+	public synchronized void lookupHorizontalForUpright(final FontStyle fontStyle, final FontFamily family,
+			final List<FontSource> fontList) {
+		final List<FontSource> all = new ArrayList<FontSource>();
+		this.lookup(fontStyle, new FontFamilyList(family), all, false, false);
+		for (final FontSource font : all) {
+			if (!fontList.contains(font)) {
+				fontList.add(font);
+			}
+		}
+	}
+
+	/** Whether the style is upright vertical text, which takes vertical sources first (see lookupHorizontalForUpright). */
+	public static boolean uprightVertical(final FontStyle fontStyle) {
+		return fontStyle.getDirection() == Direction.TB
+				&& fontStyle.getTextOrientation() == FontStyle.TextOrientation.UPRIGHT;
 	}
 
 	public synchronized FontSource[] lookup(final FontStyle fontStyle) {
@@ -442,7 +471,16 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 		}
 
 		final List<FontSource> fontList = new ArrayList<FontSource>();
-		this.lookup(fontStyle, fontStyle.getFamily(), fontList, false);
+		this.lookup(fontStyle, fontStyle.getFamily(), fontList, false, true);
+		if (uprightVertical(fontStyle)) {
+			final List<FontSource> all = new ArrayList<FontSource>();
+			this.lookup(fontStyle, fontStyle.getFamily(), all, false, false);
+			for (final FontSource font : all) {
+				if (!fontList.contains(font)) {
+					fontList.add(font);
+				}
+			}
+		}
 		fonts = fontList.toArray(new FontSource[fontList.size()]);
 		if (this.fontListCache == null) {
 			this.fontListCache = new LRUCache<SelectionKey, FontSource[]>(128);
@@ -503,7 +541,8 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 		return best == null ? this.genericToFamily.get(name) : best.family();
 	}
 
-	protected void lookup(FontStyle fontStyle, FontFamilyList family, List<FontSource> fontList, boolean recurse) {
+	protected void lookup(FontStyle fontStyle, FontFamilyList family, List<FontSource> fontList, boolean recurse,
+			boolean verticalOnly) {
 		for (int i = 0; i < family.getLength(); ++i) {
 			FontSource[] fonts;
 			FontFamily entry = family.get(i);
@@ -516,7 +555,7 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				}
 				FontFamilyList gfamily = this.resolveGenericFamily(name, fontStyle.getLang());
 				if (gfamily != null) {
-					this.lookup(fontStyle, gfamily, fontList, true);
+					this.lookup(fontStyle, gfamily, fontList, true, verticalOnly);
 				}
 				continue;
 			} else {
@@ -529,130 +568,9 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 			}
 
 			// Match against each condition
-			FontPolicyList policy = fontStyle.getPolicy();
-			Object[][] orders = new Object[fonts.length][2];
-			for (int j = 0; j < fonts.length; ++j) {
-				FontSource font = fonts[j];
-				int order = 0;
-
-				// Font type is the highest priority condition
-				if (font instanceof PDFFontSource) {
-					PDFFontSource pdfFont = (PDFFontSource) font;
-					Type type = pdfFont.getType();
-					for (int k = 0; k < policy.getLength(); ++k) {
-						FontPolicy policyCode = policy.get(k);
-						switch (policyCode) {
-							case CORE:
-								// CORE
-								if (type != Type.CORE) {
-									continue;
-								}
-								break;
-
-							case CID_KEYED:
-								// CID-Keyed
-								if (type != Type.CID_KEYED) {
-									continue;
-								}
-								break;
-
-							case CID_IDENTITY:
-								// CID Identity
-								if (type != Type.CID_IDENTITY) {
-									continue;
-								}
-								break;
-
-							case EMBEDDED:
-								// Embedded
-								if (type != Type.EMBEDDED) {
-									continue;
-								}
-								break;
-
-							case OUTLINES:
-								// Outlines
-								continue;
-
-							default:
-								throw new IllegalStateException();
-						}
-						order = policy.getLength() - k + 1;
-						break;
-					}
-					if (order == 0) {
-						// Only the embedded form: readers do not have a document's own font installed
-						if (!this.outsidePolicy || type != Type.EMBEDDED) {
-							continue;
-						}
-						order = 1;
-					}
-				} else {
-					order = 1;
-				}
-
-				// Select vertical/horizontal font sources according to text-orientation. mixed keeps
-				// both as candidates, with each source's canDisplay distinguishing character types.
-				Direction direction = fontStyle.getDirection();
-				Direction fsDirection = font.getDirection();
-				if (direction != Direction.TB && fsDirection == Direction.TB) {
-					continue;
-				}
-				if (direction == Direction.TB) {
-					if (fontStyle.getTextOrientation() == FontStyle.TextOrientation.UPRIGHT
-							&& fsDirection != Direction.TB) {
-						continue;
-					}
-					if (fontStyle.getTextOrientation() == FontStyle.TextOrientation.SIDEWAYS
-							&& fsDirection == Direction.TB) {
-						continue;
-					}
-				}
-
-				// Prioritize exact family name matches
-				order <<= 4;
-				String fontName = FontUtils.normalizeName(font.getFontName());
-				if (fontName.equals(name)) {
-					order |= 1;
-				} else if (this.strictMatchName) {
-					continue;
-				}
-
-				// Italic check has higher priority than weight
-				order <<= 4;
-				Style style = fontStyle.getStyle();
-				if (style == Style.ITALIC) {
-					if (font.isItalic()) {
-						order |= 1;
-					}
-				} else if (style == Style.NORMAL) {
-					if (!font.isItalic()) {
-						order |= 1;
-					}
-				}
-
-				// Weight check
-				order <<= 4;
-				Weight weight = fontStyle.getWeight();
-				int delta = Math.abs(font.getWeight().w - weight.w);
-				order |= (0xF & ((1000 - delta) / 100));
-
-				// Width class (font-stretch, 2026-08-29). Among fonts tied on italic/weight,
-				// select the closest width class. Order follows css-fonts-4 §5.2 step 1:
-				// if the requested width is normal or narrower, try all narrower widths first (nearest first), then wider widths.
-				// Reverse that order if the requested width is wider than normal. Five bits (penalty 0..16).
-				order <<= 5;
-				order |= 31 - widthPenalty(fontStyle.getWidthClass(), font.getWidthClass());
-
-				// Oblique has lower priority since it can use transformation
-				order <<= 4;
-				if (style == Style.OBLIQUE) {
-					if (font.isItalic()) {
-						order |= 1;
-					}
-				}
-				orders[j][0] = NumberUtils.intValue(order);
-				orders[j][1] = font;
+			Object[][] orders = this.score(fontStyle, fonts, name, verticalOnly);
+			if (orders == null) {
+				continue;
 			}
 			Arrays.sort(orders, FONT_COMP);
 			for (int j = 0; j < fonts.length; ++j) {
@@ -663,6 +581,144 @@ public class PDFFontSourceManager implements FontSourceManager, Closeable {
 				}
 			}
 		}
+	}
+
+	/**
+	 * The fonts of one family name with their orders ({@code {order, font}}, a null order for a font that does not
+	 * match), or null when none matches.
+	 *
+	 * @param verticalOnly for upright vertical text, whether only vertical sources match
+	 */
+	private Object[][] score(final FontStyle fontStyle, final FontSource[] fonts, final String name,
+			final boolean verticalOnly) {
+		final FontPolicyList policy = fontStyle.getPolicy();
+		boolean any = false;
+		Object[][] orders = new Object[fonts.length][2];
+		for (int j = 0; j < fonts.length; ++j) {
+			FontSource font = fonts[j];
+			int order = 0;
+
+			// Font type is the highest priority condition
+			if (font instanceof PDFFontSource) {
+				PDFFontSource pdfFont = (PDFFontSource) font;
+				Type type = pdfFont.getType();
+				for (int k = 0; k < policy.getLength(); ++k) {
+					FontPolicy policyCode = policy.get(k);
+					switch (policyCode) {
+						case CORE:
+							// CORE
+							if (type != Type.CORE) {
+								continue;
+							}
+							break;
+
+						case CID_KEYED:
+							// CID-Keyed
+							if (type != Type.CID_KEYED) {
+								continue;
+							}
+							break;
+
+						case CID_IDENTITY:
+							// CID Identity
+							if (type != Type.CID_IDENTITY) {
+								continue;
+							}
+							break;
+
+						case EMBEDDED:
+							// Embedded
+							if (type != Type.EMBEDDED) {
+								continue;
+							}
+							break;
+
+						case OUTLINES:
+							// Outlines
+							continue;
+
+						default:
+							throw new IllegalStateException();
+					}
+					order = policy.getLength() - k + 1;
+					break;
+				}
+				if (order == 0) {
+					// Only the embedded form: readers do not have a document's own font installed
+					if (!this.outsidePolicy || type != Type.EMBEDDED) {
+						continue;
+					}
+					order = 1;
+				}
+			} else {
+				order = 1;
+			}
+
+			// Select vertical/horizontal font sources according to text-orientation. mixed keeps
+			// both as candidates, with each source's canDisplay distinguishing character types.
+			Direction direction = fontStyle.getDirection();
+			Direction fsDirection = font.getDirection();
+			if (direction != Direction.TB && fsDirection == Direction.TB) {
+				continue;
+			}
+			if (direction == Direction.TB) {
+				if (fontStyle.getTextOrientation() == FontStyle.TextOrientation.UPRIGHT && verticalOnly
+						&& fsDirection != Direction.TB) {
+					continue;
+				}
+				if (fontStyle.getTextOrientation() == FontStyle.TextOrientation.SIDEWAYS
+						&& fsDirection == Direction.TB) {
+					continue;
+				}
+			}
+
+			// Prioritize exact family name matches
+			order <<= 4;
+			String fontName = FontUtils.normalizeName(font.getFontName());
+			if (fontName.equals(name)) {
+				order |= 1;
+			} else if (this.strictMatchName) {
+				continue;
+			}
+
+			// Italic check has higher priority than weight
+			order <<= 4;
+			Style style = fontStyle.getStyle();
+			if (style == Style.ITALIC) {
+				if (font.isItalic()) {
+					order |= 1;
+				}
+			} else if (style == Style.NORMAL) {
+				if (!font.isItalic()) {
+					order |= 1;
+				}
+			}
+
+			// Weight check
+			order <<= 4;
+			Weight weight = fontStyle.getWeight();
+			int delta = Math.abs(font.getWeight().w - weight.w);
+			order |= (0xF & ((1000 - delta) / 100));
+
+			// Width class (font-stretch, 2026-08-29). Among fonts tied on italic/weight,
+			// select the closest width class. Order follows css-fonts-4 §5.2 step 1:
+			// if the requested width is normal or narrower, try all narrower widths first (nearest first), then wider widths.
+			// Reverse that order if the requested width is wider than normal. Five bits (penalty 0..16).
+			order <<= 5;
+			order |= 31 - widthPenalty(fontStyle.getWidthClass(), font.getWidthClass());
+
+			// Oblique has lower priority since it can use transformation
+			order <<= 4;
+			if (style == Style.OBLIQUE) {
+				if (font.isItalic()) {
+					order |= 1;
+				}
+			}
+			orders[j][0] = NumberUtils.intValue(order);
+			orders[j][1] = font;
+			any = true;
+		}
+		return any ? orders : null;
 	}
 
 	/**

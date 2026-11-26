@@ -43,19 +43,18 @@ class SystemEmbeddedCIDFont extends CIDFont implements PDFEmbeddedFont, ShapedFo
 		this.shapes.add(gv.getGlyphOutline(0));
 	}
 
-	private final char[] chara = new char[1];
-
 	public int toGID(int c) {
 		int gid;
 		SystemEmbeddedCIDFontSource metaFont = (SystemEmbeddedCIDFontSource) this.source;
-		if (metaFont.getAwtFont().canDisplay((char) c)) {
+		// The code point, not (char) c: outside the BMP the glyph of another character was drawn (codex, 2026-11-26)
+		if (metaFont.getAwtFont().canDisplay(c)) {
 			gid = this.gids.get(c);
 			if (gid == -1) {
-				this.chara[0] = (char) c;
 				gid = this.shapes.size();
 				this.gids.set(c, gid);
 				this.unicodes.set(gid, c);
-				GlyphVector gv = metaFont.getAwtFont().createGlyphVector(metaFont.getFontRenderContext(), this.chara);
+				GlyphVector gv = metaFont.getAwtFont().createGlyphVector(metaFont.getFontRenderContext(),
+						Character.toChars(c));
 				short advance = (short) gv.getGlyphMetrics(0).getAdvance();
 				Shape shape = gv.getGlyphOutline(0);
 				this.shapes.add(shape);

@@ -159,6 +159,7 @@ public class FontManagerImpl implements FontManager, Closeable {
 	private java.util.List<FontSource> candidates(final FontStyle fontStyle) {
 		final java.util.List<FontSource> list = new java.util.ArrayList<>();
 		if (this.localdb == null) {
+			// (upright vertical text gets the horizontal sources after the vertical ones there, as below)
 			java.util.Collections.addAll(list, this.globaldb.lookup(fontStyle));
 			return list;
 		}
@@ -171,6 +172,14 @@ public class FontManagerImpl implements FontManager, Closeable {
 		for (int i = 0; i < families.getLength(); ++i) {
 			this.localdb.lookupFamily(fontStyle, families.get(i), list);
 			global.lookupFamily(fontStyle, families.get(i), list);
+		}
+		if (PDFFontSourceManager.uprightVertical(fontStyle)) {
+			// Upright vertical text: every family's vertical sources first, then the horizontal ones, for the
+			// characters none of those has (2026-11-26, PDFFontSourceManager.lookupHorizontalForUpright)
+			for (int i = 0; i < families.getLength(); ++i) {
+				this.localdb.lookupHorizontalForUpright(fontStyle, families.get(i), list);
+				global.lookupHorizontalForUpright(fontStyle, families.get(i), list);
+			}
 		}
 		return list;
 	}

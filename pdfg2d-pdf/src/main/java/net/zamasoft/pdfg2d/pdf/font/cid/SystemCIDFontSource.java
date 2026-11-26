@@ -174,7 +174,9 @@ public abstract class SystemCIDFontSource extends AbstractFontSource implements 
 	}
 
 	public boolean canDisplay(int c) {
-		return this.awtFont.canDisplay((char) c);
+		// The code point, not (char) c: a character outside the BMP took the coverage of the BMP character of its low
+		// 16 bits, U+20041 that of 'A' (codex, 2026-11-26)
+		return this.awtFont.canDisplay(c);
 	}
 }
 
