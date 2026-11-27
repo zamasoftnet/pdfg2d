@@ -1685,6 +1685,8 @@ font-dir要素は指定したディレクトリに存在するフォントファ
 
 system-fontはJava実行環境を利用してフォントを読み込みます。
 OSやウィンドウシステムにインストールされたフォントを名前で指定できますが、 縦書きなどフォントの一部の機能に制約があります。
+埋め込みフォントとCID Identityでは縦書き用の字形を使えないため、縦書きの字は立たずに行と一緒に横に倒れます
+(和文も、text-orientation: uprightの欧文も)。縦書きに使うフォントはfont-file要素かfont-dir要素で読み込んでください。
 
 <table>
 <caption>system-font要素</caption>
@@ -1755,6 +1757,8 @@ PDF独自のプログラムで読み込みますが、
 ###### all-system-fonts
 
 all-system-fontsはJava実行環境が利用可能なフォントを全て読み込みます。
+system-fontと同じく、埋め込みフォントとCID Identityでは縦書きの字が横に倒れます。
+縦書きに使うフォントはfont-dir要素かfont-file要素で読み込んでください。
 
 <table>
 <caption>all-system-fonts要素</caption>

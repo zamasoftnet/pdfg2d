@@ -169,7 +169,8 @@
 		</cid-keyed-font>
 
 		<!-- Javaで利用可能な全てのインストールされたフォント types: (cid-identity||embedded) cmap: 横書きcmapエンコーディング名 
-			vcmap: 縦書きcmapエンコーディング名 -->
+			vcmap: 縦書きcmapエンコーディング名
+			埋め込み・CID Identityでは縦書きの字が横に倒れます。縦書きに使うフォントはfont-dirかfont-fileで読み込んでください。 -->
 		<all-system-fonts types="cid-identity embedded" />
 	</cid-fonts>
 
